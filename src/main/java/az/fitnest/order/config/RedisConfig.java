@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -15,8 +16,11 @@ import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 
 @Configuration
+@EnableCaching
 public class RedisConfig {
 
     @Bean
@@ -42,8 +46,15 @@ public class RedisConfig {
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer));
 
+        Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();
+        cacheConfigurations.put("dashboard-filters", config.entryTtl(Duration.ofHours(24)));
+        cacheConfigurations.put("dashboard-summary", config.entryTtl(Duration.ofMinutes(5)));
+        cacheConfigurations.put("dashboard-revenue", config.entryTtl(Duration.ofMinutes(10)));
+        cacheConfigurations.put("dashboard-growth", config.entryTtl(Duration.ofMinutes(10)));
+
         return RedisCacheManager.builder(redisConnectionFactory)
                 .cacheDefaults(config)
+                .withInitialCacheConfigurations(cacheConfigurations)
                 .build();
     }
 

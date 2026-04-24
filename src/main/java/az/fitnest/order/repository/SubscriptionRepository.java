@@ -30,4 +30,77 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     List<Subscription> findByUserIdAndStatusOrderByStartAtDesc(Long userId, String status);
     @org.springframework.data.jpa.repository.Query("SELECT s FROM Subscription s WHERE s.userId = :userId ORDER BY s.startAt DESC, s.subscriptionId DESC")
     List<Subscription> findAllByUserIdOrderByStartAtDesc(Long userId);
+
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT COUNT(DISTINCT s.userId)
+            FROM Subscription s
+            WHERE s.status IN :statuses
+              AND s.startAt >= :from
+              AND s.startAt < :to
+              AND (:gymId IS NULL OR EXISTS (
+                    SELECT 1 FROM GymVisit v
+                    WHERE v.subscriptionId = s.subscriptionId
+                      AND v.gymId = :gymId
+              ))
+            """)
+    long countDistinctUsersByStatusAndPeriod(
+            @org.springframework.data.repository.query.Param("statuses") List<String> statuses,
+            @org.springframework.data.repository.query.Param("from") LocalDateTime from,
+            @org.springframework.data.repository.query.Param("to") LocalDateTime to,
+            @org.springframework.data.repository.query.Param("gymId") Long gymId);
+
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT COUNT(s)
+            FROM Subscription s
+            WHERE s.status IN :statuses
+              AND s.startAt >= :from
+              AND s.startAt < :to
+              AND (:gymId IS NULL OR EXISTS (
+                    SELECT 1 FROM GymVisit v
+                    WHERE v.subscriptionId = s.subscriptionId
+                      AND v.gymId = :gymId
+              ))
+            """)
+    long countByStatusAndPeriod(
+            @org.springframework.data.repository.query.Param("statuses") List<String> statuses,
+            @org.springframework.data.repository.query.Param("from") LocalDateTime from,
+            @org.springframework.data.repository.query.Param("to") LocalDateTime to,
+            @org.springframework.data.repository.query.Param("gymId") Long gymId);
+
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT COUNT(DISTINCT s.userId)
+            FROM Subscription s
+            WHERE s.startAt >= :from
+              AND s.startAt < :to
+              AND (:gymId IS NULL OR EXISTS (
+                    SELECT 1 FROM GymVisit v
+                    WHERE v.subscriptionId = s.subscriptionId
+                      AND v.gymId = :gymId
+              ))
+            """)
+    long countNewCustomersByPeriod(
+            @org.springframework.data.repository.query.Param("from") LocalDateTime from,
+            @org.springframework.data.repository.query.Param("to") LocalDateTime to,
+            @org.springframework.data.repository.query.Param("gymId") Long gymId);
+
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT COALESCE(SUM(p.price), 0)
+            FROM Subscription s
+            JOIN SubscriptionPackage p ON p.id = s.packageId
+            WHERE s.status IN :statuses
+              AND s.startAt >= :from
+              AND s.startAt < :to
+              AND (:packageCode = 'all' OR LOWER(p.name) LIKE LOWER(CONCAT('%', :packageCode, '%')))
+              AND (:gymId IS NULL OR EXISTS (
+                    SELECT 1 FROM GymVisit v
+                    WHERE v.subscriptionId = s.subscriptionId
+                      AND v.gymId = :gymId
+              ))
+            """)
+    java.math.BigDecimal sumRevenueByPeriod(
+            @org.springframework.data.repository.query.Param("statuses") List<String> statuses,
+            @org.springframework.data.repository.query.Param("from") LocalDateTime from,
+            @org.springframework.data.repository.query.Param("to") LocalDateTime to,
+            @org.springframework.data.repository.query.Param("packageCode") String packageCode,
+            @org.springframework.data.repository.query.Param("gymId") Long gymId);
 }

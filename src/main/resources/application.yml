@@ -134,6 +134,22 @@ payment:
   backend:
     url: ${PAYMENT_BACKEND_URL:http://payment-backend:8080}
 
+dashboard:
+  clients:
+    customer:
+      enabled: ${DASHBOARD_CUSTOMER_CLIENT_ENABLED:false}
+      url: ${USER_BACKEND_URL:http://user-backend:8080}
+      summary-path: ${DASHBOARD_CUSTOMER_SUMMARY_PATH:/api/v1/internal/customers/summary}
+      growth-path: ${DASHBOARD_CUSTOMER_GROWTH_PATH:/api/v1/internal/customers/growth}
+    gym:
+      enabled: ${DASHBOARD_GYM_CLIENT_ENABLED:false}
+      url: ${CATALOG_BACKEND_URL:http://catalog-backend:8080}
+      count-path: ${DASHBOARD_GYM_COUNT_PATH:/api/v1/internal/gyms/count}
+    payment:
+      enabled: ${DASHBOARD_PAYMENT_CLIENT_ENABLED:false}
+      url: ${PAYMENT_BACKEND_URL:http://payment-backend:8080}
+      revenue-path: ${DASHBOARD_PAYMENT_REVENUE_PATH:/api/v1/internal/payments/revenue}
+
 management:
   endpoints:
     web:
