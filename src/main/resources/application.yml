@@ -146,6 +146,7 @@ management:
         enabled: true
 
 springdoc:
+  server-url: ${SPRINGDOC_SERVER_URL:}
   api-docs:
     path: /v3/api-docs
     cache:
