@@ -13,7 +13,7 @@ import az.fitnest.order.dto.dashboard.RevenueResponseDto;
 import az.fitnest.order.dto.dashboard.RevenueSeriesDto;
 import az.fitnest.order.dto.dashboard.RevenueTotalsDto;
 import az.fitnest.order.dto.dashboard.SummaryResponseDto;
-import az.fitnest.order.exception.BadRequestException;
+import az.fitnest.order.exception.DashboardValidationException;
 import az.fitnest.order.exception.ForbiddenException;
 import az.fitnest.order.repository.GymVisitRepository;
 import az.fitnest.order.repository.SubscriptionRepository;
@@ -52,7 +52,8 @@ public class AdminDashboardService {
     private final PaymentDashboardClient paymentDashboardClient;
 
     @Cacheable(cacheNames = "dashboard-filters")
-    public FilterResponseDto getFilters() {
+    public FilterResponseDto getFilters(String roleScope, HttpServletRequest request) {
+        validateRoleScope(roleScope, request);
         return new FilterResponseDto(
                 List.of(
                         new FilterOptionDto("bronze", "Bronze"),
@@ -82,7 +83,7 @@ public class AdminDashboardService {
     @Cacheable(cacheNames = "dashboard-summary",
             key = "'summary:' + #timeRange + ':' + (#gymId != null ? #gymId : (#request.getHeader('X-Gym-Id') != null ? #request.getHeader('X-Gym-Id') : 'null'))")
     public SummaryResponseDto getSummary(String timeRange, Long gymId, HttpServletRequest request) {
-        TimeRange range = TimeRange.from(timeRange);
+        TimeRange range = TimeRange.from(timeRange, "time_range");
         Long effectiveGymId = resolveGymId(gymId, request);
         String authHeader = extractAuthHeader(request);
 
@@ -144,7 +145,7 @@ public class AdminDashboardService {
     public RevenueResponseDto getRevenue(String packageCode, String period, LocalDate dateFrom, LocalDate dateTo,
                                          Long gymId, HttpServletRequest request) {
         String resolvedPackage = validatePackage(packageCode);
-        PeriodType periodType = PeriodType.from(period);
+        PeriodType periodType = PeriodType.from(period, "period");
         validateDates(dateFrom, dateTo);
         Long effectiveGymId = resolveGymId(gymId, request);
         String authHeader = extractAuthHeader(request);
@@ -194,8 +195,8 @@ public class AdminDashboardService {
             key = "'growth:' + #period + ':' + #metric + ':' + (#dateFrom != null ? #dateFrom : 'null') + ':' + (#dateTo != null ? #dateTo : 'null') + ':' + (#gymId != null ? #gymId : (#request.getHeader('X-Gym-Id') != null ? #request.getHeader('X-Gym-Id') : 'null'))")
     public CustomerGrowthResponseDto getCustomerGrowth(String period, String metric, LocalDate dateFrom, LocalDate dateTo,
                                                        Long gymId, HttpServletRequest request) {
-        PeriodType periodType = PeriodType.from(period);
-        MetricType metricType = MetricType.from(metric);
+        PeriodType periodType = PeriodType.from(period, "period");
+        MetricType metricType = MetricType.from(metric, "metric");
         validateDates(dateFrom, dateTo);
         Long effectiveGymId = resolveGymId(gymId, request);
         String authHeader = extractAuthHeader(request);
@@ -217,7 +218,7 @@ public class AdminDashboardService {
         List<ChartPointDto> points = new ArrayList<>();
         for (PeriodWindow window : windows) {
             long value = switch (metricType) {
-                case NEW_CUSTOMERS -> subscriptionRepository.countNewCustomersByPeriod(
+                case NEW_CUSTOMERS -> subscriptionRepository.countFirstTimeCustomersByPeriod(
                         window.from(), window.to(), effectiveGymId);
                 case ACTIVE_CUSTOMERS -> subscriptionRepository.countDistinctUsersByStatusAndPeriod(
                         ACTIVE_STATUSES, window.from(), window.to(), effectiveGymId);
@@ -236,7 +237,7 @@ public class AdminDashboardService {
         }
         Long tokenGymId = parseLongHeader(request, "X-Gym-Id");
         if (tokenGymId == null) {
-            throw new BadRequestException("gym_id is required for gym_owner tokens");
+            throw new DashboardValidationException("gym_id", "is required for gym_owner");
         }
         if (requestedGymId != null && !requestedGymId.equals(tokenGymId)) {
             throw new ForbiddenException("You do not have permission to access data for gym_id " + requestedGymId + ".");
@@ -259,7 +260,7 @@ public class AdminDashboardService {
         try {
             return Long.parseLong(value);
         } catch (NumberFormatException ex) {
-            throw new BadRequestException(name + " must be a valid integer");
+            throw new DashboardValidationException(name, "must be a valid integer");
         }
     }
 
@@ -272,17 +273,33 @@ public class AdminDashboardService {
         return auth == null ? "" : auth;
     }
 
+    private void validateRoleScope(String roleScope, HttpServletRequest request) {
+        if (roleScope == null || roleScope.isBlank()) {
+            return;
+        }
+        String normalized = roleScope.toLowerCase(Locale.ROOT);
+        if (!List.of("gym_owner", "all").contains(normalized)) {
+            throw new DashboardValidationException("role_scope", "must be one of: gym_owner, all");
+        }
+        if ("gym_owner".equals(normalized) && !isGymOwner(request)) {
+            throw new DashboardValidationException("role_scope", "gym_owner scope is only available for gym_owner role");
+        }
+    }
+
     private String validatePackage(String packageCode) {
         String value = packageCode == null || packageCode.isBlank() ? "bronze" : packageCode.toLowerCase(Locale.ROOT);
         if (!List.of("bronze", "silver", "gold", "platinum", "all").contains(value)) {
-            throw new BadRequestException("package must be one of: bronze, silver, gold, platinum, all");
+            throw new DashboardValidationException("package", "must be one of: bronze, silver, gold, platinum, all");
         }
         return value;
     }
 
     private void validateDates(LocalDate dateFrom, LocalDate dateTo) {
         if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
-            throw new BadRequestException("date_from must be <= date_to");
+            throw new DashboardValidationException(List.of(
+                    new DashboardValidationException.FieldIssue("date_from", "must be <= date_to"),
+                    new DashboardValidationException.FieldIssue("date_to", "must be >= date_from")
+            ));
         }
     }
 
@@ -386,14 +403,14 @@ public class AdminDashboardService {
             this.days = days;
         }
 
-        static TimeRange from(String code) {
+        static TimeRange from(String code, String fieldName) {
             String value = code == null || code.isBlank() ? "last_30_days" : code;
             for (TimeRange range : values()) {
                 if (range.code.equalsIgnoreCase(value)) {
                     return range;
                 }
             }
-            throw new BadRequestException("time_range must be one of: last_7_days, last_30_days, last_365_days");
+            throw new DashboardValidationException(fieldName, "must be one of: last_7_days, last_30_days, last_365_days");
         }
 
         int days() {
@@ -417,14 +434,14 @@ public class AdminDashboardService {
             this.code = code;
         }
 
-        static PeriodType from(String code) {
+        static PeriodType from(String code, String fieldName) {
             String value = code == null || code.isBlank() ? "monthly" : code;
             for (PeriodType period : values()) {
                 if (period.code.equalsIgnoreCase(value)) {
                     return period;
                 }
             }
-            throw new BadRequestException("period must be one of: daily, weekly, monthly, yearly");
+            throw new DashboardValidationException(fieldName, "must be one of: daily, weekly, monthly, yearly");
         }
 
         String code() {
@@ -442,14 +459,14 @@ public class AdminDashboardService {
             this.code = code;
         }
 
-        static MetricType from(String code) {
+        static MetricType from(String code, String fieldName) {
             String value = code == null || code.isBlank() ? "new_customers" : code;
             for (MetricType metric : values()) {
                 if (metric.code.equalsIgnoreCase(value)) {
                     return metric;
                 }
             }
-            throw new BadRequestException("metric must be one of: new_customers, active_customers");
+            throw new DashboardValidationException(fieldName, "must be one of: new_customers, active_customers");
         }
 
         String code() {

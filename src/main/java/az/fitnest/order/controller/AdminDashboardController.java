@@ -31,8 +31,9 @@ public class AdminDashboardController {
     @GetMapping("/filters")
     @Operation(summary = "Get dashboard filters")
     public FilterResponseDto getFilters(
-            @Parameter(description = "Optional UI scope hint") @RequestParam(required = false) String role_scope) {
-        return adminDashboardService.getFilters();
+            @Parameter(description = "Optional UI scope hint") @RequestParam(required = false) String role_scope,
+            HttpServletRequest request) {
+        return adminDashboardService.getFilters(role_scope, request);
     }
 
     @GetMapping("/summary")

@@ -84,6 +84,27 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
             @org.springframework.data.repository.query.Param("gymId") Long gymId);
 
     @org.springframework.data.jpa.repository.Query("""
+            SELECT COUNT(DISTINCT s.userId)
+            FROM Subscription s
+            WHERE s.startAt >= :from
+              AND s.startAt < :to
+              AND s.startAt = (
+                    SELECT MIN(s2.startAt)
+                    FROM Subscription s2
+                    WHERE s2.userId = s.userId
+              )
+              AND (:gymId IS NULL OR EXISTS (
+                    SELECT 1 FROM GymVisit v
+                    WHERE v.subscriptionId = s.subscriptionId
+                      AND v.gymId = :gymId
+              ))
+            """)
+    long countFirstTimeCustomersByPeriod(
+            @org.springframework.data.repository.query.Param("from") LocalDateTime from,
+            @org.springframework.data.repository.query.Param("to") LocalDateTime to,
+            @org.springframework.data.repository.query.Param("gymId") Long gymId);
+
+    @org.springframework.data.jpa.repository.Query("""
             SELECT COALESCE(SUM(p.price), 0)
             FROM Subscription s
             JOIN SubscriptionPackage p ON p.id = s.packageId
