@@ -43,6 +43,16 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional(readOnly = true)
+    public List<az.fitnest.order.dto.PackageNameDto> getPackageNames() {
+        return packageRepository.findAll().stream()
+                .map(pkg -> az.fitnest.order.dto.PackageNameDto.builder()
+                        .id(pkg.getId())
+                        .name(pkg.getName())
+                        .build())
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public az.fitnest.order.dto.AdminSubscriptionPackageResponse getPackageById(Long packageId) {
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));

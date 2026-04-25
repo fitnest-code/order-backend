@@ -37,6 +37,13 @@ public class SubscriptionPackageAdminController {
         return ResponseEntity.ok(ApiResponse.success(subscriptionPackageAdminService.getAllPackages()));
     }
 
+    @Operation(summary = "Get package names", description = "Returns a lightweight list of package IDs and names for dropdowns/filters.")
+    @GetMapping("/names")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<az.fitnest.order.dto.PackageNameDto>>> getPackageNames() {
+        return ResponseEntity.ok(ApiResponse.success(subscriptionPackageAdminService.getPackageNames()));
+    }
+
     @Operation(summary = "Paketi ID ilə əldə edin", description = "Müəyyən abunəlik paketini variantları ilə birlikdə qaytarır.")
     @GetMapping("/{packageId}")
     @PreAuthorize("hasRole('ADMIN')")
