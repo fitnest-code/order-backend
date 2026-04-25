@@ -30,4 +30,8 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     List<Subscription> findByUserIdAndStatusOrderByStartAtDesc(Long userId, String status);
     @org.springframework.data.jpa.repository.Query("SELECT s FROM Subscription s WHERE s.userId = :userId ORDER BY s.startAt DESC, s.subscriptionId DESC")
     List<Subscription> findAllByUserIdOrderByStartAtDesc(Long userId);
+
+    long countByStatusIn(List<String> statuses);
+    long countByStatus(String status);
+    long countByStatusInAndEndAtBetween(List<String> statuses, LocalDateTime start, LocalDateTime end);
 }

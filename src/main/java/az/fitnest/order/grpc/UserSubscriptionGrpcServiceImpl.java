@@ -127,4 +127,19 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
                 .asRuntimeException());
         }
     }
+
+    @Override
+    public void getSubscriptionStatistics(az.fitnest.order.grpc.GetSubscriptionStatisticsRequest request, StreamObserver<az.fitnest.order.grpc.SubscriptionStatisticsResponse> responseObserver) {
+        try {
+            az.fitnest.order.grpc.SubscriptionStatisticsResponse response = subscriptionService.getSubscriptionStatistics();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            log.error("[gRPC] Failed to get subscription statistics", e);
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                .withDescription("Failed to get statistics: " + e.getMessage())
+                .withCause(e)
+                .asRuntimeException());
+        }
+    }
 }

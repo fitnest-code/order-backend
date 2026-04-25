@@ -656,4 +656,17 @@ public class UserSubscriptionService {
             default -> List.of();
         };
     }
+
+    public az.fitnest.order.grpc.SubscriptionStatisticsResponse getSubscriptionStatistics() {
+        LocalDateTime now = LocalDateTime.now();
+        long activeOrFrozen = subscriptionRepository.countByStatusIn(List.of("ACTIVE", "FROZEN"));
+        long finished = subscriptionRepository.countByStatus("FINISHED");
+        long last7Days = subscriptionRepository.countByStatusInAndEndAtBetween(List.of("ACTIVE", "FROZEN"), now, now.plusDays(7));
+
+        return az.fitnest.order.grpc.SubscriptionStatisticsResponse.newBuilder()
+                .setUsersActiveOrFrozen(activeOrFrozen)
+                .setUsersFinished(finished)
+                .setUsersLast7Days(last7Days)
+                .build();
+    }
 }

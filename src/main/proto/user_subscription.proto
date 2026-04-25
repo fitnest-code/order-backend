@@ -12,6 +12,7 @@ service UserSubscriptionService {
   rpc GetUserIdsByDurationMonths(GetUserIdsByDurationMonthsRequest) returns (GetUserIdsByPackageIdResponse);
   rpc GetUserIdsByType(GetUserIdsByTypeRequest) returns (GetUserIdsByPackageIdResponse);
   rpc AssignSubscriptionToUser(AssignSubscriptionToUserRequest) returns (AssignSubscriptionToUserResponse);
+  rpc GetSubscriptionStatistics(GetSubscriptionStatisticsRequest) returns (SubscriptionStatisticsResponse);
 }
 
 message AssignSubscriptionToUserRequest {
@@ -53,4 +54,12 @@ message GetUserIdsByDurationMonthsRequest {
 
 message GetUserIdsByTypeRequest {
   string type = 1; // all, active, expired, upgraded, last_7_days
+}
+
+message GetSubscriptionStatisticsRequest {}
+
+message SubscriptionStatisticsResponse {
+  int64 users_last_7_days = 1;
+  int64 users_finished = 2;
+  int64 users_active_or_frozen = 3;
 }
