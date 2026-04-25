@@ -37,6 +37,7 @@ public class UserSubscriptionService {
     private final TranslationService translationService;
     private final PaymentGrpcClient paymentGrpcClient;
     private final NotificationGrpcClient notificationGrpcClient;
+    private final jakarta.persistence.EntityManager entityManager;
 
     @Transactional
     public boolean checkIn(Long userId, Long gymId) {
@@ -655,6 +656,60 @@ public class UserSubscriptionService {
                     .toList();
             default -> List.of();
         };
+    }
+
+    public List<Long> getFilteredUserIds(az.fitnest.order.grpc.GetFilteredUserIdsRequest request) {
+        jakarta.persistence.criteria.CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        jakarta.persistence.criteria.CriteriaQuery<Long> query = cb.createQuery(Long.class);
+        jakarta.persistence.criteria.Root<Subscription> root = query.from(Subscription.class);
+
+        java.util.List<jakarta.persistence.criteria.Predicate> predicates = new java.util.ArrayList<>();
+
+        if (request.getPackageId() != 0) {
+            predicates.add(cb.equal(root.get("packageId"), request.getPackageId()));
+        }
+
+        if (request.getDurationMonths() != 0) {
+            jakarta.persistence.criteria.Root<PackageOption> optionRoot = query.from(PackageOption.class);
+            predicates.add(cb.equal(root.get("optionId"), optionRoot.get("id")));
+            predicates.add(cb.equal(optionRoot.get("durationMonths"), request.getDurationMonths()));
+        }
+
+        String status = request.getSubscriptionStatus();
+        if (status != null && !status.isEmpty()) {
+            LocalDateTime now = LocalDateTime.now();
+            switch (status.toUpperCase()) {
+                case "ACTIVE":
+                    predicates.add(cb.equal(root.get("status"), "ACTIVE"));
+                    break;
+                case "FROZEN":
+                    predicates.add(cb.equal(root.get("status"), "FROZEN"));
+                    break;
+                case "FINISHED":
+                    predicates.add(cb.in(root.get("status")).value("FINISHED").value("EXPIRED").value("CANCELLED"));
+                    break;
+                case "LAST_7_DAYS":
+                    predicates.add(cb.equal(root.get("status"), "ACTIVE"));
+                    predicates.add(cb.between(root.get("endAt"), now, now.plusDays(7)));
+                    break;
+            }
+        }
+
+        query.select(root.get("userId")).distinct(true);
+        if (!predicates.isEmpty()) {
+            query.where(cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0])));
+        }
+
+        String sortBy = request.getSortBy();
+        if (sortBy != null && !sortBy.isEmpty()) {
+            if ("FINISH_DATE_ASC".equalsIgnoreCase(sortBy)) {
+                query.orderBy(cb.asc(root.get("endAt")));
+            } else if ("FINISH_DATE_DESC".equalsIgnoreCase(sortBy)) {
+                query.orderBy(cb.desc(root.get("endAt")));
+            }
+        }
+
+        return entityManager.createQuery(query).getResultList();
     }
 
     public az.fitnest.order.grpc.SubscriptionStatisticsResponse getSubscriptionStatistics() {

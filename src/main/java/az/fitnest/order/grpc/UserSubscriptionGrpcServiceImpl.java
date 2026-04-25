@@ -129,6 +129,24 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
     }
 
     @Override
+    public void getFilteredUserIds(az.fitnest.order.grpc.GetFilteredUserIdsRequest request, StreamObserver<az.fitnest.order.grpc.GetUserIdsByPackageIdResponse> responseObserver) {
+        try {
+            List<Long> userIds = subscriptionService.getFilteredUserIds(request);
+            az.fitnest.order.grpc.GetUserIdsByPackageIdResponse response = az.fitnest.order.grpc.GetUserIdsByPackageIdResponse.newBuilder()
+                    .addAllUserIds(userIds)
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            log.error("[gRPC] Failed to get filtered user IDs", e);
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to get filtered user IDs: " + e.getMessage())
+                    .withCause(e)
+                    .asRuntimeException());
+        }
+    }
+
+    @Override
     public void getSubscriptionStatistics(az.fitnest.order.grpc.GetSubscriptionStatisticsRequest request, StreamObserver<az.fitnest.order.grpc.SubscriptionStatisticsResponse> responseObserver) {
         try {
             az.fitnest.order.grpc.SubscriptionStatisticsResponse response = subscriptionService.getSubscriptionStatistics();
