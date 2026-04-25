@@ -37,7 +37,22 @@ public class SubscriptionPackageAdminController {
         return ResponseEntity.ok(ApiResponse.success(subscriptionPackageAdminService.getAllPackages()));
     }
 
-    @Operation(summary = "Get package names", description = "Returns a lightweight list of package IDs and names for dropdowns/filters.")
+    @Operation(
+        summary = "Get package names",
+        description = "Returns a lightweight list of package IDs and names for dropdowns/filters.",
+        responses = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "List of package names",
+                content = @io.swagger.v3.oas.annotations.media.Content(
+                    mediaType = "application/json",
+                    array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                        schema = @io.swagger.v3.oas.annotations.media.Schema(implementation = az.fitnest.order.dto.PackageNameDto.class)
+                    )
+                )
+            )
+        }
+    )
     @GetMapping("/names")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<az.fitnest.order.dto.PackageNameDto>>> getPackageNames() {
