@@ -724,4 +724,36 @@ public class UserSubscriptionService {
                 .setUsersLast7Days(last7Days)
                 .build();
     }
+
+    @Transactional(readOnly = true)
+    public az.fitnest.order.dto.AdminUserSubscriptionResponse getUserSubscriptionDetail(Long userId) {
+        log.info("Fetching user subscription detail for admin. User ID: {}", userId);
+        
+        List<Subscription> allSubs = subscriptionRepository.findAllByUserIdOrderByStartAtDesc(userId);
+        if (allSubs.isEmpty()) {
+            throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_subscription_found");
+        }
+        
+        Subscription sub = allSubs.get(0);
+        SubscriptionPackage pkg = packageRepository.findById(sub.getPackageId())
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
+        
+        PackageOption option = pkg.getOptions().stream()
+                .filter(o -> o.getId().equals(sub.getOptionId()))
+                .findFirst()
+                .orElse(null);
+
+        return az.fitnest.order.dto.AdminUserSubscriptionResponse.builder()
+                .packageId(sub.getPackageId())
+                .packageName(pkg.getName())
+                .optionId(sub.getOptionId())
+                .optionDuration(option != null ? option.getDurationMonths() : null)
+                .price(option != null ? option.getPriceStandard() : pkg.getPrice())
+                .discountedPrice(option != null ? option.getPriceDiscounted() : null)
+                .startDate(sub.getStartAt())
+                .endDate(sub.getEndAt())
+                .totalEntryLimit(sub.getTotalLimit())
+                .userRemainingLimit(sub.getRemainingLimit())
+                .build();
+    }
 }
