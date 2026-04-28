@@ -67,13 +67,13 @@ public class UserSubscriptionService {
 
         if (subscription.getRemainingLimit() != null) {
             if (subscription.getRemainingLimit() <= 0) {
-                subscription.setStatus("NO_LIMITS");
+                subscription.setStatus("FINISHED");
                 subscriptionRepository.save(subscription);
                 throw new az.fitnest.order.exception.BadRequestException("error.no_remaining_visits");
             }
             subscription.setRemainingLimit(subscription.getRemainingLimit() - 1);
             if (subscription.getRemainingLimit() == 0) {
-                subscription.setStatus("NO_LIMITS");
+                subscription.setStatus("FINISHED");
             }
             subscriptionRepository.save(subscription);
             subscriptionEventPublisher.publishSubscriptionEvent(userId, "CHECKIN", subscription.getSubscriptionId());
@@ -490,7 +490,7 @@ public class UserSubscriptionService {
         next.setUserId(current.getUserId());
         next.setPackageId(current.getPackageId());
         next.setOptionId(current.getOptionId());
-        next.setStatus(option.getEntryLimit() != null && option.getEntryLimit() == 0 ? "NO_LIMITS" : "ACTIVE");
+        next.setStatus(option.getEntryLimit() != null && option.getEntryLimit() == 0 ? "FINISHED" : "ACTIVE");
         next.setStartAt(now);
         next.setEndAt(endAt);
         next.setTotalLimit(option.getEntryLimit());
@@ -520,7 +520,7 @@ public class UserSubscriptionService {
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.duration_config_not_found"));
 
         List<Subscription> toFinish = subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "ACTIVE");
-        toFinish.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "NO_LIMITS"));
+        toFinish.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "FINISHED"));
         toFinish.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "FROZEN"));
         toFinish.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "PENDING"));
         for (Subscription existing : toFinish) {
@@ -545,7 +545,7 @@ public class UserSubscriptionService {
         subscription.setPackageId(request.planId());
         subscription.setOptionId(option.getId());
         if (entryLimit != null && entryLimit == 0) {
-            subscription.setStatus("NO_LIMITS");
+            subscription.setStatus("FINISHED");
         } else {
             subscription.setStatus("ACTIVE");
         }
@@ -608,7 +608,7 @@ public class UserSubscriptionService {
     @Transactional
     public void removeAllSubscriptionsOfUser(Long userId) {
         List<Subscription> allSubs = subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "ACTIVE");
-        allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "NO_LIMITS"));
+        allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "FINISHED"));
         allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "FROZEN"));
         allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "PENDING"));
         for (Subscription sub : allSubs) {
