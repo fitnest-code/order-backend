@@ -24,20 +24,8 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
             Long userId = request.getUserId();
             ActiveSubscriptionResponse dto = subscriptionService.getActiveSubscription(userId);
 
-            az.fitnest.order.grpc.ActiveSubscriptionResponse.Builder grpcResponse = az.fitnest.order.grpc.ActiveSubscriptionResponse.newBuilder();
-
-            if (dto.status() != null) {
-                grpcResponse.setSubscriptionStatus(dto.status());
-            }
-            if (dto.subscription() != null) {
-                var sub = dto.subscription();
-                if (sub.packageName() != null) grpcResponse.setPackageName(sub.packageName());
-                if (sub.packageId() != null) grpcResponse.setPackageId(Long.parseLong(sub.packageId()));
-                if (sub.totalLimit() != null) grpcResponse.setTotalLimit(sub.totalLimit());
-                if (sub.remainingLimit() != null) grpcResponse.setRemainingLimit(sub.remainingLimit());
-                if (sub.endAt() != null) grpcResponse.setExpiresAt(sub.endAt().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
-            }
-            responseObserver.onNext(grpcResponse.build());
+            az.fitnest.order.grpc.ActiveSubscriptionResponse grpcResponse = buildGrpcActiveSubscriptionResponse(dto);
+            responseObserver.onNext(grpcResponse);
             responseObserver.onCompleted();
         } catch (Exception e) {
             responseObserver.onError(io.grpc.Status.INTERNAL
@@ -45,6 +33,45 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
                     .withCause(e)
                     .asRuntimeException());
         }
+    }
+
+    @Override
+    public void getActiveSubscriptions(az.fitnest.order.grpc.GetActiveSubscriptionsRequest request, StreamObserver<az.fitnest.order.grpc.GetActiveSubscriptionsResponse> responseObserver) {
+        try {
+            az.fitnest.order.grpc.GetActiveSubscriptionsResponse.Builder responseBuilder = az.fitnest.order.grpc.GetActiveSubscriptionsResponse.newBuilder();
+            for (Long userId : request.getUserIdsList()) {
+                try {
+                    ActiveSubscriptionResponse dto = subscriptionService.getActiveSubscription(userId);
+                    responseBuilder.putSubscriptions(userId, buildGrpcActiveSubscriptionResponse(dto));
+                } catch (Exception e) {
+                    log.error("Failed to get active subscription for user {}: {}", userId, e.getMessage());
+                }
+            }
+            responseObserver.onNext(responseBuilder.build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to get active subscriptions: " + e.getMessage())
+                    .withCause(e)
+                    .asRuntimeException());
+        }
+    }
+
+    private az.fitnest.order.grpc.ActiveSubscriptionResponse buildGrpcActiveSubscriptionResponse(ActiveSubscriptionResponse dto) {
+        az.fitnest.order.grpc.ActiveSubscriptionResponse.Builder grpcResponse = az.fitnest.order.grpc.ActiveSubscriptionResponse.newBuilder();
+
+        if (dto.status() != null) {
+            grpcResponse.setSubscriptionStatus(dto.status());
+        }
+        if (dto.subscription() != null) {
+            var sub = dto.subscription();
+            if (sub.packageName() != null) grpcResponse.setPackageName(sub.packageName());
+            if (sub.packageId() != null) grpcResponse.setPackageId(Long.parseLong(sub.packageId()));
+            if (sub.totalLimit() != null) grpcResponse.setTotalLimit(sub.totalLimit());
+            if (sub.remainingLimit() != null) grpcResponse.setRemainingLimit(sub.remainingLimit());
+            if (sub.endAt() != null) grpcResponse.setExpiresAt(sub.endAt().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+        }
+        return grpcResponse.build();
     }
 
     @Override
