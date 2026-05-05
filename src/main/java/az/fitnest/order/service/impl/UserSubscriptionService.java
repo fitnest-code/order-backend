@@ -756,4 +756,61 @@ public class UserSubscriptionService {
                 .userRemainingLimit(sub.getRemainingLimit())
                 .build();
     }
+
+    @Transactional
+    public void freezeSession(Long userId) {
+        List<Subscription> activeSubs = subscriptionRepository.findByUserIdAndStatus(userId, "ACTIVE");
+        if (activeSubs.isEmpty()) {
+            throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_active_subscription");
+        }
+        Subscription subscription = activeSubs.stream()
+                .max((a, b) -> a.getEndAt().compareTo(b.getEndAt()))
+                .get();
+
+        if (subscription.getRemainingLimit() == null || subscription.getRemainingLimit() <= 0) {
+            throw new az.fitnest.order.exception.BadRequestException("error.no_remaining_visits");
+        }
+
+        subscription.setRemainingLimit(subscription.getRemainingLimit() - 1);
+        if (subscription.getFrozenSessions() == null) {
+            subscription.setFrozenSessions(0);
+        }
+        subscription.setFrozenSessions(subscription.getFrozenSessions() + 1);
+
+        if (subscription.getRemainingLimit() == 0) {
+            subscription.setStatus("FINISHED");
+        }
+
+        subscriptionRepository.save(subscription);
+        log.info("Froze 1 session for user {}. Remaining: {}, Frozen: {}", userId, subscription.getRemainingLimit(), subscription.getFrozenSessions());
+    }
+
+    @Transactional
+    public void restoreSession(Long userId) {
+        List<Subscription> subs = subscriptionRepository.findByUserIdAndStatusIn(userId, List.of("ACTIVE", "FINISHED"));
+        if (subs.isEmpty()) {
+            return;
+        }
+        Subscription subscription = subs.stream()
+                .max((a, b) -> a.getEndAt().compareTo(b.getEndAt()))
+                .get();
+
+        if (subscription.getFrozenSessions() == null || subscription.getFrozenSessions() <= 0) {
+            log.warn("Attempted to restore session for user {} but no sessions are frozen.", userId);
+            return;
+        }
+
+        subscription.setFrozenSessions(subscription.getFrozenSessions() - 1);
+        if (subscription.getRemainingLimit() == null) {
+            subscription.setRemainingLimit(0);
+        }
+        subscription.setRemainingLimit(subscription.getRemainingLimit() + 1);
+        
+        if ("FINISHED".equals(subscription.getStatus()) && subscription.getRemainingLimit() > 0) {
+            subscription.setStatus("ACTIVE");
+        }
+
+        subscriptionRepository.save(subscription);
+        log.info("Restored 1 session for user {}. Remaining: {}, Frozen: {}", userId, subscription.getRemainingLimit(), subscription.getFrozenSessions());
+    }
 }

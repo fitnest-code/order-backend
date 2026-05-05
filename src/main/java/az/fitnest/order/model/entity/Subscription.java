@@ -62,4 +62,7 @@ public class Subscription {
 
     @Column(name = "auto_payment_enabled")
     private Boolean autoPaymentEnabled = false;
+
+    @Column(name = "frozen_sessions")
+    private Integer frozenSessions = 0;
 }

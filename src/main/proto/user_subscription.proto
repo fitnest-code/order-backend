@@ -15,6 +15,24 @@ service UserSubscriptionService {
   rpc GetSubscriptionStatistics(GetSubscriptionStatisticsRequest) returns (SubscriptionStatisticsResponse);
   rpc GetFilteredUserIds(GetFilteredUserIdsRequest) returns (GetUserIdsByPackageIdResponse);
   rpc GetActiveSubscriptions(GetActiveSubscriptionsRequest) returns (GetActiveSubscriptionsResponse);
+  rpc FreezeSession(FreezeSessionRequest) returns (FreezeSessionResponse);
+  rpc RestoreSession(RestoreSessionRequest) returns (RestoreSessionResponse);
+}
+
+message FreezeSessionRequest {
+  int64 user_id = 1;
+}
+
+message FreezeSessionResponse {
+  bool success = 1;
+}
+
+message RestoreSessionRequest {
+  int64 user_id = 1;
+}
+
+message RestoreSessionResponse {
+  bool success = 1;
 }
 
 message GetActiveSubscriptionsRequest {
