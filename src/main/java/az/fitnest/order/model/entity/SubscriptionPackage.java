@@ -39,6 +39,13 @@ public class SubscriptionPackage extends BaseAuditableEntity {
     @Column(name = "sort_order")
     private Integer sortOrder;
 
+    @Column(name = "entry_limit")
+    private Integer entryLimit;
+
+    @ElementCollection
+    @CollectionTable(name = "subscription_package_benefits", joinColumns = @JoinColumn(name = "package_id"))
+    private List<PlanBenefit> benefits = new java.util.ArrayList<>();
+
     @OneToMany(mappedBy = "subscriptionPackage", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<PackageOption> options = new HashSet<>();
 }

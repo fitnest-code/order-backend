@@ -160,10 +160,10 @@ public class PackageCatalogService {
 
         String badge = (discount != null && base != null && discount.compareTo(base) < 0) ? "discount" : null;
 
-        List<PackageBenefitDto> benefits = option.getBenefits() != null ?
-                option.getBenefits().stream()
+        List<PackageBenefitDto> benefits = pkg.getBenefits() != null ?
+                pkg.getBenefits().stream()
                         .map(b -> {
-                            String entityId = option.getId() + "_" + b.getDescription();
+                            String entityId = pkg.getId() + "_" + b.getDescription();
                             String localizedBenefit = translationService.getTranslatedValue("PLANBENEFIT", entityId, "description", lang);
                             return PackageBenefitDto.builder()
                                     .description(localizedBenefit != null ? localizedBenefit : b.getDescription())
@@ -178,8 +178,8 @@ public class PackageCatalogService {
                 .durationLabel(getDurationLabel(option.getDurationMonths(), lang))
                 .price(priceDto)
                 .badge(badge)
-                .visitLimit(option.getEntryLimit() != null ? option.getEntryLimit() : 0)
-                .freezeDays(option.getFreezeDays() != null ? option.getFreezeDays() : 0)
+                .visitLimit(pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0)
+                .freezeDays(0)
                 .benefits(benefits)
                 .build();
     }
@@ -217,13 +217,13 @@ public class PackageCatalogService {
                 badge = "discount";
             }
 
-            visitLimit = option.getEntryLimit() != null ? option.getEntryLimit() : 0;
-            freezeDays = option.getFreezeDays() != null ? option.getFreezeDays() : 0;
+            visitLimit = pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0;
+            freezeDays = 0;
 
-            if (option.getBenefits() != null) {
-                benefits = option.getBenefits().stream()
+            if (pkg.getBenefits() != null) {
+                benefits = pkg.getBenefits().stream()
                         .map(b -> {
-                            String entityId = option.getId() + "_" + b.getDescription();
+                            String entityId = pkg.getId() + "_" + b.getDescription();
                             String localizedBenefit = translationService.getTranslatedValue("PLANBENEFIT", entityId, "description", lang);
                             return PackageBenefitDto.builder()
                                     .description(localizedBenefit != null ? localizedBenefit : b.getDescription())

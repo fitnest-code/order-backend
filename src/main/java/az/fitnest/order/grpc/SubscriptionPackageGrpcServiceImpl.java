@@ -87,10 +87,8 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
         try {
             var packages = packageRepository.findAllByIdWithOptions(request.getPackageIdsList());
             for (SubscriptionPackage pkg : packages) {
-                if (pkg.getOptions() != null) {
-                    for (PackageOption option : pkg.getOptions()) {
-                        option.getBenefits().size();
-                    }
+                if (pkg.getBenefits() != null) {
+                    pkg.getBenefits().size();
                 }
             }
             GetPlansByIdsResponse.Builder responseBuilder = GetPlansByIdsResponse.newBuilder();
@@ -178,17 +176,10 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
                 .setCurrency(pkg.getCurrency() != null ? pkg.getCurrency() : "AZN")
                 .setIsActive(pkg.getIsActive() != null && pkg.getIsActive());
 
-        if (pkg.getOptions() != null) {
-            for (PackageOption opt : pkg.getOptions()) {
-                if (opt.getBenefits() != null) {
-                    for (PlanBenefit benefit : opt.getBenefits()) {
-                        if (benefit.getDescription() != null) {
-                            String desc = benefit.getDescription();
-                            if (!pkgBuilder.getBenefitsList().contains(desc)) {
-                                pkgBuilder.addBenefits(desc);
-                            }
-                        }
-                    }
+        if (pkg.getBenefits() != null) {
+            for (az.fitnest.order.model.entity.PlanBenefit benefit : pkg.getBenefits()) {
+                if (benefit.getDescription() != null) {
+                    pkgBuilder.addBenefits(benefit.getDescription());
                 }
             }
         }
@@ -199,8 +190,8 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
                         .setDurationMonths(opt.getDurationMonths() != null ? opt.getDurationMonths() : 0)
                         .setPriceStandard(opt.getPriceStandard() != null ? opt.getPriceStandard().toPlainString() : "0")
                         .setPriceDiscounted(opt.getPriceDiscounted() != null ? opt.getPriceDiscounted().toPlainString() : "")
-                        .setEntryLimit(opt.getEntryLimit() != null ? opt.getEntryLimit() : 0)
-                        .setFreezeDays(opt.getFreezeDays() != null ? opt.getFreezeDays() : 0);
+                        .setEntryLimit(pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0)
+                        .setFreezeDays(0);
 
                 pkgBuilder.addOptions(optBuilder.build());
             }

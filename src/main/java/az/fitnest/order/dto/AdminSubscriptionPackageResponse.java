@@ -19,6 +19,12 @@ public record AdminSubscriptionPackageResponse(
     @JsonProperty("sort_order")
     Integer sortOrder,
 
+    @JsonProperty("entry_limit")
+    Integer entryLimit,
+
+    @JsonProperty("benefits")
+    List<String> benefits,
+
     @JsonProperty("duration_options")
     List<AdminPackageOptionResponse> durationOptions
 ) {
@@ -37,16 +43,7 @@ public record AdminSubscriptionPackageResponse(
         @JsonProperty("price_discounted")
         BigDecimal priceDiscounted,
 
-        @JsonProperty("entry_limit")
-        Integer entryLimit,
-
         @JsonProperty("is_active")
-        Boolean isActive,
-
-        @JsonProperty("freeze_days")
-        Integer freezeDays,
-
-        @JsonProperty("benefits")
-        List<String> benefits
+        Boolean isActive
     ) {}
 }

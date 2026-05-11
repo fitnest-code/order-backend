@@ -7,6 +7,7 @@ import az.fitnest.order.dto.SubscriptionPackageWithOptionsRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -150,6 +151,22 @@ public class SubscriptionPackageAdminController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> updateOption(@PathVariable Long packageId, @PathVariable Long optionId, @RequestBody az.fitnest.order.dto.PackageOptionEntityDto request) {
         subscriptionPackageAdminService.updateOption(packageId, optionId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    @Operation(summary = "Xidmət əlavə edin", description = "Paketə yeni xidmət (üstünlük) əlavə edir.")
+    @PostMapping("/{packageId}/benefits")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> addBenefit(@PathVariable Long packageId, @RequestParam String description) {
+        subscriptionPackageAdminService.addBenefit(packageId, description);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    @Operation(summary = "Xidməti silin", description = "Paketdən müəyyən bir xidməti (üstünlüyü) silir.")
+    @DeleteMapping("/{packageId}/benefits")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> deleteBenefit(@PathVariable Long packageId, @RequestParam String description) {
+        subscriptionPackageAdminService.deleteBenefit(packageId, description);
         return ResponseEntity.noContent().build();
     }
 }

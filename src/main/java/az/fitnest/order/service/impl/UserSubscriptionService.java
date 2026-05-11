@@ -158,9 +158,7 @@ public class UserSubscriptionService {
                         ? matchedOption.getPriceDiscounted()
                         : matchedOption.getPriceStandard();
             }
-            Integer allowedFreezeDays = matchedOption != null && matchedOption.getFreezeDays() != null
-                    ? matchedOption.getFreezeDays()
-                    : 0;
+            Integer allowedFreezeDays = 0;
             Integer frozenDaysUsed = subscription.getFrozenDaysUsed() != null ? subscription.getFrozenDaysUsed() : 0;
             Integer remainingFreezeDays = allowedFreezeDays - frozenDaysUsed;
             Long optionId = matchedOption != null ? matchedOption.getId() : -1L;
@@ -168,11 +166,10 @@ public class UserSubscriptionService {
             if (localizedPackageName == null || localizedPackageName.isEmpty()) localizedPackageName = pkg.getName();
 
             java.util.List<az.fitnest.order.dto.PackageBenefitDto> benefitDtos = java.util.Collections.emptyList();
-            if (matchedOption != null && matchedOption.getBenefits() != null && !matchedOption.getBenefits().isEmpty()) {
-                final Long optId = matchedOption.getId();
-                benefitDtos = matchedOption.getBenefits().stream()
+            if (pkg.getBenefits() != null && !pkg.getBenefits().isEmpty()) {
+                benefitDtos = pkg.getBenefits().stream()
                         .map(b -> {
-                            String ebId = optId + "_" + b.getDescription();
+                            String ebId = pkg.getId() + "_" + b.getDescription();
                             String localizedBenefit = translationService.getTranslatedValue("PLANBENEFIT", ebId, "description", lang);
                             return az.fitnest.order.dto.PackageBenefitDto.builder()
                                     .description(localizedBenefit != null ? localizedBenefit : b.getDescription())
@@ -258,9 +255,7 @@ public class UserSubscriptionService {
                 .findFirst()
                 .orElse(null);
 
-        Integer allowedFreezeDays = matchedOption != null && matchedOption.getFreezeDays() != null
-                ? matchedOption.getFreezeDays()
-                : 0;
+        Integer allowedFreezeDays = 0;
 
         if (allowedFreezeDays == 0) {
             throw new az.fitnest.order.exception.BadRequestException("error.freeze_not_allowed_for_plan");
@@ -490,13 +485,13 @@ public class UserSubscriptionService {
         next.setUserId(current.getUserId());
         next.setPackageId(current.getPackageId());
         next.setOptionId(current.getOptionId());
-        next.setStatus(option.getEntryLimit() != null && option.getEntryLimit() == 0 ? "FINISHED" : "ACTIVE");
+        next.setStatus(pkg.getEntryLimit() != null && pkg.getEntryLimit() == 0 ? "FINISHED" : "ACTIVE");
         next.setStartAt(now);
         next.setEndAt(endAt);
-        next.setTotalLimit(option.getEntryLimit());
-        next.setRemainingLimit(option.getEntryLimit());
+        next.setTotalLimit(pkg.getEntryLimit());
+        next.setRemainingLimit(pkg.getEntryLimit());
         next.setFrozenDaysUsed(0);
-        next.setAllowedFreezeDays(option.getFreezeDays() != null ? option.getFreezeDays() : 0);
+        next.setAllowedFreezeDays(0);
         next.setAutoPaymentEnabled(true);
 
         Subscription saved = subscriptionRepository.save(next);
@@ -537,8 +532,8 @@ public class UserSubscriptionService {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime endAt = now.plusMonths(option.getDurationMonths());
 
-        Integer entryLimit = option.getEntryLimit();
-        Integer freezeDays = option.getFreezeDays() != null ? option.getFreezeDays() : 0;
+        Integer entryLimit = pkg.getEntryLimit();
+        Integer freezeDays = 0;
 
         Subscription subscription = new Subscription();
         subscription.setUserId(request.userId());

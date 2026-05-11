@@ -31,16 +31,6 @@ public class PackageOption extends BaseAuditableEntity {
     @Column(name = "price_discounted")
     private BigDecimal priceDiscounted;
 
-    @Column(name = "entry_limit")
-    private Integer entryLimit;
-
-    @Column(name = "freeze_days")
-    private Integer freezeDays;
-
     @Column(name = "is_active")
     private Boolean isActive;
-
-    @ElementCollection
-    @CollectionTable(name = "membership_plan_option_benefits", joinColumns = @JoinColumn(name = "option_id"))
-    private List<PlanBenefit> benefits = new ArrayList<>();
 }
