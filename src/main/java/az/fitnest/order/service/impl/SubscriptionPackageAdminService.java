@@ -43,6 +43,24 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional(readOnly = true)
+    public List<az.fitnest.order.dto.AdminPackageOptionDetailResponse> getAllPackageOptions() {
+        return packageRepository.findAllWithOptions().stream()
+                .flatMap(pkg -> pkg.getOptions().stream()
+                        .map(opt -> az.fitnest.order.dto.AdminPackageOptionDetailResponse.builder()
+                                .packageId(pkg.getId())
+                                .packageName(pkg.getName())
+                                .optionId(opt.getId())
+                                .durationMonths(opt.getDurationMonths())
+                                .priceStandard(opt.getPriceStandard())
+                                .priceDiscounted(opt.getPriceDiscounted())
+                                .entryLimit(opt.getEntryLimit())
+                                .isActive(opt.getIsActive() != null ? opt.getIsActive() : true)
+                                .benefits(opt.getBenefits() != null ? opt.getBenefits().stream().map(az.fitnest.order.model.entity.PlanBenefit::getDescription).toList() : List.of())
+                                .build()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<az.fitnest.order.dto.PackageNameDto> getPackageNames() {
         return packageRepository.findAll().stream()
                 .map(pkg -> az.fitnest.order.dto.PackageNameDto.builder()
@@ -69,6 +87,8 @@ public class SubscriptionPackageAdminService {
                                 .priceDiscounted(opt.getPriceDiscounted())
                                 .entryLimit(opt.getEntryLimit())
                                 .freezeDays(opt.getFreezeDays())
+                                .isActive(opt.getIsActive() != null ? opt.getIsActive() : true)
+                                .benefits(opt.getBenefits() != null ? opt.getBenefits().stream().map(az.fitnest.order.model.entity.PlanBenefit::getDescription).toList() : List.of())
                                 .build())
                         .toList();
 
@@ -117,12 +137,9 @@ public class SubscriptionPackageAdminService {
                 opt.setPriceDiscounted(dto.priceDiscounted());
                 opt.setEntryLimit(dto.entryLimit());
                 opt.setFreezeDays(dto.freezeDays());
+                opt.setIsActive(dto.isActive() != null ? dto.isActive() : true);
                 if (dto.benefits() != null) {
-                    List<az.fitnest.order.model.entity.PlanBenefit> benefits = new ArrayList<>();
-                    for (az.fitnest.order.model.entity.PlanBenefit pb : dto.benefits()) {
-                        benefits.add(pb);
-                    }
-                    opt.setBenefits(benefits);
+                    opt.setBenefits(new ArrayList<>(dto.benefits()));
                 }
                 pkg.getOptions().add(opt);
             }
@@ -139,8 +156,9 @@ public class SubscriptionPackageAdminService {
 
     @Transactional
     public Long createPackage(String name, String currency, BillingPeriod billingPeriod, Boolean isActive) {
-        if (name == null || name.isBlank()) {
-            throw new az.fitnest.order.exception.BadRequestException("error.missing_field");
+        List<String> allowedNames = List.of("Bronze", "Silver", "Gold", "Platinum");
+        if (name == null || name.isBlank() || !allowedNames.contains(name)) {
+            throw new az.fitnest.order.exception.BadRequestException("error.invalid_package_name");
         }
         SubscriptionPackage pkg = new SubscriptionPackage();
         pkg.setName(name);
@@ -154,8 +172,9 @@ public class SubscriptionPackageAdminService {
 
     @Transactional
     public void updatePackageWithOptions(Long packageId, SubscriptionPackageWithOptionsRequest request) {
-        if (request.name() == null || request.name().isBlank()) {
-            throw new az.fitnest.order.exception.BadRequestException("error.missing_field");
+        List<String> allowedNames = List.of("Bronze", "Silver", "Gold", "Platinum");
+        if (request.name() == null || request.name().isBlank() || !allowedNames.contains(request.name())) {
+            throw new az.fitnest.order.exception.BadRequestException("error.invalid_package_name");
         }
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
@@ -176,6 +195,10 @@ public class SubscriptionPackageAdminService {
                 opt.setPriceDiscounted(dto.priceDiscounted());
                 opt.setEntryLimit(dto.entryLimit());
                 opt.setFreezeDays(dto.freezeDays());
+                opt.setIsActive(dto.isActive() != null ? dto.isActive() : true);
+                if (dto.benefits() != null) {
+                    opt.setBenefits(new ArrayList<>(dto.benefits()));
+                }
                 pkg.getOptions().add(opt);
             }
         }
@@ -210,12 +233,9 @@ public class SubscriptionPackageAdminService {
         opt.setPriceDiscounted(dto.priceDiscounted());
         opt.setEntryLimit(dto.entryLimit());
         opt.setFreezeDays(dto.freezeDays());
+        opt.setIsActive(dto.isActive() != null ? dto.isActive() : true);
         if (dto.benefits() != null) {
-            java.util.List<az.fitnest.order.model.entity.PlanBenefit> benefits = new ArrayList<>();
-            for (az.fitnest.order.model.entity.PlanBenefit pb : dto.benefits()) {
-                benefits.add(pb);
-            }
-            opt.setBenefits(benefits);
+            opt.setBenefits(new ArrayList<>(dto.benefits()));
         }
         pkg.getOptions().add(opt);
         packageRepository.save(pkg);
@@ -247,6 +267,39 @@ public class SubscriptionPackageAdminService {
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
         pkg.getOptions().clear();
+        packageRepository.save(pkg);
+    }
+
+    @Transactional
+    public void updateOptionStatus(Long packageId, Long optionId, boolean isActive) {
+        SubscriptionPackage pkg = packageRepository.findById(packageId)
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
+        PackageOption option = pkg.getOptions().stream()
+                .filter(opt -> opt.getId().equals(optionId))
+                .findFirst()
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.option_not_found"));
+        option.setIsActive(isActive);
+        packageRepository.save(pkg);
+    }
+
+    @Transactional
+    public void updateOption(Long packageId, Long optionId, az.fitnest.order.dto.PackageOptionEntityDto dto) {
+        SubscriptionPackage pkg = packageRepository.findById(packageId)
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
+        PackageOption opt = pkg.getOptions().stream()
+                .filter(o -> o.getId().equals(optionId))
+                .findFirst()
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.option_not_found"));
+
+        opt.setDurationMonths(dto.durationMonths());
+        opt.setPriceStandard(dto.priceStandard());
+        opt.setPriceDiscounted(dto.priceDiscounted());
+        opt.setEntryLimit(dto.entryLimit());
+        opt.setFreezeDays(dto.freezeDays());
+        opt.setIsActive(dto.isActive() != null ? dto.isActive() : opt.getIsActive());
+        if (dto.benefits() != null) {
+            opt.setBenefits(new ArrayList<>(dto.benefits()));
+        }
         packageRepository.save(pkg);
     }
 }

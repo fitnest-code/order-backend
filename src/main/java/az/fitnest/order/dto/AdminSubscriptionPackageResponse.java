@@ -40,7 +40,13 @@ public record AdminSubscriptionPackageResponse(
         @JsonProperty("entry_limit")
         Integer entryLimit,
 
+        @JsonProperty("is_active")
+        Boolean isActive,
+
         @JsonProperty("freeze_days")
-        Integer freezeDays
+        Integer freezeDays,
+
+        @JsonProperty("benefits")
+        List<String> benefits
     ) {}
 }

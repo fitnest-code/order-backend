@@ -59,6 +59,13 @@ public class SubscriptionPackageAdminController {
         return ResponseEntity.ok(ApiResponse.success(subscriptionPackageAdminService.getPackageNames()));
     }
 
+    @Operation(summary = "Bütün paket variantlarını əldə edin", description = "Sistemdəki bütün paket variantlarını (Bronze, Silver və s.) düz siyahı şəklində qaytarır.")
+    @GetMapping("/options")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<az.fitnest.order.dto.AdminPackageOptionDetailResponse>>> getAllOptions() {
+        return ResponseEntity.ok(ApiResponse.success(subscriptionPackageAdminService.getAllPackageOptions()));
+    }
+
     @Operation(summary = "Paketi ID ilə əldə edin", description = "Müəyyən abunəlik paketini variantları ilə birlikdə qaytarır.")
     @GetMapping("/{packageId}")
     @PreAuthorize("hasRole('ADMIN')")
@@ -127,6 +134,22 @@ public class SubscriptionPackageAdminController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteAllOptions(@PathVariable Long packageId) {
         subscriptionPackageAdminService.deleteAllOptionsByPackageId(packageId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Variant statusunu yeniləyin", description = "Müəyyən paket variantının aktiv/passiv statusunu yeniləyir.")
+    @PatchMapping("/{packageId}/options/{optionId}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> updateOptionStatus(@PathVariable Long packageId, @PathVariable Long optionId, @RequestParam boolean isActive) {
+        subscriptionPackageAdminService.updateOptionStatus(packageId, optionId, isActive);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Variantı yeniləyin", description = "Müəyyən paket variantını yeniləyir.")
+    @PutMapping("/{packageId}/options/{optionId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> updateOption(@PathVariable Long packageId, @PathVariable Long optionId, @RequestBody az.fitnest.order.dto.PackageOptionEntityDto request) {
+        subscriptionPackageAdminService.updateOption(packageId, optionId, request);
         return ResponseEntity.noContent().build();
     }
 }
