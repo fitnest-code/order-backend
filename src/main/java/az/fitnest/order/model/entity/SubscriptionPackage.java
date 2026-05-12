@@ -44,7 +44,7 @@ public class SubscriptionPackage extends BaseAuditableEntity {
 
     @ElementCollection
     @CollectionTable(name = "subscription_package_benefits", joinColumns = @JoinColumn(name = "package_id"))
-    private List<PlanBenefit> benefits = new java.util.ArrayList<>();
+    private java.util.Set<PlanBenefit> benefits = new java.util.LinkedHashSet<>();
 
     @OneToMany(mappedBy = "subscriptionPackage", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<PackageOption> options = new HashSet<>();
