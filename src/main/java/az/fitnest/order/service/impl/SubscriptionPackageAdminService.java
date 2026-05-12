@@ -331,8 +331,15 @@ public class SubscriptionPackageAdminService {
     public void addBenefit(Long packageId, String description) {
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
-        pkg.getBenefits().add(new az.fitnest.order.model.entity.PlanBenefit(description));
-        packageRepository.save(pkg);
+        if (description != null && !description.isBlank()) {
+            String trimmed = description.trim();
+            boolean exists = pkg.getBenefits().stream()
+                    .anyMatch(b -> b.getDescription().equalsIgnoreCase(trimmed));
+            if (!exists) {
+                pkg.getBenefits().add(new az.fitnest.order.model.entity.PlanBenefit(trimmed));
+                packageRepository.save(pkg);
+            }
+        }
     }
 
     @Transactional
