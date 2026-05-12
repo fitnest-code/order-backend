@@ -135,8 +135,17 @@ public class SubscriptionPackageAdminService {
         }
 
         pkg.setEntryLimit(request.entryLimit());
+        pkg.getBenefits().clear();
         if (request.benefits() != null) {
-            pkg.setBenefits(new ArrayList<>(request.benefits()));
+            java.util.Set<String> uniqueDescriptions = new java.util.HashSet<>();
+            for (az.fitnest.order.model.entity.PlanBenefit b : request.benefits()) {
+                if (b != null && b.getDescription() != null && !b.getDescription().isBlank()) {
+                    String trimmed = b.getDescription().trim();
+                    if (uniqueDescriptions.add(trimmed.toLowerCase())) {
+                        pkg.getBenefits().add(new az.fitnest.order.model.entity.PlanBenefit(trimmed));
+                    }
+                }
+            }
         }
 
         if (pkg.getId() != null) {
@@ -201,8 +210,18 @@ public class SubscriptionPackageAdminService {
         pkg.setIsActive(request.isActive() != null ? request.isActive() : pkg.getIsActive());
         pkg.setSortOrder(request.sortOrder() != null ? request.sortOrder() : pkg.getSortOrder());
         pkg.setEntryLimit(request.entryLimit());
+        
+        pkg.getBenefits().clear();
         if (request.benefits() != null) {
-            pkg.setBenefits(new ArrayList<>(request.benefits()));
+            java.util.Set<String> uniqueDescriptions = new java.util.HashSet<>();
+            for (az.fitnest.order.model.entity.PlanBenefit b : request.benefits()) {
+                if (b != null && b.getDescription() != null && !b.getDescription().isBlank()) {
+                    String trimmed = b.getDescription().trim();
+                    if (uniqueDescriptions.add(trimmed.toLowerCase())) {
+                        pkg.getBenefits().add(new az.fitnest.order.model.entity.PlanBenefit(trimmed));
+                    }
+                }
+            }
         }
 
         pkg.getOptions().clear();
