@@ -18,14 +18,15 @@ import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class SubscriptionPackageAdminService {
-            @Transactional(readOnly = true)
-            public az.fitnest.order.dto.PaginatedResponse<az.fitnest.order.dto.AdminSubscriptionPackageResponse> getAllPackagesPagedResponse(int page, int size) {
-                org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.max(1, size));
-                org.springframework.data.domain.Page<az.fitnest.order.dto.AdminSubscriptionPackageResponse> result = packageRepository.findAllWithOptions(pageable)
-                        .map(this::toAdminPackageResponse);
-                return az.fitnest.order.dto.PaginatedResponse.of(result);
-            }
+    @Transactional(readOnly = true)
+    public az.fitnest.order.dto.PaginatedResponse<az.fitnest.order.dto.AdminSubscriptionPackageResponse> getAllPackagesPagedResponse(int page, int size) {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.max(1, size));
+        org.springframework.data.domain.Page<az.fitnest.order.dto.AdminSubscriptionPackageResponse> result = packageRepository.findAllWithOptions(pageable)
+                .map(this::toAdminPackageResponse);
+        return az.fitnest.order.dto.PaginatedResponse.of(result);
+    }
     @Transactional(readOnly = true)
     public org.springframework.data.domain.Page<az.fitnest.order.dto.AdminSubscriptionPackageResponse> getAllPackagesPaged(int page, int size) {
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.max(1, size));

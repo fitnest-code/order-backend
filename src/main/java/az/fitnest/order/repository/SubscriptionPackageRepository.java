@@ -10,10 +10,11 @@ import java.util.List;
 
 @Repository
 public interface SubscriptionPackageRepository extends JpaRepository<SubscriptionPackage, Long> {
-                            @Query(value = "SELECT p FROM SubscriptionPackage p LEFT JOIN FETCH p.options LEFT JOIN FETCH p.benefits", countQuery = "SELECT COUNT(p) FROM SubscriptionPackage p")
-                            org.springframework.data.domain.Page<SubscriptionPackage> findAllWithOptions(org.springframework.data.domain.Pageable pageable);
-            @Query("SELECT p FROM SubscriptionPackage p LEFT JOIN FETCH p.options LEFT JOIN FETCH p.benefits")
-            List<SubscriptionPackage> findAllWithOptions();
+    @Query(value = "SELECT p FROM SubscriptionPackage p LEFT JOIN FETCH p.options LEFT JOIN FETCH p.benefits", countQuery = "SELECT COUNT(p) FROM SubscriptionPackage p")
+    org.springframework.data.domain.Page<SubscriptionPackage> findAllWithOptions(org.springframework.data.domain.Pageable pageable);
+
+    @Query("SELECT p FROM SubscriptionPackage p LEFT JOIN FETCH p.options LEFT JOIN FETCH p.benefits")
+    List<SubscriptionPackage> findAllWithOptions();
     @Query("""
     SELECT p FROM SubscriptionPackage p
     LEFT JOIN FETCH p.options o
