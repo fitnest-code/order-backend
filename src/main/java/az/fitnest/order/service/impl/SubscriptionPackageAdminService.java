@@ -127,12 +127,14 @@ public class SubscriptionPackageAdminService {
             pkg.setBenefits(new ArrayList<>(request.benefits()));
         }
 
+        if (pkg.getId() != null) {
+            pkg.getOptions().clear();
+        }
+
         if (request.options() != null) {
+            java.util.Set<Integer> seenDurations = new java.util.HashSet<>();
             for (PackageOptionEntityDto dto : request.options()) {
-                boolean exists = pkg.getOptions().stream().anyMatch(opt ->
-                    Objects.equals(opt.getDurationMonths(), dto.durationMonths())
-                );
-                if (exists) {
+                if (!seenDurations.add(dto.durationMonths())) {
                     throw new az.fitnest.order.exception.BadRequestException("error.duration_already_exists");
                 }
                 PackageOption opt = new PackageOption();
@@ -192,7 +194,11 @@ public class SubscriptionPackageAdminService {
 
         pkg.getOptions().clear();
         if (request.options() != null) {
+            java.util.Set<Integer> seenDurations = new java.util.HashSet<>();
             for (PackageOptionEntityDto dto : request.options()) {
+                if (!seenDurations.add(dto.durationMonths())) {
+                    throw new az.fitnest.order.exception.BadRequestException("error.duration_already_exists");
+                }
                 PackageOption opt = new PackageOption();
                 opt.setSubscriptionPackage(pkg);
                 opt.setDurationMonths(dto.durationMonths());
@@ -276,6 +282,14 @@ public class SubscriptionPackageAdminService {
                 .findFirst()
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.option_not_found"));
         option.setIsActive(isActive);
+        packageRepository.save(pkg);
+    }
+
+    @Transactional
+    public void updatePackageStatus(Long packageId, boolean isActive) {
+        SubscriptionPackage pkg = packageRepository.findById(packageId)
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
+        pkg.setIsActive(isActive);
         packageRepository.save(pkg);
     }
 

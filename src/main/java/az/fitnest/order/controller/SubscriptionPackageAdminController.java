@@ -146,6 +146,14 @@ public class SubscriptionPackageAdminController {
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(summary = "Paket statusunu yeniləyin", description = "Müəyyən abunəlik paketinin aktiv/passiv statusunu yeniləyir.")
+    @PatchMapping("/{packageId}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> updatePackageStatus(@PathVariable Long packageId, @RequestParam boolean isActive) {
+        subscriptionPackageAdminService.updatePackageStatus(packageId, isActive);
+        return ResponseEntity.noContent().build();
+    }
+
     @Operation(summary = "Variantı yeniləyin", description = "Müəyyən paket variantını yeniləyir.")
     @PutMapping("/{packageId}/options/{optionId}")
     @PreAuthorize("hasRole('ADMIN')")
