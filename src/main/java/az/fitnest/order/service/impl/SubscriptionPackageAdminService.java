@@ -148,24 +148,34 @@ public class SubscriptionPackageAdminService {
             }
         }
 
-        if (pkg.getId() != null) {
-            pkg.getOptions().clear();
-        }
-
         if (request.options() != null) {
             java.util.Set<Integer> seenDurations = new java.util.HashSet<>();
+            java.util.Map<Integer, PackageOption> existingOptionsMap = new java.util.HashMap<>();
+            if (pkg.getOptions() != null) {
+                pkg.getOptions().forEach(o -> existingOptionsMap.put(o.getDurationMonths(), o));
+            }
+
+            java.util.Set<PackageOption> updatedOptions = new java.util.HashSet<>();
             for (PackageOptionEntityDto dto : request.options()) {
                 if (!seenDurations.add(dto.durationMonths())) {
                     throw new az.fitnest.order.exception.BadRequestException("error.duration_already_exists");
                 }
-                PackageOption opt = new PackageOption();
+                
+                PackageOption opt = existingOptionsMap.getOrDefault(dto.durationMonths(), new PackageOption());
                 opt.setSubscriptionPackage(pkg);
                 opt.setDurationMonths(dto.durationMonths());
                 opt.setPriceStandard(dto.priceStandard());
                 opt.setPriceDiscounted(dto.priceDiscounted());
                 opt.setIsActive(dto.isActive() != null ? dto.isActive() : true);
                 opt.setEntryLimit(dto.entryLimit());
-                pkg.getOptions().add(opt);
+                updatedOptions.add(opt);
+            }
+            
+            if (pkg.getOptions() == null) {
+                pkg.setOptions(updatedOptions);
+            } else {
+                pkg.getOptions().clear();
+                pkg.getOptions().addAll(updatedOptions);
             }
         }
         if (!pkg.getOptions().isEmpty()) {
@@ -224,22 +234,31 @@ public class SubscriptionPackageAdminService {
             }
         }
 
-        pkg.getOptions().clear();
         if (request.options() != null) {
             java.util.Set<Integer> seenDurations = new java.util.HashSet<>();
+            java.util.Map<Integer, PackageOption> existingOptionsMap = new java.util.HashMap<>();
+            if (pkg.getOptions() != null) {
+                pkg.getOptions().forEach(o -> existingOptionsMap.put(o.getDurationMonths(), o));
+            }
+
+            java.util.Set<PackageOption> updatedOptions = new java.util.HashSet<>();
             for (PackageOptionEntityDto dto : request.options()) {
                 if (!seenDurations.add(dto.durationMonths())) {
                     throw new az.fitnest.order.exception.BadRequestException("error.duration_already_exists");
                 }
-                PackageOption opt = new PackageOption();
+                
+                PackageOption opt = existingOptionsMap.getOrDefault(dto.durationMonths(), new PackageOption());
                 opt.setSubscriptionPackage(pkg);
                 opt.setDurationMonths(dto.durationMonths());
                 opt.setPriceStandard(dto.priceStandard());
                 opt.setPriceDiscounted(dto.priceDiscounted());
                 opt.setIsActive(dto.isActive() != null ? dto.isActive() : true);
                 opt.setEntryLimit(dto.entryLimit());
-                pkg.getOptions().add(opt);
+                updatedOptions.add(opt);
             }
+            
+            pkg.getOptions().clear();
+            pkg.getOptions().addAll(updatedOptions);
         }
 
         if (!pkg.getOptions().isEmpty()) {
