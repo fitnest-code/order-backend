@@ -102,11 +102,19 @@ public class UserSubscriptionService {
             if (!allSubs.isEmpty()) {
                 subscription = allSubs.get(0);
                 String rawStatus = subscription.getStatus();
-                subscriptionStatus = translationService.getTranslatedValue("SUBSCRIPTION_STATUS", rawStatus, "name", lang);
-                if (subscriptionStatus == null || subscriptionStatus.isEmpty()) {
-                    subscriptionStatus = rawStatus != null ? rawStatus.toLowerCase() : "unknown";
-                    if (subscriptionStatus.length() > 0) {
-                        subscriptionStatus = subscriptionStatus.substring(0, 1).toUpperCase() + subscriptionStatus.substring(1);
+                if (Boolean.TRUE.equals(subscription.getIsUpgraded())) {
+                    subscriptionStatus = "changed";
+                } else if ("ACTIVE".equalsIgnoreCase(rawStatus) && subscription.getEndAt() != null &&
+                        !subscription.getEndAt().isBefore(LocalDateTime.now()) &&
+                        !subscription.getEndAt().isAfter(LocalDateTime.now().plusDays(7))) {
+                    subscriptionStatus = "last_7_days";
+                } else {
+                    subscriptionStatus = translationService.getTranslatedValue("SUBSCRIPTION_STATUS", rawStatus, "name", lang);
+                    if (subscriptionStatus == null || subscriptionStatus.isEmpty()) {
+                        subscriptionStatus = rawStatus != null ? rawStatus.toLowerCase() : "unknown";
+                        if (subscriptionStatus.length() > 0) {
+                            subscriptionStatus = subscriptionStatus.substring(0, 1).toUpperCase() + subscriptionStatus.substring(1);
+                        }
                     }
                 }
                 log.info("Found latest subscription for userId={}, subscriptionId={}, status={}", userId, subscription.getSubscriptionId(), subscriptionStatus);
@@ -686,6 +694,9 @@ public class UserSubscriptionService {
                 case "LAST_7_DAYS":
                     predicates.add(cb.equal(root.get("status"), "ACTIVE"));
                     predicates.add(cb.between(root.get("endAt"), now, now.plusDays(7)));
+                    break;
+                case "CHANGED":
+                    predicates.add(cb.equal(root.get("isUpgraded"), true));
                     break;
             }
         }
