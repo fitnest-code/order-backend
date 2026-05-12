@@ -86,6 +86,7 @@ public class SubscriptionPackageAdminService {
                                 .priceStandard(opt.getPriceStandard())
                                 .priceDiscounted(opt.getPriceDiscounted())
                                 .isActive(opt.getIsActive() != null ? opt.getIsActive() : true)
+                                .entryLimit(opt.getEntryLimit())
                                 .build())
                         .toList();
 
@@ -140,6 +141,7 @@ public class SubscriptionPackageAdminService {
                 opt.setPriceStandard(dto.priceStandard());
                 opt.setPriceDiscounted(dto.priceDiscounted());
                 opt.setIsActive(dto.isActive() != null ? dto.isActive() : true);
+                opt.setEntryLimit(dto.entryLimit());
                 pkg.getOptions().add(opt);
             }
         }
@@ -197,6 +199,7 @@ public class SubscriptionPackageAdminService {
                 opt.setPriceStandard(dto.priceStandard());
                 opt.setPriceDiscounted(dto.priceDiscounted());
                 opt.setIsActive(dto.isActive() != null ? dto.isActive() : true);
+                opt.setEntryLimit(dto.entryLimit());
                 pkg.getOptions().add(opt);
             }
         }
@@ -230,6 +233,7 @@ public class SubscriptionPackageAdminService {
         opt.setPriceStandard(dto.priceStandard());
         opt.setPriceDiscounted(dto.priceDiscounted());
         opt.setIsActive(dto.isActive() != null ? dto.isActive() : true);
+        opt.setEntryLimit(dto.entryLimit());
         pkg.getOptions().add(opt);
         packageRepository.save(pkg);
         return opt.getId();
@@ -288,6 +292,7 @@ public class SubscriptionPackageAdminService {
         opt.setPriceStandard(dto.priceStandard());
         opt.setPriceDiscounted(dto.priceDiscounted());
         opt.setIsActive(dto.isActive() != null ? dto.isActive() : opt.getIsActive());
+        opt.setEntryLimit(dto.entryLimit());
         packageRepository.save(pkg);
     }
 

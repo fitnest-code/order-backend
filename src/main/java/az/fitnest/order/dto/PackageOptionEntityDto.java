@@ -8,5 +8,6 @@ public record PackageOptionEntityDto(
     Integer durationMonths,
     BigDecimal priceStandard,
     BigDecimal priceDiscounted,
-    Boolean isActive
+    Boolean isActive,
+    Integer entryLimit
 ) {}

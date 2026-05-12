@@ -33,4 +33,7 @@ public class PackageOption extends BaseAuditableEntity {
 
     @Column(name = "is_active")
     private Boolean isActive;
+
+    @Column(name = "entry_limit")
+    private Integer entryLimit;
 }

@@ -44,6 +44,9 @@ public record AdminSubscriptionPackageResponse(
         BigDecimal priceDiscounted,
 
         @JsonProperty("is_active")
-        Boolean isActive
+        Boolean isActive,
+
+        @JsonProperty("entry_limit")
+        Integer entryLimit
     ) {}
 }
