@@ -137,8 +137,28 @@ public class UserSubscriptionService {
             SubscriptionPackage pkg = packageRepository.findFullById(subscription.getPackageId())
                     .orElse(null);
             if (pkg == null) {
-                log.error("Package not found for packageId={} (userId={})", subscription.getPackageId(), userId);
-                throw new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found");
+                log.warn("Package not found for packageId={} (userId={}), returning fallback details with status={}", subscription.getPackageId(), userId, subscriptionStatus);
+                SubscriptionDetailsDto fallbackDetails = SubscriptionDetailsDto.builder()
+                        .subscriptionId(subscription.getSubscriptionId())
+                        .packageId(String.valueOf(subscription.getPackageId()))
+                        .packageName("Bilinməyən Paket")
+                        .durationMonths(1)
+                        .durationLabel("1 ay")
+                        .effectivePrice(java.math.BigDecimal.ZERO)
+                        .currency("AZN")
+                        .totalLimit(subscription.getTotalLimit())
+                        .remainingLimit(subscription.getRemainingLimit())
+                        .startAt(subscription.getStartAt() != null ? subscription.getStartAt().toLocalDate() : null)
+                        .endAt(subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null)
+                        .frozenDaysUsed(0)
+                        .allowedFreezeDays(0)
+                        .remainingFreezeDays(0)
+                        .automaticPaymentEnabled(false)
+                        .build();
+                return ActiveSubscriptionResponse.builder()
+                        .status(subscriptionStatus)
+                        .subscription(fallbackDetails)
+                        .build();
             }
             long durationMonths = 1;
             if (subscription.getEndAt() != null && subscription.getStartAt() != null) {
