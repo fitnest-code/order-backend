@@ -34,6 +34,17 @@ public class SubscriptionPackageAdminService {
                 .map(this::toAdminPackageResponse);
     }
 
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+
+    private void cleanupStaleOptionBenefitsTable() {
+        try {
+            entityManager.createNativeQuery("DROP TABLE IF EXISTS membership_plan_option_benefits CASCADE").executeUpdate();
+        } catch (Exception e) {
+            // Ignore if table does not exist or permission denied
+        }
+    }
+
     private final SubscriptionPackageRepository packageRepository;
 
     @Transactional(readOnly = true)
@@ -176,6 +187,7 @@ public class SubscriptionPackageAdminService {
 
     @Transactional
     public void updatePackageWithOptions(Long packageId, SubscriptionPackageWithOptionsRequest request) {
+        cleanupStaleOptionBenefitsTable();
         List<String> allowedNames = List.of("Bronze", "Silver", "Gold", "Platinum");
         if (request.name() == null || request.name().isBlank() || !allowedNames.contains(request.name())) {
             throw new az.fitnest.order.exception.BadRequestException("error.invalid_package_name");
@@ -248,6 +260,7 @@ public class SubscriptionPackageAdminService {
 
     @Transactional
     public void deletePackageById(Long packageId) {
+        cleanupStaleOptionBenefitsTable();
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
         packageRepository.delete(pkg);
@@ -255,11 +268,13 @@ public class SubscriptionPackageAdminService {
 
     @Transactional
     public void deleteAllPackages() {
+        cleanupStaleOptionBenefitsTable();
         packageRepository.deleteAll();
     }
 
     @Transactional
     public void deleteOptionById(Long packageId, Long optionId) {
+        cleanupStaleOptionBenefitsTable();
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
         pkg.getOptions().removeIf(opt -> opt.getId().equals(optionId));
@@ -268,6 +283,7 @@ public class SubscriptionPackageAdminService {
 
     @Transactional
     public void deleteAllOptionsByPackageId(Long packageId) {
+        cleanupStaleOptionBenefitsTable();
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
         pkg.getOptions().clear();
