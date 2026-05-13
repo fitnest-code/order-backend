@@ -160,6 +160,10 @@ public class SubscriptionPackageAdminService {
                 if (!seenDurations.add(dto.durationMonths())) {
                     throw new az.fitnest.order.exception.BadRequestException("error.duration_already_exists");
                 }
+                if (dto.priceDiscounted() != null && dto.priceStandard() != null &&
+                    dto.priceDiscounted().compareTo(dto.priceStandard()) > 0) {
+                    throw new az.fitnest.order.exception.BadRequestException("error.discount_higher_than_price");
+                }
                 
                 PackageOption opt = existingOptionsMap.getOrDefault(dto.durationMonths(), new PackageOption());
                 opt.setSubscriptionPackage(pkg);
@@ -246,6 +250,10 @@ public class SubscriptionPackageAdminService {
                 if (!seenDurations.add(dto.durationMonths())) {
                     throw new az.fitnest.order.exception.BadRequestException("error.duration_already_exists");
                 }
+                if (dto.priceDiscounted() != null && dto.priceStandard() != null &&
+                    dto.priceDiscounted().compareTo(dto.priceStandard()) > 0) {
+                    throw new az.fitnest.order.exception.BadRequestException("error.discount_higher_than_price");
+                }
                 
                 PackageOption opt = existingOptionsMap.getOrDefault(dto.durationMonths(), new PackageOption());
                 opt.setSubscriptionPackage(pkg);
@@ -282,6 +290,10 @@ public class SubscriptionPackageAdminService {
         );
         if (exists) {
             throw new az.fitnest.order.exception.BadRequestException("error.duration_already_exists");
+        }
+        if (dto.priceDiscounted() != null && dto.priceStandard() != null &&
+            dto.priceDiscounted().compareTo(dto.priceStandard()) > 0) {
+            throw new az.fitnest.order.exception.BadRequestException("error.discount_higher_than_price");
         }
 
         PackageOption opt = new PackageOption();
@@ -358,6 +370,10 @@ public class SubscriptionPackageAdminService {
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.option_not_found"));
 
         opt.setDurationMonths(dto.durationMonths());
+        if (dto.priceDiscounted() != null && dto.priceStandard() != null &&
+            dto.priceDiscounted().compareTo(dto.priceStandard()) > 0) {
+            throw new az.fitnest.order.exception.BadRequestException("error.discount_higher_than_price");
+        }
         opt.setPriceStandard(dto.priceStandard());
         opt.setPriceDiscounted(dto.priceDiscounted());
         opt.setIsActive(dto.isActive() != null ? dto.isActive() : opt.getIsActive());
