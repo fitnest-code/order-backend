@@ -27,4 +27,22 @@ public interface SubscriptionPackageRepository extends JpaRepository<Subscriptio
 
     @Query("SELECT p FROM SubscriptionPackage p LEFT JOIN FETCH p.options LEFT JOIN FETCH p.benefits WHERE p.id IN :ids")
     List<SubscriptionPackage> findAllByIdWithOptions(@Param("ids") List<Long> ids);
+
+    @Query("SELECT p FROM SubscriptionPackage p WHERE p.isActive = true ORDER BY " +
+            "CASE LOWER(p.name) " +
+            "  WHEN 'bronze' THEN 1 " +
+            "  WHEN 'silver' THEN 2 " +
+            "  WHEN 'gold' THEN 3 " +
+            "  WHEN 'platinum' THEN 4 " +
+            "  ELSE 5 END")
+    List<SubscriptionPackage> findByIsActiveTrueOrdered();
+
+    @Query("SELECT p FROM SubscriptionPackage p ORDER BY " +
+            "CASE LOWER(p.name) " +
+            "  WHEN 'bronze' THEN 1 " +
+            "  WHEN 'silver' THEN 2 " +
+            "  WHEN 'gold' THEN 3 " +
+            "  WHEN 'platinum' THEN 4 " +
+            "  ELSE 5 END")
+    List<SubscriptionPackage> findAllOrdered();
 }
