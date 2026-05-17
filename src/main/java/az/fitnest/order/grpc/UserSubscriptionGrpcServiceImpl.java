@@ -24,20 +24,8 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
             Long userId = request.getUserId();
             ActiveSubscriptionResponse dto = subscriptionService.getActiveSubscription(userId);
 
-            az.fitnest.order.grpc.ActiveSubscriptionResponse.Builder grpcResponse = az.fitnest.order.grpc.ActiveSubscriptionResponse.newBuilder();
-
-            if (dto.status() != null) {
-                grpcResponse.setSubscriptionStatus(dto.status());
-            }
-            if (dto.subscription() != null) {
-                var sub = dto.subscription();
-                if (sub.packageName() != null) grpcResponse.setPackageName(sub.packageName());
-                if (sub.packageId() != null) grpcResponse.setPackageId(Long.parseLong(sub.packageId()));
-                if (sub.totalLimit() != null) grpcResponse.setTotalLimit(sub.totalLimit());
-                if (sub.remainingLimit() != null) grpcResponse.setRemainingLimit(sub.remainingLimit());
-                if (sub.endAt() != null) grpcResponse.setExpiresAt(sub.endAt().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
-            }
-            responseObserver.onNext(grpcResponse.build());
+            az.fitnest.order.grpc.ActiveSubscriptionResponse grpcResponse = buildGrpcActiveSubscriptionResponse(dto);
+            responseObserver.onNext(grpcResponse);
             responseObserver.onCompleted();
         } catch (Exception e) {
             responseObserver.onError(io.grpc.Status.INTERNAL
@@ -45,6 +33,45 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
                     .withCause(e)
                     .asRuntimeException());
         }
+    }
+
+    @Override
+    public void getActiveSubscriptions(az.fitnest.order.grpc.GetActiveSubscriptionsRequest request, StreamObserver<az.fitnest.order.grpc.GetActiveSubscriptionsResponse> responseObserver) {
+        try {
+            az.fitnest.order.grpc.GetActiveSubscriptionsResponse.Builder responseBuilder = az.fitnest.order.grpc.GetActiveSubscriptionsResponse.newBuilder();
+            for (Long userId : request.getUserIdsList()) {
+                try {
+                    ActiveSubscriptionResponse dto = subscriptionService.getActiveSubscription(userId);
+                    responseBuilder.putSubscriptions(userId, buildGrpcActiveSubscriptionResponse(dto));
+                } catch (Exception e) {
+                    log.error("Failed to get active subscription for user {}: {}", userId, e.getMessage());
+                }
+            }
+            responseObserver.onNext(responseBuilder.build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to get active subscriptions: " + e.getMessage())
+                    .withCause(e)
+                    .asRuntimeException());
+        }
+    }
+
+    private az.fitnest.order.grpc.ActiveSubscriptionResponse buildGrpcActiveSubscriptionResponse(ActiveSubscriptionResponse dto) {
+        az.fitnest.order.grpc.ActiveSubscriptionResponse.Builder grpcResponse = az.fitnest.order.grpc.ActiveSubscriptionResponse.newBuilder();
+
+        if (dto.status() != null) {
+            grpcResponse.setSubscriptionStatus(dto.status());
+        }
+        if (dto.subscription() != null) {
+            var sub = dto.subscription();
+            if (sub.packageName() != null) grpcResponse.setPackageName(sub.packageName());
+            if (sub.packageId() != null) grpcResponse.setPackageId(Long.parseLong(sub.packageId()));
+            if (sub.totalLimit() != null) grpcResponse.setTotalLimit(sub.totalLimit());
+            if (sub.remainingLimit() != null) grpcResponse.setRemainingLimit(sub.remainingLimit());
+            if (sub.endAt() != null) grpcResponse.setExpiresAt(sub.endAt().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+        }
+        return grpcResponse.build();
     }
 
     @Override
@@ -125,6 +152,67 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
                 .withDescription("Failed to assign subscription: " + e.getMessage())
                 .withCause(e)
                 .asRuntimeException());
+        }
+    }
+
+    @Override
+    public void getFilteredUserIds(az.fitnest.order.grpc.GetFilteredUserIdsRequest request, StreamObserver<az.fitnest.order.grpc.GetUserIdsByPackageIdResponse> responseObserver) {
+        try {
+            List<Long> userIds = subscriptionService.getFilteredUserIds(request);
+            az.fitnest.order.grpc.GetUserIdsByPackageIdResponse response = az.fitnest.order.grpc.GetUserIdsByPackageIdResponse.newBuilder()
+                    .addAllUserIds(userIds)
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            log.error("[gRPC] Failed to get filtered user IDs", e);
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to get filtered user IDs: " + e.getMessage())
+                    .withCause(e)
+                    .asRuntimeException());
+        }
+    }
+
+    @Override
+    public void getSubscriptionStatistics(az.fitnest.order.grpc.GetSubscriptionStatisticsRequest request, StreamObserver<az.fitnest.order.grpc.SubscriptionStatisticsResponse> responseObserver) {
+        try {
+            az.fitnest.order.grpc.SubscriptionStatisticsResponse response = subscriptionService.getSubscriptionStatistics();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            log.error("[gRPC] Failed to get subscription statistics", e);
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                .withDescription("Failed to get statistics: " + e.getMessage())
+                .withCause(e)
+                .asRuntimeException());
+        }
+    }
+
+    @Override
+    public void freezeSession(az.fitnest.order.grpc.FreezeSessionRequest request, StreamObserver<az.fitnest.order.grpc.FreezeSessionResponse> responseObserver) {
+        try {
+            subscriptionService.freezeSession(request.getUserId());
+            responseObserver.onNext(az.fitnest.order.grpc.FreezeSessionResponse.newBuilder().setSuccess(true).build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            log.error("[gRPC] Failed to freeze session for user {}", request.getUserId(), e);
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to freeze session: " + e.getMessage())
+                    .asRuntimeException());
+        }
+    }
+
+    @Override
+    public void restoreSession(az.fitnest.order.grpc.RestoreSessionRequest request, StreamObserver<az.fitnest.order.grpc.RestoreSessionResponse> responseObserver) {
+        try {
+            subscriptionService.restoreSession(request.getUserId());
+            responseObserver.onNext(az.fitnest.order.grpc.RestoreSessionResponse.newBuilder().setSuccess(true).build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            log.error("[gRPC] Failed to restore session for user {}", request.getUserId(), e);
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to restore session: " + e.getMessage())
+                    .asRuntimeException());
         }
     }
 }

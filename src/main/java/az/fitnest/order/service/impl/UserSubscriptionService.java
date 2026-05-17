@@ -37,6 +37,7 @@ public class UserSubscriptionService {
     private final TranslationService translationService;
     private final PaymentGrpcClient paymentGrpcClient;
     private final NotificationGrpcClient notificationGrpcClient;
+    private final jakarta.persistence.EntityManager entityManager;
 
     @Transactional
     public boolean checkIn(Long userId, Long gymId) {
@@ -66,13 +67,13 @@ public class UserSubscriptionService {
 
         if (subscription.getRemainingLimit() != null) {
             if (subscription.getRemainingLimit() <= 0) {
-                subscription.setStatus("NO_LIMITS");
+                subscription.setStatus("FINISHED");
                 subscriptionRepository.save(subscription);
                 throw new az.fitnest.order.exception.BadRequestException("error.no_remaining_visits");
             }
             subscription.setRemainingLimit(subscription.getRemainingLimit() - 1);
             if (subscription.getRemainingLimit() == 0) {
-                subscription.setStatus("NO_LIMITS");
+                subscription.setStatus("FINISHED");
             }
             subscriptionRepository.save(subscription);
             subscriptionEventPublisher.publishSubscriptionEvent(userId, "CHECKIN", subscription.getSubscriptionId());
@@ -101,11 +102,19 @@ public class UserSubscriptionService {
             if (!allSubs.isEmpty()) {
                 subscription = allSubs.get(0);
                 String rawStatus = subscription.getStatus();
-                subscriptionStatus = translationService.getTranslatedValue("SUBSCRIPTION_STATUS", rawStatus, "name", lang);
-                if (subscriptionStatus == null || subscriptionStatus.isEmpty()) {
-                    subscriptionStatus = rawStatus != null ? rawStatus.toLowerCase() : "unknown";
-                    if (subscriptionStatus.length() > 0) {
-                        subscriptionStatus = subscriptionStatus.substring(0, 1).toUpperCase() + subscriptionStatus.substring(1);
+                if (Boolean.TRUE.equals(subscription.getIsUpgraded())) {
+                    subscriptionStatus = "changed";
+                } else if ("ACTIVE".equalsIgnoreCase(rawStatus) && subscription.getEndAt() != null &&
+                        !subscription.getEndAt().isBefore(LocalDateTime.now()) &&
+                        !subscription.getEndAt().isAfter(LocalDateTime.now().plusDays(7))) {
+                    subscriptionStatus = "last_7_days";
+                } else {
+                    subscriptionStatus = translationService.getTranslatedValue("SUBSCRIPTION_STATUS", rawStatus, "name", lang);
+                    if (subscriptionStatus == null || subscriptionStatus.isEmpty()) {
+                        subscriptionStatus = rawStatus != null ? rawStatus.toLowerCase() : "unknown";
+                        if (subscriptionStatus.length() > 0) {
+                            subscriptionStatus = subscriptionStatus.substring(0, 1).toUpperCase() + subscriptionStatus.substring(1);
+                        }
                     }
                 }
                 log.info("Found latest subscription for userId={}, subscriptionId={}, status={}", userId, subscription.getSubscriptionId(), subscriptionStatus);
@@ -128,8 +137,28 @@ public class UserSubscriptionService {
             SubscriptionPackage pkg = packageRepository.findFullById(subscription.getPackageId())
                     .orElse(null);
             if (pkg == null) {
-                log.error("Package not found for packageId={} (userId={})", subscription.getPackageId(), userId);
-                throw new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found");
+                log.warn("Package not found for packageId={} (userId={}), returning fallback details with status={}", subscription.getPackageId(), userId, subscriptionStatus);
+                SubscriptionDetailsDto fallbackDetails = SubscriptionDetailsDto.builder()
+                        .subscriptionId(subscription.getSubscriptionId())
+                        .packageId(String.valueOf(subscription.getPackageId()))
+                        .packageName("Bilinməyən Paket")
+                        .durationMonths(1)
+                        .durationLabel("1 ay")
+                        .effectivePrice(java.math.BigDecimal.ZERO)
+                        .currency("AZN")
+                        .totalLimit(subscription.getTotalLimit())
+                        .remainingLimit(subscription.getRemainingLimit())
+                        .startAt(subscription.getStartAt() != null ? subscription.getStartAt().toLocalDate() : null)
+                        .endAt(subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null)
+                        .frozenDaysUsed(0)
+                        .allowedFreezeDays(0)
+                        .remainingFreezeDays(0)
+                        .automaticPaymentEnabled(false)
+                        .build();
+                return ActiveSubscriptionResponse.builder()
+                        .status(subscriptionStatus)
+                        .subscription(fallbackDetails)
+                        .build();
             }
             long durationMonths = 1;
             if (subscription.getEndAt() != null && subscription.getStartAt() != null) {
@@ -157,9 +186,7 @@ public class UserSubscriptionService {
                         ? matchedOption.getPriceDiscounted()
                         : matchedOption.getPriceStandard();
             }
-            Integer allowedFreezeDays = matchedOption != null && matchedOption.getFreezeDays() != null
-                    ? matchedOption.getFreezeDays()
-                    : 0;
+            Integer allowedFreezeDays = 0;
             Integer frozenDaysUsed = subscription.getFrozenDaysUsed() != null ? subscription.getFrozenDaysUsed() : 0;
             Integer remainingFreezeDays = allowedFreezeDays - frozenDaysUsed;
             Long optionId = matchedOption != null ? matchedOption.getId() : -1L;
@@ -167,11 +194,10 @@ public class UserSubscriptionService {
             if (localizedPackageName == null || localizedPackageName.isEmpty()) localizedPackageName = pkg.getName();
 
             java.util.List<az.fitnest.order.dto.PackageBenefitDto> benefitDtos = java.util.Collections.emptyList();
-            if (matchedOption != null && matchedOption.getBenefits() != null && !matchedOption.getBenefits().isEmpty()) {
-                final Long optId = matchedOption.getId();
-                benefitDtos = matchedOption.getBenefits().stream()
+            if (pkg.getBenefits() != null && !pkg.getBenefits().isEmpty()) {
+                benefitDtos = pkg.getBenefits().stream()
                         .map(b -> {
-                            String ebId = optId + "_" + b.getDescription();
+                            String ebId = pkg.getId() + "_" + b.getDescription();
                             String localizedBenefit = translationService.getTranslatedValue("PLANBENEFIT", ebId, "description", lang);
                             return az.fitnest.order.dto.PackageBenefitDto.builder()
                                     .description(localizedBenefit != null ? localizedBenefit : b.getDescription())
@@ -257,9 +283,7 @@ public class UserSubscriptionService {
                 .findFirst()
                 .orElse(null);
 
-        Integer allowedFreezeDays = matchedOption != null && matchedOption.getFreezeDays() != null
-                ? matchedOption.getFreezeDays()
-                : 0;
+        Integer allowedFreezeDays = 0;
 
         if (allowedFreezeDays == 0) {
             throw new az.fitnest.order.exception.BadRequestException("error.freeze_not_allowed_for_plan");
@@ -489,13 +513,13 @@ public class UserSubscriptionService {
         next.setUserId(current.getUserId());
         next.setPackageId(current.getPackageId());
         next.setOptionId(current.getOptionId());
-        next.setStatus(option.getEntryLimit() != null && option.getEntryLimit() == 0 ? "NO_LIMITS" : "ACTIVE");
+        next.setStatus(pkg.getEntryLimit() != null && pkg.getEntryLimit() == 0 ? "FINISHED" : "ACTIVE");
         next.setStartAt(now);
         next.setEndAt(endAt);
-        next.setTotalLimit(option.getEntryLimit());
-        next.setRemainingLimit(option.getEntryLimit());
+        next.setTotalLimit(pkg.getEntryLimit());
+        next.setRemainingLimit(pkg.getEntryLimit());
         next.setFrozenDaysUsed(0);
-        next.setAllowedFreezeDays(option.getFreezeDays() != null ? option.getFreezeDays() : 0);
+        next.setAllowedFreezeDays(0);
         next.setAutoPaymentEnabled(true);
 
         Subscription saved = subscriptionRepository.save(next);
@@ -519,7 +543,7 @@ public class UserSubscriptionService {
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.duration_config_not_found"));
 
         List<Subscription> toFinish = subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "ACTIVE");
-        toFinish.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "NO_LIMITS"));
+        toFinish.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "FINISHED"));
         toFinish.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "FROZEN"));
         toFinish.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "PENDING"));
         for (Subscription existing : toFinish) {
@@ -536,15 +560,15 @@ public class UserSubscriptionService {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime endAt = now.plusMonths(option.getDurationMonths());
 
-        Integer entryLimit = option.getEntryLimit();
-        Integer freezeDays = option.getFreezeDays() != null ? option.getFreezeDays() : 0;
+        Integer entryLimit = pkg.getEntryLimit();
+        Integer freezeDays = 0;
 
         Subscription subscription = new Subscription();
         subscription.setUserId(request.userId());
         subscription.setPackageId(request.planId());
         subscription.setOptionId(option.getId());
         if (entryLimit != null && entryLimit == 0) {
-            subscription.setStatus("NO_LIMITS");
+            subscription.setStatus("FINISHED");
         } else {
             subscription.setStatus("ACTIVE");
         }
@@ -607,7 +631,7 @@ public class UserSubscriptionService {
     @Transactional
     public void removeAllSubscriptionsOfUser(Long userId) {
         List<Subscription> allSubs = subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "ACTIVE");
-        allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "NO_LIMITS"));
+        allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "FINISHED"));
         allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "FROZEN"));
         allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "PENDING"));
         for (Subscription sub : allSubs) {
@@ -655,5 +679,164 @@ public class UserSubscriptionService {
                     .toList();
             default -> List.of();
         };
+    }
+
+    public List<Long> getFilteredUserIds(az.fitnest.order.grpc.GetFilteredUserIdsRequest request) {
+        jakarta.persistence.criteria.CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        jakarta.persistence.criteria.CriteriaQuery<Long> query = cb.createQuery(Long.class);
+        jakarta.persistence.criteria.Root<Subscription> root = query.from(Subscription.class);
+
+        java.util.List<jakarta.persistence.criteria.Predicate> predicates = new java.util.ArrayList<>();
+
+        if (request.getPackageId() != 0) {
+            predicates.add(cb.equal(root.get("packageId"), request.getPackageId()));
+        }
+
+        if (request.getDurationMonths() != 0) {
+            jakarta.persistence.criteria.Root<PackageOption> optionRoot = query.from(PackageOption.class);
+            predicates.add(cb.equal(root.get("optionId"), optionRoot.get("id")));
+            predicates.add(cb.equal(optionRoot.get("durationMonths"), request.getDurationMonths()));
+        }
+
+        String status = request.getSubscriptionStatus();
+        if (status != null && !status.isEmpty()) {
+            LocalDateTime now = LocalDateTime.now();
+            switch (status.toUpperCase()) {
+                case "ACTIVE":
+                    predicates.add(cb.equal(root.get("status"), "ACTIVE"));
+                    break;
+                case "FROZEN":
+                    predicates.add(cb.equal(root.get("status"), "FROZEN"));
+                    break;
+                case "FINISHED":
+                    predicates.add(cb.in(root.get("status")).value("FINISHED").value("EXPIRED").value("CANCELLED"));
+                    break;
+                case "LAST_7_DAYS":
+                    predicates.add(cb.equal(root.get("status"), "ACTIVE"));
+                    predicates.add(cb.between(root.get("endAt"), now, now.plusDays(7)));
+                    break;
+                case "CHANGED":
+                    predicates.add(cb.equal(root.get("isUpgraded"), true));
+                    break;
+            }
+        }
+
+        query.select(root.get("userId")).distinct(true);
+        if (!predicates.isEmpty()) {
+            query.where(cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0])));
+        }
+
+        String sortBy = request.getSortBy();
+        if (sortBy != null && !sortBy.isEmpty()) {
+            if ("FINISH_DATE_ASC".equalsIgnoreCase(sortBy)) {
+                query.orderBy(cb.asc(root.get("endAt")));
+            } else if ("FINISH_DATE_DESC".equalsIgnoreCase(sortBy)) {
+                query.orderBy(cb.desc(root.get("endAt")));
+            }
+        }
+
+        return entityManager.createQuery(query).getResultList();
+    }
+
+    public az.fitnest.order.grpc.SubscriptionStatisticsResponse getSubscriptionStatistics() {
+        LocalDateTime now = LocalDateTime.now();
+        long activeOrFrozen = subscriptionRepository.countByStatusIn(List.of("ACTIVE", "FROZEN"));
+        long finished = subscriptionRepository.countByStatus("FINISHED");
+        long last7Days = subscriptionRepository.countByStatusInAndEndAtBetween(List.of("ACTIVE", "FROZEN"), now, now.plusDays(7));
+
+        return az.fitnest.order.grpc.SubscriptionStatisticsResponse.newBuilder()
+                .setUsersActiveOrFrozen(activeOrFrozen)
+                .setUsersFinished(finished)
+                .setUsersLast7Days(last7Days)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public az.fitnest.order.dto.AdminUserSubscriptionResponse getUserSubscriptionDetail(Long userId) {
+        log.info("Fetching user subscription detail for admin. User ID: {}", userId);
+        
+        List<Subscription> allSubs = subscriptionRepository.findAllByUserIdOrderByStartAtDesc(userId);
+        if (allSubs.isEmpty()) {
+            throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_subscription_found");
+        }
+        
+        Subscription sub = allSubs.get(0);
+        SubscriptionPackage pkg = packageRepository.findById(sub.getPackageId())
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
+        
+        PackageOption option = pkg.getOptions().stream()
+                .filter(o -> o.getId().equals(sub.getOptionId()))
+                .findFirst()
+                .orElse(null);
+
+        return az.fitnest.order.dto.AdminUserSubscriptionResponse.builder()
+                .packageId(sub.getPackageId())
+                .packageName(pkg.getName())
+                .optionId(sub.getOptionId())
+                .optionDuration(option != null ? option.getDurationMonths() : null)
+                .price(option != null ? option.getPriceStandard() : pkg.getPrice())
+                .discountedPrice(option != null ? option.getPriceDiscounted() : null)
+                .startDate(sub.getStartAt())
+                .endDate(sub.getEndAt())
+                .totalEntryLimit(sub.getTotalLimit())
+                .userRemainingLimit(sub.getRemainingLimit())
+                .build();
+    }
+
+    @Transactional
+    public void freezeSession(Long userId) {
+        List<Subscription> activeSubs = subscriptionRepository.findByUserIdAndStatus(userId, "ACTIVE");
+        if (activeSubs.isEmpty()) {
+            throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_active_subscription");
+        }
+        Subscription subscription = activeSubs.stream()
+                .max((a, b) -> a.getEndAt().compareTo(b.getEndAt()))
+                .get();
+
+        if (subscription.getRemainingLimit() == null || subscription.getRemainingLimit() <= 0) {
+            throw new az.fitnest.order.exception.BadRequestException("error.no_remaining_visits");
+        }
+
+        subscription.setRemainingLimit(subscription.getRemainingLimit() - 1);
+        if (subscription.getFrozenSessions() == null) {
+            subscription.setFrozenSessions(0);
+        }
+        subscription.setFrozenSessions(subscription.getFrozenSessions() + 1);
+
+        if (subscription.getRemainingLimit() == 0) {
+            subscription.setStatus("FINISHED");
+        }
+
+        subscriptionRepository.save(subscription);
+        log.info("Froze 1 session for user {}. Remaining: {}, Frozen: {}", userId, subscription.getRemainingLimit(), subscription.getFrozenSessions());
+    }
+
+    @Transactional
+    public void restoreSession(Long userId) {
+        List<Subscription> subs = subscriptionRepository.findByUserIdAndStatusIn(userId, List.of("ACTIVE", "FINISHED"));
+        if (subs.isEmpty()) {
+            return;
+        }
+        Subscription subscription = subs.stream()
+                .max((a, b) -> a.getEndAt().compareTo(b.getEndAt()))
+                .get();
+
+        if (subscription.getFrozenSessions() == null || subscription.getFrozenSessions() <= 0) {
+            log.warn("Attempted to restore session for user {} but no sessions are frozen.", userId);
+            return;
+        }
+
+        subscription.setFrozenSessions(subscription.getFrozenSessions() - 1);
+        if (subscription.getRemainingLimit() == null) {
+            subscription.setRemainingLimit(0);
+        }
+        subscription.setRemainingLimit(subscription.getRemainingLimit() + 1);
+        
+        if ("FINISHED".equals(subscription.getStatus()) && subscription.getRemainingLimit() > 0) {
+            subscription.setStatus("ACTIVE");
+        }
+
+        subscriptionRepository.save(subscription);
+        log.info("Restored 1 session for user {}. Remaining: {}, Frozen: {}", userId, subscription.getRemainingLimit(), subscription.getFrozenSessions());
     }
 }

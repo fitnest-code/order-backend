@@ -1,19 +1,27 @@
 package az.fitnest.order.service.impl;
 
-import az.fitnest.order.dto.*;
-import az.fitnest.order.model.entity.*;
+import az.fitnest.order.dto.PackageBenefitDto;
+import az.fitnest.order.dto.PackageListResponse;
+import az.fitnest.order.dto.PackageNameDto;
+import az.fitnest.order.dto.PackageOptionDto;
+import az.fitnest.order.dto.PackagePlanListResponse;
+import az.fitnest.order.dto.PackagePriceDto;
+import az.fitnest.order.dto.SubscriptionPackageDto;
+import az.fitnest.order.dto.SubscriptionPackageResponse;
+import az.fitnest.order.model.entity.PackageOption;
+import az.fitnest.order.model.entity.SubscriptionPackage;
 import az.fitnest.order.repository.SubscriptionPackageRepository;
-import az.fitnest.order.util.UserContext;
 import az.fitnest.order.service.TranslationService;
+import az.fitnest.order.util.UserContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -25,8 +33,8 @@ public class PackageCatalogService {
     @Transactional(readOnly = true)
     public PackageListResponse getAllPackages(boolean activeOnly) {
         List<SubscriptionPackage> packages = activeOnly ?
-                packageRepository.findByIsActiveTrue() :
-                packageRepository.findAll();
+                packageRepository.findByIsActiveTrueOrdered() :
+                packageRepository.findAllOrdered();
 
         List<SubscriptionPackageDto> dtos = new ArrayList<>();
         for (SubscriptionPackage pkg : packages) {
@@ -46,21 +54,12 @@ public class PackageCatalogService {
 
     @Transactional(readOnly = true)
     public PackagePlanListResponse getUniquePlans(String order) {
-        List<SubscriptionPackage> packages = packageRepository.findAll();
+        List<SubscriptionPackage> packages = packageRepository.findAllOrdered();
 
-        List<String> orderList = List.of("bronze", "silver", "gold", "platinum");
         boolean isDesc = "desc".equalsIgnoreCase(order);
-
-        packages.sort((p1, p2) -> {
-            int i1 = orderList.indexOf(p1.getName().toLowerCase());
-            int i2 = orderList.indexOf(p2.getName().toLowerCase());
-
-            if (i1 == -1) i1 = orderList.size();
-            if (i2 == -1) i2 = orderList.size();
-
-            int cmp = Integer.compare(i1, i2);
-            return isDesc ? -cmp : cmp;
-        });
+        if (isDesc) {
+            Collections.reverse(packages);
+        }
 
         List<SubscriptionPackageResponse> dtos = packages.stream()
                 .map(p -> mapToPackageResponse(p, order))
@@ -73,7 +72,7 @@ public class PackageCatalogService {
 
     @Transactional(readOnly = true)
     public List<PackageNameDto> getPackageNames() {
-        return packageRepository.findAll().stream()
+        return packageRepository.findAllOrdered().stream()
                 .map(pkg -> PackageNameDto.builder()
                         .id(pkg.getId())
                         .name(pkg.getName())
@@ -112,7 +111,7 @@ public class PackageCatalogService {
 
     @Transactional(readOnly = true)
     public SubscriptionPackageDto getPackageByOptionId(Long optionId) {
-        for (SubscriptionPackage pkg : packageRepository.findAll()) {
+        for (SubscriptionPackage pkg : packageRepository.findAllOrdered()) {
             for (PackageOption option : pkg.getOptions()) {
                 if (option.getId().equals(optionId)) {
                     return mapToDto(pkg, option);
@@ -160,10 +159,10 @@ public class PackageCatalogService {
 
         String badge = (discount != null && base != null && discount.compareTo(base) < 0) ? "discount" : null;
 
-        List<PackageBenefitDto> benefits = option.getBenefits() != null ?
-                option.getBenefits().stream()
+        List<PackageBenefitDto> benefits = pkg.getBenefits() != null ?
+                pkg.getBenefits().stream()
                         .map(b -> {
-                            String entityId = option.getId() + "_" + b.getDescription();
+                            String entityId = pkg.getId() + "_" + b.getDescription();
                             String localizedBenefit = translationService.getTranslatedValue("PLANBENEFIT", entityId, "description", lang);
                             return PackageBenefitDto.builder()
                                     .description(localizedBenefit != null ? localizedBenefit : b.getDescription())
@@ -178,8 +177,8 @@ public class PackageCatalogService {
                 .durationLabel(getDurationLabel(option.getDurationMonths(), lang))
                 .price(priceDto)
                 .badge(badge)
-                .visitLimit(option.getEntryLimit() != null ? option.getEntryLimit() : 0)
-                .freezeDays(option.getFreezeDays() != null ? option.getFreezeDays() : 0)
+                .visitLimit(pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0)
+                .freezeDays(0)
                 .benefits(benefits)
                 .build();
     }
@@ -217,13 +216,13 @@ public class PackageCatalogService {
                 badge = "discount";
             }
 
-            visitLimit = option.getEntryLimit() != null ? option.getEntryLimit() : 0;
-            freezeDays = option.getFreezeDays() != null ? option.getFreezeDays() : 0;
+            visitLimit = pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0;
+            freezeDays = 0;
 
-            if (option.getBenefits() != null) {
-                benefits = option.getBenefits().stream()
+            if (pkg.getBenefits() != null) {
+                benefits = pkg.getBenefits().stream()
                         .map(b -> {
-                            String entityId = option.getId() + "_" + b.getDescription();
+                            String entityId = pkg.getId() + "_" + b.getDescription();
                             String localizedBenefit = translationService.getTranslatedValue("PLANBENEFIT", entityId, "description", lang);
                             return PackageBenefitDto.builder()
                                     .description(localizedBenefit != null ? localizedBenefit : b.getDescription())

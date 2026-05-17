@@ -7,6 +7,7 @@ import az.fitnest.order.dto.SubscriptionPackageWithOptionsRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -35,6 +36,35 @@ public class SubscriptionPackageAdminController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<AdminSubscriptionPackageResponse>>> getAllPackages() {
         return ResponseEntity.ok(ApiResponse.success(subscriptionPackageAdminService.getAllPackages()));
+    }
+
+    @Operation(
+        summary = "Get package names",
+        description = "Returns a lightweight list of package IDs and names for dropdowns/filters.",
+        responses = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "List of package names",
+                content = @io.swagger.v3.oas.annotations.media.Content(
+                    mediaType = "application/json",
+                    array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                        schema = @io.swagger.v3.oas.annotations.media.Schema(implementation = az.fitnest.order.dto.PackageNameDto.class)
+                    )
+                )
+            )
+        }
+    )
+    @GetMapping("/names")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<az.fitnest.order.dto.PackageNameDto>>> getPackageNames() {
+        return ResponseEntity.ok(ApiResponse.success(subscriptionPackageAdminService.getPackageNames()));
+    }
+
+    @Operation(summary = "Bütün paket variantlarını əldə edin", description = "Sistemdəki bütün paket variantlarını (Bronze, Silver və s.) düz siyahı şəklində qaytarır.")
+    @GetMapping("/options")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<az.fitnest.order.dto.AdminPackageOptionDetailResponse>>> getAllOptions() {
+        return ResponseEntity.ok(ApiResponse.success(subscriptionPackageAdminService.getAllPackageOptions()));
     }
 
     @Operation(summary = "Paketi ID ilə əldə edin", description = "Müəyyən abunəlik paketini variantları ilə birlikdə qaytarır.")
@@ -105,6 +135,46 @@ public class SubscriptionPackageAdminController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteAllOptions(@PathVariable Long packageId) {
         subscriptionPackageAdminService.deleteAllOptionsByPackageId(packageId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Variant statusunu yeniləyin", description = "Müəyyən paket variantının aktiv/passiv statusunu yeniləyir.")
+    @PatchMapping("/{packageId}/options/{optionId}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> updateOptionStatus(@PathVariable Long packageId, @PathVariable Long optionId, @RequestParam boolean isActive) {
+        subscriptionPackageAdminService.updateOptionStatus(packageId, optionId, isActive);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Paket statusunu yeniləyin", description = "Müəyyən abunəlik paketinin aktiv/passiv statusunu yeniləyir.")
+    @PatchMapping("/{packageId}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> updatePackageStatus(@PathVariable Long packageId, @RequestParam boolean isActive) {
+        subscriptionPackageAdminService.updatePackageStatus(packageId, isActive);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Variantı yeniləyin", description = "Müəyyən paket variantını yeniləyir.")
+    @PutMapping("/{packageId}/options/{optionId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> updateOption(@PathVariable Long packageId, @PathVariable Long optionId, @RequestBody az.fitnest.order.dto.PackageOptionEntityDto request) {
+        subscriptionPackageAdminService.updateOption(packageId, optionId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    @Operation(summary = "Xidmət əlavə edin", description = "Paketə yeni xidmət (üstünlük) əlavə edir.")
+    @PostMapping("/{packageId}/benefits")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> addBenefit(@PathVariable Long packageId, @RequestParam String description) {
+        subscriptionPackageAdminService.addBenefit(packageId, description);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    @Operation(summary = "Xidməti silin", description = "Paketdən müəyyən bir xidməti (üstünlüyü) silir.")
+    @DeleteMapping("/{packageId}/benefits")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> deleteBenefit(@PathVariable Long packageId, @RequestParam String description) {
+        subscriptionPackageAdminService.deleteBenefit(packageId, description);
         return ResponseEntity.noContent().build();
     }
 }

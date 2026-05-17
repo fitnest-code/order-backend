@@ -59,4 +59,23 @@ public class SubscriptionAdminController {
         userSubscriptionService.removeAllSubscriptionsOfUser(userId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
+
+    @Operation(
+            summary = "İstifadəçinin cari abunəlik detallarını gətir",
+            description = "İstifadəçinin ən son (cari) abunəlik məlumatlarını, paket detallarını və giriş limitlərini qaytarır."
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Abunəlik detalları uğurla gətirildi",
+                    content = @Content(schema = @Schema(implementation = az.fitnest.order.dto.AdminUserSubscriptionResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "İstifadəçi və ya abunəlik tapılmadı")
+    })
+    @GetMapping("/users/{userId}/current")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<az.fitnest.order.dto.AdminUserSubscriptionResponse>> getUserSubscriptionDetail(
+            @PathVariable Long userId) {
+        return ResponseEntity.ok(ApiResponse.success(userSubscriptionService.getUserSubscriptionDetail(userId)));
+    }
 }

@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface SubscriptionRepository extends JpaRepository<Subscription, Long> {
+public interface SubscriptionRepository extends JpaRepository<Subscription, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Subscription> {
             @org.springframework.data.jpa.repository.Query("SELECT s FROM Subscription s WHERE s.status = 'FROZEN' AND s.unfreezesAt <= :now")
             java.util.List<Subscription> findExpiredFrozen(@org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 
@@ -19,6 +19,7 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
             @org.springframework.data.jpa.repository.Query("SELECT s.userId FROM Subscription s")
             java.util.List<Long> findAllUserIds();
     List<Subscription> findByUserIdAndStatus(Long userId, String status);
+    List<Subscription> findByUserIdAndStatusIn(Long userId, List<String> statuses);
     List<Subscription> findByStatusInAndEndAtBefore(List<String> statuses, LocalDateTime now);
     List<Subscription> findByStatusIn(List<String> statuses);
     List<Subscription> findByStatusInAndEndAtBetween(List<String> statuses, LocalDateTime start, LocalDateTime end);
@@ -30,4 +31,8 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     List<Subscription> findByUserIdAndStatusOrderByStartAtDesc(Long userId, String status);
     @org.springframework.data.jpa.repository.Query("SELECT s FROM Subscription s WHERE s.userId = :userId ORDER BY s.startAt DESC, s.subscriptionId DESC")
     List<Subscription> findAllByUserIdOrderByStartAtDesc(Long userId);
+
+    long countByStatusIn(List<String> statuses);
+    long countByStatus(String status);
+    long countByStatusInAndEndAtBetween(List<String> statuses, LocalDateTime start, LocalDateTime end);
 }
