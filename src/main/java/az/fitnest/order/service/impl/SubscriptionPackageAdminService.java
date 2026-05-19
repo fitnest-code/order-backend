@@ -46,6 +46,7 @@ public class SubscriptionPackageAdminService {
     }
 
     private final SubscriptionPackageRepository packageRepository;
+    private final az.fitnest.order.service.TranslationService translationService;
 
     @Transactional(readOnly = true)
     public List<az.fitnest.order.dto.AdminSubscriptionPackageResponse> getAllPackages() {
@@ -134,6 +135,10 @@ public class SubscriptionPackageAdminService {
             pkg.setPrice(BigDecimal.ZERO);
         }
 
+        if (pkg.getId() == null) {
+            pkg = packageRepository.save(pkg);
+        }
+
         pkg.setEntryLimit(request.entryLimit());
         pkg.getBenefits().clear();
         if (request.benefits() != null) {
@@ -143,6 +148,7 @@ public class SubscriptionPackageAdminService {
                     String trimmed = b.getDescription().trim();
                     if (uniqueDescriptions.add(trimmed.toLowerCase())) {
                         pkg.getBenefits().add(new az.fitnest.order.model.entity.PlanBenefit(trimmed));
+                        translationService.autoTranslateAndSave("PLANBENEFIT", pkg.getId() + "_" + trimmed, "description", trimmed);
                     }
                 }
             }
@@ -233,6 +239,7 @@ public class SubscriptionPackageAdminService {
                     String trimmed = b.getDescription().trim();
                     if (uniqueDescriptions.add(trimmed.toLowerCase())) {
                         pkg.getBenefits().add(new az.fitnest.order.model.entity.PlanBenefit(trimmed));
+                        translationService.autoTranslateAndSave("PLANBENEFIT", pkg.getId() + "_" + trimmed, "description", trimmed);
                     }
                 }
             }
@@ -392,6 +399,7 @@ public class SubscriptionPackageAdminService {
             if (!exists) {
                 pkg.getBenefits().add(new az.fitnest.order.model.entity.PlanBenefit(trimmed));
                 packageRepository.save(pkg);
+                translationService.autoTranslateAndSave("PLANBENEFIT", pkg.getId() + "_" + trimmed, "description", trimmed);
             }
         }
     }
