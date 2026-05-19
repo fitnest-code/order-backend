@@ -30,13 +30,23 @@ public class UserContext {
                         org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
         if (attributes != null) {
             jakarta.servlet.http.HttpServletRequest request = attributes.getRequest();
-            String lang = request.getHeader("X-User-Language");
-            if (lang != null && !lang.isBlank()) {
-                return lang.toUpperCase();
+            String queryLang = request.getParameter("lang");
+            if (queryLang != null && !queryLang.isBlank()) {
+                String normalized = queryLang.trim().toUpperCase();
+                if (normalized.equals("RU") || normalized.equals("EN") || normalized.equals("AZ")) {
+                    return normalized;
+                }
             }
             String acceptLang = request.getHeader("Accept-Language");
             if (acceptLang != null && !acceptLang.isBlank()) {
                 String normalized = acceptLang.trim().toUpperCase();
+                if (normalized.startsWith("RU")) return "RU";
+                if (normalized.startsWith("EN")) return "EN";
+                if (normalized.startsWith("AZ")) return "AZ";
+            }
+            String lang = request.getHeader("X-User-Language");
+            if (lang != null && !lang.isBlank()) {
+                String normalized = lang.trim().toUpperCase();
                 if (normalized.startsWith("RU")) return "RU";
                 if (normalized.startsWith("EN")) return "EN";
                 if (normalized.startsWith("AZ")) return "AZ";
