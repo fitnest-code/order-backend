@@ -125,24 +125,41 @@ public class TranslationServiceImpl implements TranslationService {
         log.info("Database Save: entityType={}, entityId={}, languageCode={}, fieldName={}, fieldValue='{}'", 
             normalizedEntityType, entityId, normalizedLanguageCode, fieldName, fieldValue);
 
-        Translation existing = translationRepository.findFirstByEntityTypeAndEntityIdAndLanguageCodeAndFieldName(
-                normalizedEntityType, entityId, normalizedLanguageCode, fieldName
-        ).orElse(null);
+        try {
+            Translation existing = translationRepository.findFirstByEntityTypeAndEntityIdAndLanguageCodeAndFieldName(
+                    normalizedEntityType, entityId, normalizedLanguageCode, fieldName
+            ).orElse(null);
 
-        if (existing != null) {
-            log.info("Updating existing translation record ID={}", existing.getId());
-            existing.setFieldValue(fieldValue);
-            translationRepository.save(existing);
-        } else {
-            log.info("Creating new translation record");
-            Translation translation = Translation.builder()
-                    .entityType(normalizedEntityType)
-                    .entityId(entityId)
-                    .languageCode(normalizedLanguageCode)
-                    .fieldName(fieldName)
-                    .fieldValue(fieldValue)
-                    .build();
-            translationRepository.save(translation);
+            if (existing != null) {
+                log.info("Updating existing translation record ID={}", existing.getId());
+                existing.setFieldValue(fieldValue);
+                translationRepository.saveAndFlush(existing);
+            } else {
+                log.info("Creating new translation record");
+                Translation translation = Translation.builder()
+                        .entityType(normalizedEntityType)
+                        .entityId(entityId)
+                        .languageCode(normalizedLanguageCode)
+                        .fieldName(fieldName)
+                        .fieldValue(fieldValue)
+                        .build();
+                translationRepository.saveAndFlush(translation);
+            }
+        } catch (Exception e) {
+            log.warn("Exception during save. Retrying as update: {}", e.getMessage());
+            try {
+                Translation existing = translationRepository.findFirstByEntityTypeAndEntityIdAndLanguageCodeAndFieldName(
+                        normalizedEntityType, entityId, normalizedLanguageCode, fieldName
+                ).orElse(null);
+                if (existing != null) {
+                    existing.setFieldValue(fieldValue);
+                    translationRepository.saveAndFlush(existing);
+                } else {
+                    log.error("Failed to recover or find translation after error: {}", e.getMessage());
+                }
+            } catch (Exception retryEx) {
+                log.error("Retry update failed: {}", retryEx.getMessage());
+            }
         }
     }
 }

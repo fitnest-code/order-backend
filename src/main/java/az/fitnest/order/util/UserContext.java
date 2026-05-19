@@ -34,6 +34,20 @@ public class UserContext {
             if (lang != null && !lang.isBlank()) {
                 return lang.toUpperCase();
             }
+            String acceptLang = request.getHeader("Accept-Language");
+            if (acceptLang != null && !acceptLang.isBlank()) {
+                String normalized = acceptLang.trim().toUpperCase();
+                if (normalized.startsWith("RU")) return "RU";
+                if (normalized.startsWith("EN")) return "EN";
+                if (normalized.startsWith("AZ")) return "AZ";
+            }
+        }
+        try {
+            String localeLang = org.springframework.context.i18n.LocaleContextHolder.getLocale().getLanguage().toUpperCase();
+            if (localeLang.equals("EN") || localeLang.equals("RU") || localeLang.equals("AZ")) {
+                return localeLang;
+            }
+        } catch (Exception ignored) {
         }
         return "AZ";
     }
