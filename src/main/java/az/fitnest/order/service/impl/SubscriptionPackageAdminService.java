@@ -57,19 +57,31 @@ public class SubscriptionPackageAdminService {
 
     @Transactional(readOnly = true)
     public List<az.fitnest.order.dto.AdminPackageOptionDetailResponse> getAllPackageOptions() {
+        String lang = az.fitnest.order.util.UserContext.getCurrentLanguage();
         return packageRepository.findAllWithOptions().stream()
                 .flatMap(pkg -> pkg.getOptions().stream()
-                        .map(opt -> az.fitnest.order.dto.AdminPackageOptionDetailResponse.builder()
-                                .packageId(pkg.getId())
-                                .packageName(pkg.getName())
-                                .optionId(opt.getId())
-                                .durationMonths(opt.getDurationMonths())
-                                .priceStandard(opt.getPriceStandard())
-                                .priceDiscounted(opt.getPriceDiscounted())
-                                .entryLimit(pkg.getEntryLimit())
-                                .isActive(opt.getIsActive() != null ? opt.getIsActive() : true)
-                                .benefits(pkg.getBenefits() != null ? pkg.getBenefits().stream().map(az.fitnest.order.model.entity.PlanBenefit::getDescription).toList() : List.of())
-                                .build()))
+                        .map(opt -> {
+                            List<String> localizedBenefits = pkg.getBenefits() != null ?
+                                    pkg.getBenefits().stream()
+                                            .map(b -> {
+                                                String entityId = pkg.getId() + "_" + b.getDescription();
+                                                String localizedBenefit = translationService.getTranslatedValue("PLANBENEFIT", entityId, "description", lang);
+                                                return localizedBenefit != null && !localizedBenefit.isEmpty() ? localizedBenefit : b.getDescription();
+                                            })
+                                            .toList() :
+                                    List.of();
+                            return az.fitnest.order.dto.AdminPackageOptionDetailResponse.builder()
+                                    .packageId(pkg.getId())
+                                    .packageName(pkg.getName())
+                                    .optionId(opt.getId())
+                                    .durationMonths(opt.getDurationMonths())
+                                    .priceStandard(opt.getPriceStandard())
+                                    .priceDiscounted(opt.getPriceDiscounted())
+                                    .entryLimit(pkg.getEntryLimit())
+                                    .isActive(opt.getIsActive() != null ? opt.getIsActive() : true)
+                                    .benefits(localizedBenefits)
+                                    .build();
+                        }))
                 .toList();
     }
 
@@ -91,6 +103,7 @@ public class SubscriptionPackageAdminService {
     }
 
     private az.fitnest.order.dto.AdminSubscriptionPackageResponse toAdminPackageResponse(SubscriptionPackage pkg) {
+        String lang = az.fitnest.order.util.UserContext.getCurrentLanguage();
         List<az.fitnest.order.dto.AdminSubscriptionPackageResponse.AdminPackageOptionResponse> options =
                 pkg.getOptions().stream()
                         .map(opt -> az.fitnest.order.dto.AdminSubscriptionPackageResponse.AdminPackageOptionResponse.builder()
@@ -103,13 +116,23 @@ public class SubscriptionPackageAdminService {
                                 .build())
                         .toList();
 
+        List<String> localizedBenefits = pkg.getBenefits() != null ?
+                pkg.getBenefits().stream()
+                        .map(b -> {
+                            String entityId = pkg.getId() + "_" + b.getDescription();
+                            String localizedBenefit = translationService.getTranslatedValue("PLANBENEFIT", entityId, "description", lang);
+                            return localizedBenefit != null && !localizedBenefit.isEmpty() ? localizedBenefit : b.getDescription();
+                        })
+                        .toList() :
+                List.of();
+
         return az.fitnest.order.dto.AdminSubscriptionPackageResponse.builder()
                 .packageId(pkg.getId())
                 .name(pkg.getName())
                 .isActive(pkg.getIsActive() != null ? pkg.getIsActive() : true)
                 .sortOrder(pkg.getSortOrder())
                 .entryLimit(pkg.getEntryLimit())
-                .benefits(pkg.getBenefits() != null ? pkg.getBenefits().stream().map(az.fitnest.order.model.entity.PlanBenefit::getDescription).toList() : List.of())
+                .benefits(localizedBenefits)
                 .durationOptions(options)
                 .build();
     }
