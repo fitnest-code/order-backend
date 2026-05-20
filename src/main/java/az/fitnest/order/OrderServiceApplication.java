@@ -10,6 +10,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableJpaRepositories(basePackages = "az.fitnest.order.repository")
 @EnableRedisRepositories(basePackages = {})
 @EnableScheduling
+@org.springframework.scheduling.annotation.EnableAsync
 public class OrderServiceApplication {
 
     public static void main(String[] args) {
