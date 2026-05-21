@@ -21,6 +21,7 @@ import java.util.Objects;
 @Transactional(readOnly = true)
 public class SubscriptionPackageAdminService {
     @Transactional(readOnly = true)
+    @org.springframework.cache.annotation.Cacheable(value = "subscription-packages-paged", key = "{#page, #size, T(org.springframework.context.i18n.LocaleContextHolder).getLocale().getLanguage()}")
     public az.fitnest.order.dto.PaginatedResponse<az.fitnest.order.dto.AdminSubscriptionPackageResponse> getAllPackagesPagedResponse(int page, int size) {
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.max(1, size));
         org.springframework.data.domain.Page<az.fitnest.order.dto.AdminSubscriptionPackageResponse> result = packageRepository.findAllWithOptions(pageable)
@@ -49,6 +50,7 @@ public class SubscriptionPackageAdminService {
     private final az.fitnest.order.service.TranslationService translationService;
 
     @Transactional(readOnly = true)
+    @org.springframework.cache.annotation.Cacheable(value = "subscription-packages-all", key = "T(org.springframework.context.i18n.LocaleContextHolder).getLocale().getLanguage()")
     public List<az.fitnest.order.dto.AdminSubscriptionPackageResponse> getAllPackages() {
         return packageRepository.findAllWithOptions().stream()
                 .map(this::toAdminPackageResponse)
@@ -56,6 +58,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional(readOnly = true)
+    @org.springframework.cache.annotation.Cacheable(value = "subscription-package-options", key = "T(org.springframework.context.i18n.LocaleContextHolder).getLocale().getLanguage()")
     public List<az.fitnest.order.dto.AdminPackageOptionDetailResponse> getAllPackageOptions() {
         String lang = az.fitnest.order.util.UserContext.getCurrentLanguage();
         return packageRepository.findAllWithOptions().stream()
@@ -86,6 +89,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional(readOnly = true)
+    @org.springframework.cache.annotation.Cacheable(value = "subscription-package-names")
     public List<az.fitnest.order.dto.PackageNameDto> getPackageNames() {
         return packageRepository.findAll().stream()
                 .map(pkg -> az.fitnest.order.dto.PackageNameDto.builder()
