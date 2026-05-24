@@ -215,4 +215,18 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
                     .asRuntimeException());
         }
     }
+
+    @Override
+    public void consumeFrozenSession(az.fitnest.order.grpc.ConsumeFrozenSessionRequest request, StreamObserver<az.fitnest.order.grpc.ConsumeFrozenSessionResponse> responseObserver) {
+        try {
+            subscriptionService.consumeFrozenSession(request.getUserId());
+            responseObserver.onNext(az.fitnest.order.grpc.ConsumeFrozenSessionResponse.newBuilder().setSuccess(true).build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            log.error("[gRPC] Failed to consume frozen session for user {}", request.getUserId(), e);
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to consume frozen session: " + e.getMessage())
+                    .asRuntimeException());
+        }
+    }
 }

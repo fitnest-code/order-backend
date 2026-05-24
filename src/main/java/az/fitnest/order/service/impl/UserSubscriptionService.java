@@ -40,8 +40,8 @@ public class UserSubscriptionService {
     private final jakarta.persistence.EntityManager entityManager;
 
     @Transactional
-    public boolean checkIn(Long userId, Long gymId) {
-        List<Subscription> activeSubs = subscriptionRepository.findByUserIdAndStatus(userId, "ACTIVE");
+    public boolean checkIn(Long userId, Long gymId, boolean consumeFrozen) {
+        List<Subscription> activeSubs = subscriptionRepository.findByUserIdAndStatusIn(userId, List.of("ACTIVE", "FINISHED"));
         if (activeSubs.isEmpty()) {
             throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_active_subscription");
         }
@@ -65,18 +65,30 @@ public class UserSubscriptionService {
             throw new az.fitnest.order.exception.BadRequestException("error.membership_expired");
         }
 
-        if (subscription.getRemainingLimit() != null) {
-            if (subscription.getRemainingLimit() <= 0) {
-                subscription.setStatus("FINISHED");
-                subscriptionRepository.save(subscription);
+        if (consumeFrozen) {
+            if (subscription.getFrozenSessions() == null || subscription.getFrozenSessions() <= 0) {
+                throw new az.fitnest.order.exception.BadRequestException("error.no_frozen_sessions_available");
+            }
+            subscription.setFrozenSessions(subscription.getFrozenSessions() - 1);
+            subscriptionRepository.save(subscription);
+            subscriptionEventPublisher.publishSubscriptionEvent(userId, "CHECKIN_FROZEN", subscription.getSubscriptionId());
+        } else {
+            if ("FINISHED".equals(subscription.getStatus())) {
                 throw new az.fitnest.order.exception.BadRequestException("error.no_remaining_visits");
             }
-            subscription.setRemainingLimit(subscription.getRemainingLimit() - 1);
-            if (subscription.getRemainingLimit() == 0) {
-                subscription.setStatus("FINISHED");
+            if (subscription.getRemainingLimit() != null) {
+                if (subscription.getRemainingLimit() <= 0) {
+                    subscription.setStatus("FINISHED");
+                    subscriptionRepository.save(subscription);
+                    throw new az.fitnest.order.exception.BadRequestException("error.no_remaining_visits");
+                }
+                subscription.setRemainingLimit(subscription.getRemainingLimit() - 1);
+                if (subscription.getRemainingLimit() == 0 && (subscription.getFrozenSessions() == null || subscription.getFrozenSessions() == 0)) {
+                    subscription.setStatus("FINISHED");
+                }
+                subscriptionRepository.save(subscription);
+                subscriptionEventPublisher.publishSubscriptionEvent(userId, "CHECKIN", subscription.getSubscriptionId());
             }
-            subscriptionRepository.save(subscription);
-            subscriptionEventPublisher.publishSubscriptionEvent(userId, "CHECKIN", subscription.getSubscriptionId());
         }
 
         az.fitnest.order.model.entity.GymVisit visit = az.fitnest.order.model.entity.GymVisit.builder()
@@ -859,5 +871,37 @@ public class UserSubscriptionService {
 
         subscriptionRepository.save(subscription);
         log.info("Restored 1 session for user {}. Remaining: {}, Frozen: {}", userId, subscription.getRemainingLimit(), subscription.getFrozenSessions());
+    }
+
+    @Transactional
+    public void consumeFrozenSession(Long userId) {
+        List<Subscription> subs = subscriptionRepository.findByUserIdAndStatusIn(userId, List.of("ACTIVE", "FINISHED"));
+        if (subs.isEmpty()) {
+            throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_active_subscription");
+        }
+        Subscription subscription = subs.stream()
+                .max((a, b) -> {
+                    if (a.getEndAt() != null && b.getEndAt() != null) {
+                        return a.getEndAt().compareTo(b.getEndAt());
+                    } else if (a.getEndAt() != null) {
+                        return 1;
+                    } else if (b.getEndAt() != null) {
+                        return -1;
+                    } else if (a.getStartAt() != null && b.getStartAt() != null) {
+                        return a.getStartAt().compareTo(b.getStartAt());
+                    } else {
+                        return 0;
+                    }
+                })
+                .get();
+
+        if (subscription.getFrozenSessions() == null || subscription.getFrozenSessions() <= 0) {
+            log.warn("Attempted to consume frozen session for user {} but none are frozen.", userId);
+            return;
+        }
+
+        subscription.setFrozenSessions(subscription.getFrozenSessions() - 1);
+        subscriptionRepository.save(subscription);
+        log.info("Consumed/Deleted 1 frozen session for user {}. Remaining frozen: {}", userId, subscription.getFrozenSessions());
     }
 }

@@ -17,6 +17,7 @@ service UserSubscriptionService {
   rpc GetActiveSubscriptions(GetActiveSubscriptionsRequest) returns (GetActiveSubscriptionsResponse);
   rpc FreezeSession(FreezeSessionRequest) returns (FreezeSessionResponse);
   rpc RestoreSession(RestoreSessionRequest) returns (RestoreSessionResponse);
+  rpc ConsumeFrozenSession(ConsumeFrozenSessionRequest) returns (ConsumeFrozenSessionResponse);
 }
 
 message FreezeSessionRequest {
@@ -32,6 +33,14 @@ message RestoreSessionRequest {
 }
 
 message RestoreSessionResponse {
+  bool success = 1;
+}
+
+message ConsumeFrozenSessionRequest {
+  int64 user_id = 1;
+}
+
+message ConsumeFrozenSessionResponse {
   bool success = 1;
 }
 

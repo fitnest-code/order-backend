@@ -40,7 +40,7 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
     @Override
     public void checkIn(az.fitnest.order.grpc.CheckInRequest request, StreamObserver<az.fitnest.order.grpc.CheckInResponse> responseObserver) {
         try {
-            boolean success = userSubscriptionService.checkIn(request.getUserId(), request.getGymId());
+            boolean success = userSubscriptionService.checkIn(request.getUserId(), request.getGymId(), request.getConsumeFrozen());
             responseObserver.onNext(az.fitnest.order.grpc.CheckInResponse.newBuilder()
                     .setSuccess(success)
                     .setMessage("Checked in successfully")
