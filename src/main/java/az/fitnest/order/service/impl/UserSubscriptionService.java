@@ -682,20 +682,22 @@ public class UserSubscriptionService {
     }
 
     public List<Long> getFilteredUserIds(az.fitnest.order.grpc.GetFilteredUserIdsRequest request) {
-        jakarta.persistence.criteria.CriteriaBuilder cb = entityManager.getCriteriaBuilder();
-        jakarta.persistence.criteria.CriteriaQuery<Long> query = cb.createQuery(Long.class);
-        jakarta.persistence.criteria.Root<Subscription> root = query.from(Subscription.class);
+        StringBuilder jpql = new StringBuilder("SELECT DISTINCT s.userId FROM Subscription s");
+        if (request.getDurationMonths() != 0) {
+            jpql.append(" JOIN PackageOption o ON s.optionId = o.id");
+        }
 
-        java.util.List<jakarta.persistence.criteria.Predicate> predicates = new java.util.ArrayList<>();
+        List<String> whereClauses = new java.util.ArrayList<>();
+        java.util.Map<String, Object> parameters = new java.util.HashMap<>();
 
         if (request.getPackageId() != 0) {
-            predicates.add(cb.equal(root.get("packageId"), request.getPackageId()));
+            whereClauses.add("s.packageId = :packageId");
+            parameters.put("packageId", request.getPackageId());
         }
 
         if (request.getDurationMonths() != 0) {
-            jakarta.persistence.criteria.Root<PackageOption> optionRoot = query.from(PackageOption.class);
-            predicates.add(cb.equal(root.get("optionId"), optionRoot.get("id")));
-            predicates.add(cb.equal(optionRoot.get("durationMonths"), request.getDurationMonths()));
+            whereClauses.add("o.durationMonths = :durationMonths");
+            parameters.put("durationMonths", request.getDurationMonths());
         }
 
         String status = request.getSubscriptionStatus();
@@ -703,39 +705,45 @@ public class UserSubscriptionService {
             LocalDateTime now = LocalDateTime.now();
             switch (status.toUpperCase()) {
                 case "ACTIVE":
-                    predicates.add(cb.equal(root.get("status"), "ACTIVE"));
+                    whereClauses.add("s.status = 'ACTIVE'");
                     break;
                 case "FROZEN":
-                    predicates.add(cb.equal(root.get("status"), "FROZEN"));
+                    whereClauses.add("s.status = 'FROZEN'");
                     break;
                 case "FINISHED":
-                    predicates.add(cb.in(root.get("status")).value("FINISHED").value("EXPIRED").value("CANCELLED"));
+                    whereClauses.add("s.status IN ('FINISHED', 'EXPIRED', 'CANCELLED')");
                     break;
                 case "LAST_7_DAYS":
-                    predicates.add(cb.equal(root.get("status"), "ACTIVE"));
-                    predicates.add(cb.between(root.get("endAt"), now, now.plusDays(7)));
+                    whereClauses.add("s.status = 'ACTIVE'");
+                    whereClauses.add("s.endAt BETWEEN :now AND :endAtLimit");
+                    parameters.put("now", now);
+                    parameters.put("endAtLimit", now.plusDays(7));
                     break;
                 case "CHANGED":
-                    predicates.add(cb.equal(root.get("isUpgraded"), true));
+                    whereClauses.add("s.isUpgraded = true");
                     break;
             }
         }
 
-        query.select(root.get("userId")).distinct(true);
-        if (!predicates.isEmpty()) {
-            query.where(cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0])));
+        if (!whereClauses.isEmpty()) {
+            jpql.append(" WHERE ").append(String.join(" AND ", whereClauses));
         }
 
         String sortBy = request.getSortBy();
         if (sortBy != null && !sortBy.isEmpty()) {
             if ("FINISH_DATE_ASC".equalsIgnoreCase(sortBy)) {
-                query.orderBy(cb.asc(root.get("endAt")));
+                jpql.append(" ORDER BY s.endAt ASC");
             } else if ("FINISH_DATE_DESC".equalsIgnoreCase(sortBy)) {
-                query.orderBy(cb.desc(root.get("endAt")));
+                jpql.append(" ORDER BY s.endAt DESC");
             }
         }
 
-        return entityManager.createQuery(query).getResultList();
+        var query = entityManager.createQuery(jpql.toString(), Long.class);
+        for (var entry : parameters.entrySet()) {
+            query.setParameter(entry.getKey(), entry.getValue());
+        }
+
+        return query.getResultList();
     }
 
     public az.fitnest.order.grpc.SubscriptionStatisticsResponse getSubscriptionStatistics() {
