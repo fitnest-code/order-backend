@@ -76,6 +76,7 @@ message SubscriptionPackageOption {
 message CheckInRequest {
   int64 user_id = 1;
   int64 gym_id = 2;
+  bool consume_frozen = 3;
 }
 
 message CheckInResponse {
