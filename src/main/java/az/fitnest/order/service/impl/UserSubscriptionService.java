@@ -732,6 +732,10 @@ public class UserSubscriptionService {
                     whereClauses.add("s.isUpgraded = true");
                     break;
             }
+        } else {
+            if ("FINISH_DATE_ASC".equalsIgnoreCase(sortBy) || "FINISH_DATE_DESC".equalsIgnoreCase(sortBy)) {
+                whereClauses.add("s.status IN ('ACTIVE', 'FROZEN')");
+            }
         }
 
         if (!whereClauses.isEmpty()) {
@@ -741,9 +745,9 @@ public class UserSubscriptionService {
         if (hasSort) {
             jpql.append(" GROUP BY s.userId");
             if ("FINISH_DATE_ASC".equalsIgnoreCase(sortBy)) {
-                jpql.append(" ORDER BY MIN(s.endAt) ASC");
+                jpql.append(" ORDER BY MIN(s.endAt) ASC NULLS LAST");
             } else if ("FINISH_DATE_DESC".equalsIgnoreCase(sortBy)) {
-                jpql.append(" ORDER BY MAX(s.endAt) DESC");
+                jpql.append(" ORDER BY MAX(s.endAt) DESC NULLS LAST");
             }
         }
 
