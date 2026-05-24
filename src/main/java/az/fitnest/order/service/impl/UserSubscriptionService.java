@@ -682,7 +682,16 @@ public class UserSubscriptionService {
     }
 
     public List<Long> getFilteredUserIds(az.fitnest.order.grpc.GetFilteredUserIdsRequest request) {
-        StringBuilder jpql = new StringBuilder("SELECT DISTINCT s.userId FROM Subscription s");
+        String sortBy = request.getSortBy();
+        boolean hasSort = sortBy != null && !sortBy.isEmpty();
+
+        StringBuilder jpql = new StringBuilder();
+        if (hasSort) {
+            jpql.append("SELECT s.userId FROM Subscription s");
+        } else {
+            jpql.append("SELECT DISTINCT s.userId FROM Subscription s");
+        }
+
         if (request.getDurationMonths() != 0) {
             jpql.append(" JOIN PackageOption o ON s.optionId = o.id");
         }
@@ -729,12 +738,12 @@ public class UserSubscriptionService {
             jpql.append(" WHERE ").append(String.join(" AND ", whereClauses));
         }
 
-        String sortBy = request.getSortBy();
-        if (sortBy != null && !sortBy.isEmpty()) {
+        if (hasSort) {
+            jpql.append(" GROUP BY s.userId");
             if ("FINISH_DATE_ASC".equalsIgnoreCase(sortBy)) {
-                jpql.append(" ORDER BY s.endAt ASC");
+                jpql.append(" ORDER BY MIN(s.endAt) ASC");
             } else if ("FINISH_DATE_DESC".equalsIgnoreCase(sortBy)) {
-                jpql.append(" ORDER BY s.endAt DESC");
+                jpql.append(" ORDER BY MAX(s.endAt) DESC");
             }
         }
 
