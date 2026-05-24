@@ -13,7 +13,7 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
             @org.springframework.data.jpa.repository.Query("SELECT s FROM Subscription s WHERE s.status = 'FROZEN' AND s.unfreezesAt <= :now")
             java.util.List<Subscription> findExpiredFrozen(@org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 
-    @org.springframework.data.jpa.repository.Query("SELECT s.userId FROM Subscription s JOIN PackageOption o ON s.packageId = o.subscriptionPackage.id WHERE o.durationMonths = :duration")
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT s.userId FROM Subscription s JOIN PackageOption o ON s.optionId = o.id WHERE o.durationMonths = :duration")
     java.util.List<Long> findUserIdsByDurationMonths(@org.springframework.data.repository.query.Param("duration") Integer duration);
 
             @org.springframework.data.jpa.repository.Query("SELECT s.userId FROM Subscription s")
