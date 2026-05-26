@@ -112,24 +112,27 @@ public class UserSubscriptionService {
             String subscriptionStatus = null;
             List<Subscription> allSubs = subscriptionRepository.findAllByUserIdOrderByStartAtDesc(userId);
             if (!allSubs.isEmpty()) {
-                subscription = allSubs.get(0);
-                String rawStatus = subscription.getStatus();
-                if (Boolean.TRUE.equals(subscription.getIsUpgraded())) {
-                    subscriptionStatus = "changed";
-                } else if ("ACTIVE".equalsIgnoreCase(rawStatus) && subscription.getEndAt() != null &&
-                        !subscription.getEndAt().isBefore(LocalDateTime.now()) &&
-                        !subscription.getEndAt().isAfter(LocalDateTime.now().plusDays(7))) {
-                    subscriptionStatus = "last_7_days";
-                } else {
-                    subscriptionStatus = translationService.getTranslatedValue("SUBSCRIPTION_STATUS", rawStatus, "name", lang);
-                    if (subscriptionStatus == null || subscriptionStatus.isEmpty()) {
-                        subscriptionStatus = rawStatus != null ? rawStatus.toLowerCase() : "unknown";
-                        if (subscriptionStatus.length() > 0) {
-                            subscriptionStatus = subscriptionStatus.substring(0, 1).toUpperCase() + subscriptionStatus.substring(1);
+                Subscription latest = allSubs.get(0);
+                if (!"CANCELLED".equals(latest.getStatus()) && !"EXPIRED".equals(latest.getStatus())) {
+                    subscription = latest;
+                    String rawStatus = subscription.getStatus();
+                    if (Boolean.TRUE.equals(subscription.getIsUpgraded())) {
+                        subscriptionStatus = "changed";
+                    } else if ("ACTIVE".equalsIgnoreCase(rawStatus) && subscription.getEndAt() != null &&
+                            !subscription.getEndAt().isBefore(LocalDateTime.now()) &&
+                            !subscription.getEndAt().isAfter(LocalDateTime.now().plusDays(7))) {
+                        subscriptionStatus = "last_7_days";
+                    } else {
+                        subscriptionStatus = translationService.getTranslatedValue("SUBSCRIPTION_STATUS", rawStatus, "name", lang);
+                        if (subscriptionStatus == null || subscriptionStatus.isEmpty()) {
+                            subscriptionStatus = rawStatus != null ? rawStatus.toLowerCase() : "unknown";
+                            if (subscriptionStatus.length() > 0) {
+                                subscriptionStatus = subscriptionStatus.substring(0, 1).toUpperCase() + subscriptionStatus.substring(1);
+                            }
                         }
                     }
+                    log.info("Found latest subscription for userId={}, subscriptionId={}, status={}", userId, subscription.getSubscriptionId(), subscriptionStatus);
                 }
-                log.info("Found latest subscription for userId={}, subscriptionId={}, status={}", userId, subscription.getSubscriptionId(), subscriptionStatus);
             }
             if (subscription == null) {
                 log.info("No subscription found for userId={}, returning No Plan", userId);
@@ -794,6 +797,9 @@ public class UserSubscriptionService {
         }
         
         Subscription sub = allSubs.get(0);
+        if ("CANCELLED".equals(sub.getStatus()) || "EXPIRED".equals(sub.getStatus())) {
+            throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_subscription_found");
+        }
         SubscriptionPackage pkg = packageRepository.findById(sub.getPackageId())
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
         
