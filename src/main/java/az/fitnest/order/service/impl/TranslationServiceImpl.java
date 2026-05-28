@@ -203,6 +203,7 @@ public class TranslationServiceImpl implements TranslationService {
     private String translateWithGoogle(String text, String targetLanguage) {
         try {
             RestTemplate restTemplate = new RestTemplate();
+            restTemplate.getMessageConverters().add(0, new org.springframework.http.converter.StringHttpMessageConverter(java.nio.charset.StandardCharsets.UTF_8));
             URI uri = UriComponentsBuilder
                 .fromUriString("https://translate.googleapis.com/translate_a/single")
                 .queryParam("client", "gtx")
