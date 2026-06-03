@@ -56,12 +56,20 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
 
     @Override
     public void getGymPlans(GetGymPlansRequest request, StreamObserver<GetGymPlansResponse> responseObserver) {
-        var packages = packageRepository.findByIsActiveTrue();
-        GetGymPlansResponse.Builder responseBuilder = GetGymPlansResponse.newBuilder();
-        for (SubscriptionPackage pkg : packages) {
-            responseBuilder.addPackages(mapPackageToGrpc(pkg));
+        try {
+            var packages = packageRepository.findByIsActiveTrueWithOptions();
+            GetGymPlansResponse.Builder responseBuilder = GetGymPlansResponse.newBuilder();
+            for (SubscriptionPackage pkg : packages) {
+                responseBuilder.addPackages(mapPackageToGrpc(pkg));
+            }
+            responseObserver.onNext(responseBuilder.build());
+        } catch (Exception e) {
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                .withDescription("Failed to fetch gym plans: " + e.getMessage())
+                .withCause(e)
+                .asRuntimeException());
+            return;
         }
-        responseObserver.onNext(responseBuilder.build());
         responseObserver.onCompleted();
     }
 

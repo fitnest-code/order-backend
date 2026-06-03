@@ -25,6 +25,9 @@ public interface SubscriptionPackageRepository extends JpaRepository<Subscriptio
 
     List<SubscriptionPackage> findByIsActiveTrue();
 
+    @Query("SELECT p FROM SubscriptionPackage p LEFT JOIN FETCH p.options LEFT JOIN FETCH p.benefits WHERE p.isActive = true")
+    List<SubscriptionPackage> findByIsActiveTrueWithOptions();
+
     @Query("SELECT p FROM SubscriptionPackage p LEFT JOIN FETCH p.options LEFT JOIN FETCH p.benefits WHERE p.id IN :ids")
     List<SubscriptionPackage> findAllByIdWithOptions(@Param("ids") List<Long> ids);
 
