@@ -738,7 +738,7 @@ public class UserSubscriptionService {
                     whereClauses.add("s.status IN ('FINISHED', 'EXPIRED', 'CANCELLED')");
                     break;
                 case "LAST_7_DAYS":
-                    whereClauses.add("s.status = 'ACTIVE'");
+                    whereClauses.add("s.status IN ('ACTIVE', 'FROZEN')");
                     whereClauses.add("s.endAt BETWEEN :now AND :endAtLimit");
                     parameters.put("now", now);
                     parameters.put("endAtLimit", now.plusDays(7));
