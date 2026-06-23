@@ -60,6 +60,13 @@ public class SubscriptionPackageAdminController {
         return ResponseEntity.ok(ApiResponse.success(subscriptionPackageAdminService.getPackageNames()));
     }
 
+    @Operation(summary = "Bütün paket və variant ID-lərini əldə edin", description = "Bütün abunəlik paket ID-lərini və onlara uyğun variant ID-lərini qaytarır.")
+    @GetMapping("/ids")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<az.fitnest.order.dto.PackageIdAndOptionIdsResponse>>> getPackageAndOptionIds() {
+        return ResponseEntity.ok(ApiResponse.success(subscriptionPackageAdminService.getPackageAndOptionIds()));
+    }
+
     @Operation(summary = "Bütün paket variantlarını əldə edin", description = "Sistemdəki bütün paket variantlarını (Bronze, Silver və s.) düz siyahı şəklində qaytarır.")
     @GetMapping("/options")
     @PreAuthorize("hasRole('ADMIN')")

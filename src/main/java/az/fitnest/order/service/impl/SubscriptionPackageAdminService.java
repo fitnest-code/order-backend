@@ -100,6 +100,18 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional(readOnly = true)
+    public List<az.fitnest.order.dto.PackageIdAndOptionIdsResponse> getPackageAndOptionIds() {
+        return packageRepository.findAllWithOptions().stream()
+                .map(pkg -> az.fitnest.order.dto.PackageIdAndOptionIdsResponse.builder()
+                        .packageId(pkg.getId())
+                        .optionIds(pkg.getOptions() != null ? 
+                                pkg.getOptions().stream().map(az.fitnest.order.model.entity.PackageOption::getId).toList() : 
+                                java.util.List.of())
+                        .build())
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public az.fitnest.order.dto.AdminSubscriptionPackageResponse getPackageById(Long packageId) {
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
