@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface GymVisitRepository extends JpaRepository<GymVisit, Long> {
+    void deleteByUserId(Long userId);
 }

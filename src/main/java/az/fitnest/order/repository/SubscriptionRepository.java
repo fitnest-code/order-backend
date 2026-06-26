@@ -36,5 +36,7 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     long countByStatus(String status);
     long countByStatusInAndEndAtBetween(List<String> statuses, LocalDateTime start, LocalDateTime end);
     long countByIsUpgradedAndStartAtBetween(Boolean isUpgraded, LocalDateTime start, LocalDateTime end);
+
+    void deleteByUserId(Long userId);
 }
 
