@@ -188,7 +188,6 @@ public class SubscriptionPackageAdminService {
                     String trimmed = b.getDescription().trim();
                     if (uniqueDescriptions.add(trimmed.toLowerCase())) {
                         pkg.getBenefits().add(new az.fitnest.order.model.entity.PlanBenefit(trimmed));
-                        translationService.autoTranslateAndSave("PLANBENEFIT", pkg.getId() + "_" + trimmed, "description", trimmed);
                     }
                 }
             }
@@ -281,7 +280,6 @@ public class SubscriptionPackageAdminService {
                     String trimmed = b.getDescription().trim();
                     if (uniqueDescriptions.add(trimmed.toLowerCase())) {
                         pkg.getBenefits().add(new az.fitnest.order.model.entity.PlanBenefit(trimmed));
-                        translationService.autoTranslateAndSave("PLANBENEFIT", pkg.getId() + "_" + trimmed, "description", trimmed);
                     }
                 }
             }
@@ -450,7 +448,6 @@ public class SubscriptionPackageAdminService {
             if (!exists) {
                 pkg.getBenefits().add(new az.fitnest.order.model.entity.PlanBenefit(trimmed));
                 packageRepository.save(pkg);
-                translationService.autoTranslateAndSave("PLANBENEFIT", pkg.getId() + "_" + trimmed, "description", trimmed);
             }
         }
     }
