@@ -112,6 +112,13 @@ public class TranslationServiceImpl implements TranslationService {
             return existingValue;
         }
 
+        if (entityType != null) {
+            String norm = entityType.toUpperCase();
+            if (norm.equals("PLANBENEFIT") || norm.equals("SUBSCRIPTIONPACKAGE")) {
+                return null;
+            }
+        }
+
         try {
             String originalValueAz = null;
             if (entityType != null) {
@@ -156,6 +163,12 @@ public class TranslationServiceImpl implements TranslationService {
     @Override
     @Async
     public void autoTranslateAndSave(String entityType, String entityId, String fieldName, String originalValueAz) {
+        if (entityType != null) {
+            String norm = entityType.toUpperCase();
+            if (norm.equals("PLANBENEFIT") || norm.equals("SUBSCRIPTIONPACKAGE")) {
+                return;
+            }
+        }
         if (originalValueAz == null || originalValueAz.trim().isEmpty()) {
             log.warn("Auto-translation skipped: originalValueAz is null or empty for entityType={}, entityId={}, fieldName={}", 
                 entityType, entityId, fieldName);
