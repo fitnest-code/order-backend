@@ -18,7 +18,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import java.util.List;
  
  @RestController
- @RequestMapping("/api/v1/admin/translations")
+ @RequestMapping("/api/v1/admin/subscription-packages/translations")
  @RequiredArgsConstructor
  @Tag(name = "Translation Management", description = "Tərcümələri idarə etmək üçün ucluqlar")
  public class TranslationAdminController {
@@ -78,5 +78,59 @@ import java.util.List;
                  .filter(t -> languageCode == null || t.getLanguageCode().equalsIgnoreCase(languageCode))
                  .toList();
          return ResponseEntity.ok(results);
+     }
+
+     @PutMapping
+     @PreAuthorize("hasRole('ADMIN')")
+     public ResponseEntity<ApiResponse<Translation>> saveOrUpdateTranslation(@RequestBody CreateTranslationRequest request) {
+         String normalizedEntityType = request.entityType().toUpperCase();
+         Translation existing = translationRepository.findFirstByEntityTypeAndEntityIdAndLanguageCodeAndFieldName(
+                 normalizedEntityType, request.entityId(), request.languageCode().toUpperCase(), request.fieldName()
+         ).orElse(null);
+
+         Translation saved;
+         if (existing != null) {
+             existing.setFieldValue(request.fieldValue());
+             saved = translationRepository.saveAndFlush(existing);
+         } else {
+             Translation translation = Translation.builder()
+                     .entityType(normalizedEntityType)
+                     .entityId(request.entityId())
+                     .languageCode(request.languageCode().toUpperCase())
+                     .fieldName(request.fieldName())
+                     .fieldValue(request.fieldValue())
+                     .build();
+             saved = translationRepository.saveAndFlush(translation);
+         }
+         return ResponseEntity.ok(ApiResponse.success(saved));
+     }
+
+     @PutMapping("/bulk")
+     @PreAuthorize("hasRole('ADMIN')")
+     public ResponseEntity<ApiResponse<List<Translation>>> saveOrUpdateTranslationsBulk(@RequestBody List<CreateTranslationRequest> requests) {
+         List<Translation> savedList = new java.util.ArrayList<>();
+         for (CreateTranslationRequest request : requests) {
+             String normalizedEntityType = request.entityType().toUpperCase();
+             Translation existing = translationRepository.findFirstByEntityTypeAndEntityIdAndLanguageCodeAndFieldName(
+                     normalizedEntityType, request.entityId(), request.languageCode().toUpperCase(), request.fieldName()
+             ).orElse(null);
+
+             Translation saved;
+             if (existing != null) {
+                 existing.setFieldValue(request.fieldValue());
+                 saved = translationRepository.saveAndFlush(existing);
+             } else {
+                 Translation translation = Translation.builder()
+                         .entityType(normalizedEntityType)
+                         .entityId(request.entityId())
+                         .languageCode(request.languageCode().toUpperCase())
+                         .fieldName(request.fieldName())
+                         .fieldValue(request.fieldValue())
+                         .build();
+                 saved = translationRepository.saveAndFlush(translation);
+             }
+             savedList.add(saved);
+         }
+         return ResponseEntity.ok(ApiResponse.success(savedList));
      }
  }
