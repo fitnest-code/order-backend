@@ -78,4 +78,25 @@ public class SubscriptionAdminController {
             @PathVariable Long userId) {
         return ResponseEntity.ok(ApiResponse.success(userSubscriptionService.getUserSubscriptionDetail(userId)));
     }
+
+    @Operation(
+            summary = "İstifadəçinin cari abunəliyinin giriş limitini yenilə",
+            description = "Admin istifadəçinin cari abunəliyinin qalan (və istəyə bağlı ümumi) giriş limitini artıra və ya azalda bilər."
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Giriş limiti uğurla yeniləndi",
+                    content = @Content(schema = @Schema(implementation = az.fitnest.order.dto.AdminUserSubscriptionResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Yanlış sorğu məlumatı"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "İstifadəçi və ya abunəlik tapılmadı")
+    })
+    @PatchMapping("/users/{userId}/current/entry-limit")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<az.fitnest.order.dto.AdminUserSubscriptionResponse>> updateEntryLimit(
+            @PathVariable Long userId,
+            @Valid @RequestBody az.fitnest.order.dto.UpdateEntryLimitRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(userSubscriptionService.updateEntryLimit(userId, request)));
+    }
 }

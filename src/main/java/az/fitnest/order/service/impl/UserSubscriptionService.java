@@ -823,6 +823,53 @@ public class UserSubscriptionService {
     }
 
     @Transactional
+    public az.fitnest.order.dto.AdminUserSubscriptionResponse updateEntryLimit(
+            Long userId, az.fitnest.order.dto.UpdateEntryLimitRequest request) {
+        log.info("Admin updating entry limit for userId={}, remainingLimit={}, totalLimit={}",
+                userId, request.remainingLimit(), request.totalLimit());
+
+        List<Subscription> allSubs = subscriptionRepository.findAllByUserIdOrderByStartAtDesc(userId);
+        if (allSubs.isEmpty()) {
+            throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_subscription_found");
+        }
+
+        Subscription sub = allSubs.get(0);
+        if ("CANCELLED".equals(sub.getStatus()) || "EXPIRED".equals(sub.getStatus())) {
+            throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_subscription_found");
+        }
+
+        int newRemaining = request.remainingLimit();
+
+        Integer newTotal;
+        if (request.totalLimit() != null) {
+            newTotal = Math.max(request.totalLimit(), newRemaining);
+        } else {
+            int currentTotal = sub.getTotalLimit() != null ? sub.getTotalLimit() : 0;
+            newTotal = Math.max(currentTotal, newRemaining);
+        }
+
+        sub.setRemainingLimit(newRemaining);
+        sub.setTotalLimit(newTotal);
+
+        boolean expired = sub.getEndAt() != null && sub.getEndAt().isBefore(LocalDateTime.now());
+        boolean hasFrozen = sub.getFrozenSessions() != null && sub.getFrozenSessions() > 0;
+        if (newRemaining <= 0 && !hasFrozen) {
+            if ("ACTIVE".equals(sub.getStatus())) {
+                sub.setStatus("FINISHED");
+            }
+        } else if (newRemaining > 0 && !expired && "FINISHED".equals(sub.getStatus())) {
+            sub.setStatus("ACTIVE");
+        }
+
+        subscriptionRepository.save(sub);
+        subscriptionEventPublisher.publishSubscriptionEvent(userId, "LIMIT_UPDATED", sub.getSubscriptionId());
+        log.info("Admin updated entry limit for userId={}, subscriptionId={}, remaining={}, total={}, status={}",
+                userId, sub.getSubscriptionId(), newRemaining, newTotal, sub.getStatus());
+
+        return getUserSubscriptionDetail(userId);
+    }
+
+    @Transactional
     public void freezeSession(Long userId) {
         List<Subscription> activeSubs = subscriptionRepository.findByUserIdAndStatus(userId, "ACTIVE");
         if (activeSubs.isEmpty()) {
