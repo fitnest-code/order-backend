@@ -104,7 +104,7 @@ public class UpgradeService {
                     BigDecimal payableDiff = targetEffectivePrice.subtract(currentEffectivePrice);
                     if (payableDiff.compareTo(BigDecimal.ZERO) <= 0) continue;
 
-                    int targetTotal = pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0;
+                    int targetTotal = option.getEntryLimit() != null ? option.getEntryLimit() : (pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0);
                     int currentRemaining = currentSub.getRemainingLimit() != null ? currentSub.getRemainingLimit() : 0;
                     int newRemaining = Math.max(0, targetTotal - currentRemaining);
 
@@ -218,7 +218,7 @@ public class UpgradeService {
         SubscriptionDetailsDto subDetails = null;
 
         if ("success".equals(paymentResult.status())) {
-            int targetTotal = targetPackage.getEntryLimit() != null ? targetPackage.getEntryLimit() : 0;
+            int targetTotal = targetOption.getEntryLimit() != null ? targetOption.getEntryLimit() : (targetPackage.getEntryLimit() != null ? targetPackage.getEntryLimit() : 0);
             int currentRemaining = currentSub.getRemainingLimit() != null ? currentSub.getRemainingLimit() : 0;
             int newRemaining = Math.max(0, targetTotal - currentRemaining);
 

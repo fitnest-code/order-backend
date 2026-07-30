@@ -528,11 +528,12 @@ public class UserSubscriptionService {
         next.setUserId(current.getUserId());
         next.setPackageId(current.getPackageId());
         next.setOptionId(current.getOptionId());
-        next.setStatus(pkg.getEntryLimit() != null && pkg.getEntryLimit() == 0 ? "FINISHED" : "ACTIVE");
+        Integer renewLimit = option.getEntryLimit() != null ? option.getEntryLimit() : pkg.getEntryLimit();
+        next.setStatus(renewLimit != null && renewLimit == 0 ? "FINISHED" : "ACTIVE");
         next.setStartAt(now);
         next.setEndAt(endAt);
-        next.setTotalLimit(pkg.getEntryLimit());
-        next.setRemainingLimit(pkg.getEntryLimit());
+        next.setTotalLimit(renewLimit);
+        next.setRemainingLimit(renewLimit);
         next.setFrozenDaysUsed(0);
         next.setAllowedFreezeDays(0);
         next.setAutoPaymentEnabled(true);
@@ -575,7 +576,7 @@ public class UserSubscriptionService {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime endAt = now.plusMonths(option.getDurationMonths());
 
-        Integer entryLimit = pkg.getEntryLimit();
+        Integer entryLimit = option.getEntryLimit() != null ? option.getEntryLimit() : pkg.getEntryLimit();
         Integer freezeDays = 0;
 
         Subscription subscription = new Subscription();

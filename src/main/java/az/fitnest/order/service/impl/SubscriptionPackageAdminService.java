@@ -80,7 +80,7 @@ public class SubscriptionPackageAdminService {
                                     .durationMonths(opt.getDurationMonths())
                                     .priceStandard(opt.getPriceStandard())
                                     .priceDiscounted(opt.getPriceDiscounted())
-                                    .entryLimit(pkg.getEntryLimit())
+                                    .entryLimit(opt.getEntryLimit() != null ? opt.getEntryLimit() : pkg.getEntryLimit())
                                     .isActive(opt.getIsActive() != null ? opt.getIsActive() : true)
                                     .benefits(localizedBenefits)
                                     .build();

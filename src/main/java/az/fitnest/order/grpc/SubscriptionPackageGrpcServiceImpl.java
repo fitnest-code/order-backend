@@ -198,7 +198,7 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
                         .setDurationMonths(opt.getDurationMonths() != null ? opt.getDurationMonths() : 0)
                         .setPriceStandard(opt.getPriceStandard() != null ? opt.getPriceStandard().toPlainString() : "0")
                         .setPriceDiscounted(opt.getPriceDiscounted() != null ? opt.getPriceDiscounted().toPlainString() : "")
-                        .setEntryLimit(pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0)
+                        .setEntryLimit(opt.getEntryLimit() != null ? opt.getEntryLimit() : (pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0))
                         .setFreezeDays(0);
 
                 pkgBuilder.addOptions(optBuilder.build());

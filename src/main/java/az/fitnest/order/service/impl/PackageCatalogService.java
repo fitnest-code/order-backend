@@ -177,7 +177,7 @@ public class PackageCatalogService {
                 .durationLabel(getDurationLabel(option.getDurationMonths(), lang))
                 .price(priceDto)
                 .badge(badge)
-                .visitLimit(pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0)
+                .visitLimit(option.getEntryLimit() != null ? option.getEntryLimit() : (pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0))
                 .freezeDays(0)
                 .benefits(benefits)
                 .build();
@@ -216,7 +216,7 @@ public class PackageCatalogService {
                 badge = "discount";
             }
 
-            visitLimit = pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0;
+            visitLimit = option.getEntryLimit() != null ? option.getEntryLimit() : (pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0);
             freezeDays = 0;
 
             if (pkg.getBenefits() != null) {
