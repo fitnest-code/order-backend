@@ -171,8 +171,8 @@ springdoc:
 
 logging:
   level:
-    root: ${LOGGING_LEVEL_ROOT:DEBUG}
-    az.fitnest.order: ${LOGGING_LEVEL_AZ_FITNEST_ORDER:DEBUG}
+    root: WARN
+    az.fitnest.order: WARN
     feign.Logger: OFF
   pattern:
     console: "${LOGGING_PATTERN_CONSOLE:%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n}"
