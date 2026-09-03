@@ -76,7 +76,7 @@ spring:
 
   data:
     redis:
-      host: ${SPRING_DATA_REDIS_HOST:redis.fitnest-production.svc.cluster.local}
+      host: ${SPRING_DATA_REDIS_HOST:redis}
       port: ${SPRING_DATA_REDIS_PORT:6379}
       password: ${SPRING_DATA_REDIS_PASSWORD:}
       timeout: 2000ms
@@ -89,7 +89,7 @@ spring:
         shutdown-timeout: 100ms
 
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka-service.fitnest-production.svc.cluster.local:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka-service:9092}
     consumer:
       group-id: order-backend
       auto-offset-reset: earliest
@@ -186,5 +186,5 @@ grpc:
   client:
     # ✅ Updated gRPC client from payment-service to payment-backend
     payment-backend:
-      address: 'dns:///payment-backend.fitnest-production.svc.cluster.local:9090'
+      address: ${PAYMENT_BACKEND_GRPC_ADDRESS:dns:///payment-backend:9090}
       negotiation-type: plaintext
