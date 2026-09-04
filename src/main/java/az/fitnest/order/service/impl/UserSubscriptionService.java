@@ -257,6 +257,18 @@ public class UserSubscriptionService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public az.fitnest.order.dto.ActiveSubscriptionResponseV2 getActiveSubscriptionV2(Long userId) {
+        ActiveSubscriptionResponse v1 = getActiveSubscription(userId);
+        var coins = paymentGrpcClient.getCoinWallet(userId);
+        return az.fitnest.order.dto.ActiveSubscriptionResponseV2.from(
+                v1,
+                coins.coinBalance(),
+                coins.aznEquivalent(),
+                coins.validityDate()
+        );
+    }
+
     @Transactional
     public void freezeSubscription(Long userId) {
         List<Subscription> activeSubs = subscriptionRepository.findByUserIdAndStatus(userId, "ACTIVE");

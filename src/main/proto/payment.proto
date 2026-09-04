@@ -10,6 +10,17 @@ service PaymentService {
   rpc CreatePayment (CreatePaymentRequest) returns (CreatePaymentResponse);
   rpc PayWithCard (PayWithCardRequest) returns (PayWithCardResponse);
   rpc GetUserCards (GetUserCardsRequest) returns (GetUserCardsResponse);
+  rpc GetCoinWallet (GetCoinWalletRequest) returns (GetCoinWalletResponse);
+}
+
+message GetCoinWalletRequest {
+  int64 user_id = 1;
+}
+
+message GetCoinWalletResponse {
+  string coin_balance = 1;
+  string azn_equivalent = 2;
+  string validity_date = 3; // ISO-8601 local datetime, empty if none
 }
 
 message PayWithCardRequest {
