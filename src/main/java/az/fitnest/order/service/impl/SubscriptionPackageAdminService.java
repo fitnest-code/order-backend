@@ -154,7 +154,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public void addPackageWithOptions(SubscriptionPackageWithOptionsRequest request) {
         List<String> allowedNames = List.of("Bronze", "Silver", "Gold", "Platinum");
         if (request.name() == null || request.name().isBlank() || !allowedNames.contains(request.name())) {
@@ -238,7 +238,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public Long createPackage(String name, String currency, BillingPeriod billingPeriod, Boolean isActive) {
         List<String> allowedNames = List.of("Bronze", "Silver", "Gold", "Platinum");
         if (name == null || name.isBlank() || !allowedNames.contains(name)) {
@@ -255,7 +255,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public void updatePackageWithOptions(Long packageId, SubscriptionPackageWithOptionsRequest request) {
         cleanupStaleOptionBenefitsTable();
         List<String> allowedNames = List.of("Bronze", "Silver", "Gold", "Platinum");
@@ -328,7 +328,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public Long addOptionToPackage(Long packageId, az.fitnest.order.dto.PackageOptionEntityDto dto) {
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
@@ -357,7 +357,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public void deletePackageById(Long packageId) {
         cleanupStaleOptionBenefitsTable();
         SubscriptionPackage pkg = packageRepository.findById(packageId)
@@ -366,14 +366,14 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public void deleteAllPackages() {
         cleanupStaleOptionBenefitsTable();
         packageRepository.deleteAll();
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public void deleteOptionById(Long packageId, Long optionId) {
         cleanupStaleOptionBenefitsTable();
         SubscriptionPackage pkg = packageRepository.findById(packageId)
@@ -383,7 +383,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public void deleteAllOptionsByPackageId(Long packageId) {
         cleanupStaleOptionBenefitsTable();
         SubscriptionPackage pkg = packageRepository.findById(packageId)
@@ -393,7 +393,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public void updateOptionStatus(Long packageId, Long optionId, boolean isActive) {
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
@@ -406,7 +406,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public void updatePackageStatus(Long packageId, boolean isActive) {
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
@@ -415,7 +415,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public void updateOption(Long packageId, Long optionId, az.fitnest.order.dto.PackageOptionEntityDto dto) {
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
@@ -437,7 +437,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public void addBenefit(Long packageId, String description) {
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
@@ -453,7 +453,7 @@ public class SubscriptionPackageAdminService {
     }
 
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"subscription-packages-paged", "subscription-packages-all", "subscription-package-options", "subscription-package-names", "subscription-packages-public"}, allEntries = true)
     public void deleteBenefit(Long packageId, String description) {
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));

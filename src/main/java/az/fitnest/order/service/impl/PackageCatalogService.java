@@ -53,6 +53,10 @@ public class PackageCatalogService {
     }
 
     @Transactional(readOnly = true)
+    @org.springframework.cache.annotation.Cacheable(
+            value = "subscription-packages-public",
+            key = "{#order, T(az.fitnest.order.util.UserContext).getCurrentLanguage()}"
+    )
     public PackagePlanListResponse getUniquePlans(String order) {
         List<SubscriptionPackage> packages = packageRepository.findAllOrdered();
 
