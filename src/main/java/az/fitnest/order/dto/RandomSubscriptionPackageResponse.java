@@ -22,7 +22,7 @@ public record RandomSubscriptionPackageResponse(
         @Schema(description = "Ən qısa müddətli (aylıq) paket variantının qiyməti", example = "49.00")
         BigDecimal monthlyPrice,
 
-        @Schema(description = "Paketin verdiyi xidmətlər / faydalar")
+        @Schema(description = "Bütün paketlərin unikal xidmətləri / faydaları (təkrarlar yoxdur)")
         List<String> services
 ) {
 }

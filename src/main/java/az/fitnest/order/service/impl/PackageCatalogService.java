@@ -12,6 +12,7 @@ import az.fitnest.order.dto.SubscriptionPackageDto;
 import az.fitnest.order.dto.SubscriptionPackageResponse;
 import az.fitnest.order.exception.ResourceNotFoundException;
 import az.fitnest.order.model.entity.PackageOption;
+import az.fitnest.order.model.entity.PlanBenefit;
 import az.fitnest.order.model.entity.SubscriptionPackage;
 import az.fitnest.order.repository.SubscriptionPackageRepository;
 import az.fitnest.order.service.TranslationService;
@@ -24,6 +25,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -113,25 +115,11 @@ public class PackageCatalogService {
             localizedName = pkg.getName();
         }
 
-        List<String> services = pkg.getBenefits() == null
-                ? List.of()
-                : pkg.getBenefits().stream()
-                        .map(benefit -> {
-                            String entityId = pkg.getId() + "_" + benefit.getDescription();
-                            String localized = translationService.getTranslatedValue(
-                                    "PLANBENEFIT", entityId, "description", lang);
-                            return (localized != null && !localized.isEmpty())
-                                    ? localized
-                                    : benefit.getDescription();
-                        })
-                        .filter(description -> description != null && !description.isBlank())
-                        .collect(Collectors.toList());
-
         return RandomSubscriptionPackageResponse.builder()
                 .subscriptionName(localizedName)
                 .gymCount(catalogServiceGrpcClient.countGymsByPackage(pkg.getId()))
                 .monthlyPrice(resolveMonthlyPrice(pkg))
-                .services(services)
+                .services(uniqueServicesFromPackages(packages, lang))
                 .build();
     }
 
@@ -300,6 +288,36 @@ public class PackageCatalogService {
                 .freezeDays(freezeDays)
                 .benefits(benefits)
                 .build();
+    }
+
+    private List<String> uniqueServicesFromPackages(List<SubscriptionPackage> packages, String lang) {
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+        List<String> services = new ArrayList<>();
+        for (SubscriptionPackage pkg : packages) {
+            if (pkg.getBenefits() == null) {
+                continue;
+            }
+            for (PlanBenefit benefit : pkg.getBenefits()) {
+                String description = localizeBenefit(pkg, benefit, lang);
+                if (description == null || description.isBlank()) {
+                    continue;
+                }
+                String trimmed = description.trim();
+                if (seen.add(trimmed.toLowerCase(Locale.ROOT))) {
+                    services.add(trimmed);
+                }
+            }
+        }
+        return services;
+    }
+
+    private String localizeBenefit(SubscriptionPackage pkg, PlanBenefit benefit, String lang) {
+        if (benefit == null || benefit.getDescription() == null) {
+            return null;
+        }
+        String entityId = pkg.getId() + "_" + benefit.getDescription();
+        String localized = translationService.getTranslatedValue("PLANBENEFIT", entityId, "description", lang);
+        return (localized != null && !localized.isEmpty()) ? localized : benefit.getDescription();
     }
 
     private BigDecimal resolveMonthlyPrice(SubscriptionPackage pkg) {
