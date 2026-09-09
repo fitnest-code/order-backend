@@ -8,8 +8,8 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @Builder
-@Schema(description = "Təsadüfi seçilmiş abunəlik paketinin yığcam v3 cavabı")
-public record RandomSubscriptionPackageResponse(
+@Schema(description = "Abunəlik paketinin yığcam v3 cavabı")
+public record SubscriptionPackageSummaryV3(
         @JsonProperty("subscription_name")
         @Schema(description = "Paket adı (Bronze, Silver, Gold, Platinum)", example = "Gold")
         String subscriptionName,
@@ -22,7 +22,7 @@ public record RandomSubscriptionPackageResponse(
         @Schema(description = "Ən qısa müddətli (aylıq) paket variantının qiyməti", example = "49.00")
         BigDecimal monthlyPrice,
 
-        @Schema(description = "Bütün paketlərin unikal xidmətləri / faydaları (təkrarlar yoxdur)")
+        @Schema(description = "Bu paketin unikal xidmətləri / faydaları")
         List<String> services
 ) {
 }

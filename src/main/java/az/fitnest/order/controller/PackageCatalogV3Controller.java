@@ -1,6 +1,6 @@
 package az.fitnest.order.controller;
 
-import az.fitnest.order.dto.RandomSubscriptionPackageResponse;
+import az.fitnest.order.dto.SubscriptionPackagesResponseV3;
 import az.fitnest.order.service.impl.PackageCatalogService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -22,15 +22,15 @@ public class PackageCatalogV3Controller {
 
     private final PackageCatalogService packageCatalogService;
 
-    @Operation(summary = "Təsadüfi paketi əldə edin",
-            description = "Bronze, Silver, Gold və ya Platinum paketlərindən birini təsadüfi seçir. Paket adı, aylıq qiymət və zal sayı həmin paketə aiddir; xidmətlər bütün paketlərin unikal faydalarının birləşməsidir.")
+    @Operation(summary = "Bütün paketləri əldə edin",
+            description = "Bronze, Silver, Gold və Platinum paketlərinin adını, aylıq qiymətini, dəstəkləyən aktiv idman zallarının sayını və hər paketin unikal xidmətlərini qaytarır.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Təsadüfi paket əldə edildi",
-                    content = @Content(schema = @Schema(implementation = RandomSubscriptionPackageResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Paketlər uğurla əldə edildi",
+                    content = @Content(schema = @Schema(implementation = SubscriptionPackagesResponseV3.class))),
             @ApiResponse(responseCode = "404", description = "Aktiv paket tapılmadı")
     })
-    @GetMapping("/random")
-    public ResponseEntity<RandomSubscriptionPackageResponse> getRandomPackage() {
-        return ResponseEntity.ok(packageCatalogService.getRandomFeaturedPackage());
+    @GetMapping
+    public ResponseEntity<SubscriptionPackagesResponseV3> getPackages() {
+        return ResponseEntity.ok(packageCatalogService.getFeaturedPackages());
     }
 }

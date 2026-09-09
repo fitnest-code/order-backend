@@ -7,9 +7,10 @@ import az.fitnest.order.dto.PackageNameDto;
 import az.fitnest.order.dto.PackageOptionDto;
 import az.fitnest.order.dto.PackagePlanListResponse;
 import az.fitnest.order.dto.PackagePriceDto;
-import az.fitnest.order.dto.RandomSubscriptionPackageResponse;
 import az.fitnest.order.dto.SubscriptionPackageDto;
 import az.fitnest.order.dto.SubscriptionPackageResponse;
+import az.fitnest.order.dto.SubscriptionPackageSummaryV3;
+import az.fitnest.order.dto.SubscriptionPackagesResponseV3;
 import az.fitnest.order.exception.ResourceNotFoundException;
 import az.fitnest.order.model.entity.PackageOption;
 import az.fitnest.order.model.entity.PlanBenefit;
@@ -29,7 +30,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 @Service
@@ -97,7 +97,7 @@ public class PackageCatalogService {
     }
 
     @Transactional(readOnly = true)
-    public RandomSubscriptionPackageResponse getRandomFeaturedPackage() {
+    public SubscriptionPackagesResponseV3 getFeaturedPackages() {
         List<SubscriptionPackage> packages = packageRepository.findByIsActiveTrueOrdered().stream()
                 .filter(pkg -> pkg.getName() != null
                         && FEATURED_PACKAGE_NAMES.contains(pkg.getName().trim().toLowerCase(Locale.ROOT)))
@@ -107,19 +107,13 @@ public class PackageCatalogService {
             throw new ResourceNotFoundException("error.plan_not_found");
         }
 
-        SubscriptionPackage pkg = packages.get(ThreadLocalRandom.current().nextInt(packages.size()));
         String lang = UserContext.getCurrentLanguage();
-        String localizedName = translationService.getTranslatedValue(
-                "SUBSCRIPTIONPACKAGE", pkg.getId().toString(), "name", lang);
-        if (localizedName == null || localizedName.isEmpty()) {
-            localizedName = pkg.getName();
-        }
+        List<SubscriptionPackageSummaryV3> items = packages.stream()
+                .map(pkg -> toPackageSummary(pkg, lang))
+                .collect(Collectors.toList());
 
-        return RandomSubscriptionPackageResponse.builder()
-                .subscriptionName(localizedName)
-                .gymCount(catalogServiceGrpcClient.countGymsByPackage(pkg.getId()))
-                .monthlyPrice(resolveMonthlyPrice(pkg))
-                .services(uniqueServicesFromPackages(packages, lang))
+        return SubscriptionPackagesResponseV3.builder()
+                .items(items)
                 .build();
     }
 
@@ -290,22 +284,35 @@ public class PackageCatalogService {
                 .build();
     }
 
-    private List<String> uniqueServicesFromPackages(List<SubscriptionPackage> packages, String lang) {
+    private SubscriptionPackageSummaryV3 toPackageSummary(SubscriptionPackage pkg, String lang) {
+        String localizedName = translationService.getTranslatedValue(
+                "SUBSCRIPTIONPACKAGE", pkg.getId().toString(), "name", lang);
+        if (localizedName == null || localizedName.isEmpty()) {
+            localizedName = pkg.getName();
+        }
+
+        return SubscriptionPackageSummaryV3.builder()
+                .subscriptionName(localizedName)
+                .gymCount(catalogServiceGrpcClient.countGymsByPackage(pkg.getId()))
+                .monthlyPrice(resolveMonthlyPrice(pkg))
+                .services(uniqueServicesFromPackage(pkg, lang))
+                .build();
+    }
+
+    private List<String> uniqueServicesFromPackage(SubscriptionPackage pkg, String lang) {
         LinkedHashSet<String> seen = new LinkedHashSet<>();
         List<String> services = new ArrayList<>();
-        for (SubscriptionPackage pkg : packages) {
-            if (pkg.getBenefits() == null) {
+        if (pkg.getBenefits() == null) {
+            return services;
+        }
+        for (PlanBenefit benefit : pkg.getBenefits()) {
+            String description = localizeBenefit(pkg, benefit, lang);
+            if (description == null || description.isBlank()) {
                 continue;
             }
-            for (PlanBenefit benefit : pkg.getBenefits()) {
-                String description = localizeBenefit(pkg, benefit, lang);
-                if (description == null || description.isBlank()) {
-                    continue;
-                }
-                String trimmed = description.trim();
-                if (seen.add(trimmed.toLowerCase(Locale.ROOT))) {
-                    services.add(trimmed);
-                }
+            String trimmed = description.trim();
+            if (seen.add(trimmed.toLowerCase(Locale.ROOT))) {
+                services.add(trimmed);
             }
         }
         return services;
