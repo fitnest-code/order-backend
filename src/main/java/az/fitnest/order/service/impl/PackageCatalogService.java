@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -129,6 +130,7 @@ public class PackageCatalogService {
         return RandomSubscriptionPackageResponse.builder()
                 .subscriptionName(localizedName)
                 .gymCount(catalogServiceGrpcClient.countGymsByPackage(pkg.getId()))
+                .monthlyPrice(resolveMonthlyPrice(pkg))
                 .services(services)
                 .build();
     }
@@ -298,6 +300,25 @@ public class PackageCatalogService {
                 .freezeDays(freezeDays)
                 .benefits(benefits)
                 .build();
+    }
+
+    private BigDecimal resolveMonthlyPrice(SubscriptionPackage pkg) {
+        if (pkg.getOptions() != null && !pkg.getOptions().isEmpty()) {
+            return pkg.getOptions().stream()
+                    .filter(option -> !Boolean.FALSE.equals(option.getIsActive()))
+                    .filter(option -> option.getDurationMonths() != null && option.getDurationMonths() > 0)
+                    .min(Comparator.comparingInt(PackageOption::getDurationMonths))
+                    .map(this::effectiveOptionPrice)
+                    .orElse(pkg.getPrice());
+        }
+        return pkg.getPrice();
+    }
+
+    private BigDecimal effectiveOptionPrice(PackageOption option) {
+        if (option.getPriceDiscounted() != null) {
+            return option.getPriceDiscounted();
+        }
+        return option.getPriceStandard();
     }
 
     private String getDurationLabel(Integer months, String lang) {

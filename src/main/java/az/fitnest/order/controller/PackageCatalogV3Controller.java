@@ -23,7 +23,7 @@ public class PackageCatalogV3Controller {
     private final PackageCatalogService packageCatalogService;
 
     @Operation(summary = "Təsadüfi paketi əldə edin",
-            description = "Bronze, Silver, Gold və ya Platinum paketlərindən birini təsadüfi seçir. Paket adı, onu dəstəkləyən aktiv idman zallarının sayı və paketin xidmətlərini qaytarır.")
+            description = "Bronze, Silver, Gold və ya Platinum paketlərindən birini təsadüfi seçir. Paket adı, aylıq qiymət, onu dəstəkləyən aktiv idman zallarının sayı və paketin xidmətlərini qaytarır.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Təsadüfi paket əldə edildi",
                     content = @Content(schema = @Schema(implementation = RandomSubscriptionPackageResponse.class))),
