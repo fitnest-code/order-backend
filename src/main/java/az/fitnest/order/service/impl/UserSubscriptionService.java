@@ -269,6 +269,73 @@ public class UserSubscriptionService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public az.fitnest.order.dto.ActiveSubscriptionResponseV3 getActiveSubscriptionV3(Long userId) {
+        String lang = UserContext.getCurrentLanguage();
+        List<Subscription> allSubs = subscriptionRepository.findAllByUserIdOrderByStartAtDesc(userId);
+        Subscription subscription = allSubs.stream()
+                .filter(item -> !"CANCELLED".equals(item.getStatus()) && !"EXPIRED".equals(item.getStatus()))
+                .findFirst()
+                .orElse(null);
+
+        if (subscription == null) {
+            return az.fitnest.order.dto.ActiveSubscriptionResponseV3.none();
+        }
+
+        SubscriptionPackage pkg = packageRepository.findFullById(subscription.getPackageId()).orElse(null);
+        String subscriptionName = null;
+        Integer durationMonths = null;
+
+        if (pkg != null) {
+            subscriptionName = translationService.getTranslatedValue(
+                    "SUBSCRIPTIONPACKAGE", pkg.getId().toString(), "name", lang);
+            if (subscriptionName == null || subscriptionName.isBlank()) {
+                subscriptionName = pkg.getName();
+            }
+
+            PackageOption matchedOption = null;
+            if (pkg.getOptions() != null && subscription.getOptionId() != null) {
+                matchedOption = pkg.getOptions().stream()
+                        .filter(option -> option.getId().equals(subscription.getOptionId()))
+                        .findFirst()
+                        .orElse(null);
+            }
+            if (matchedOption != null && matchedOption.getDurationMonths() != null) {
+                durationMonths = matchedOption.getDurationMonths();
+            }
+        }
+
+        if (durationMonths == null && subscription.getStartAt() != null && subscription.getEndAt() != null) {
+            long months = java.time.temporal.ChronoUnit.MONTHS.between(
+                    subscription.getStartAt(), subscription.getEndAt());
+            durationMonths = months <= 0 ? 1 : (int) months;
+        }
+
+        String status = subscription.getStatus() == null
+                ? "unknown"
+                : subscription.getStatus().toLowerCase();
+
+        return az.fitnest.order.dto.ActiveSubscriptionResponseV3.builder()
+                .subscriptionName(subscriptionName)
+                .planDurationMonths(durationMonths)
+                .planLabel(buildPlanLabel(durationMonths, lang))
+                .status(status)
+                .nextPaymentDueAt(subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null)
+                .build();
+    }
+
+    private String buildPlanLabel(Integer months, String lang) {
+        if (months == null) {
+            return null;
+        }
+        String normalized = lang == null ? "AZ" : lang.toUpperCase();
+        return switch (normalized) {
+            case "EN" -> months + " month plan";
+            case "RU" -> months + "-месячный план";
+            default -> months + " aylıq plan";
+        };
+    }
+
     @Transactional
     public void freezeSubscription(Long userId) {
         List<Subscription> activeSubs = subscriptionRepository.findByUserIdAndStatus(userId, "ACTIVE");
