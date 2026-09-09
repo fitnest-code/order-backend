@@ -13,3 +13,11 @@ message GymSupportsPlanRequest {
 message GymSupportsPlanResponse {
   bool supported = 1;
 }
+
+message CountGymsByPackageRequest {
+  int64 package_id = 1;
+}
+
+message CountGymsByPackageResponse {
+  int64 gym_count = 1;
+}

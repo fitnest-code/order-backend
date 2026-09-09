@@ -1,13 +1,16 @@
 package az.fitnest.order.service.impl;
 
+import az.fitnest.order.client.CatalogServiceGrpcClient;
 import az.fitnest.order.dto.PackageBenefitDto;
 import az.fitnest.order.dto.PackageListResponse;
 import az.fitnest.order.dto.PackageNameDto;
 import az.fitnest.order.dto.PackageOptionDto;
 import az.fitnest.order.dto.PackagePlanListResponse;
 import az.fitnest.order.dto.PackagePriceDto;
+import az.fitnest.order.dto.RandomSubscriptionPackageResponse;
 import az.fitnest.order.dto.SubscriptionPackageDto;
 import az.fitnest.order.dto.SubscriptionPackageResponse;
+import az.fitnest.order.exception.ResourceNotFoundException;
 import az.fitnest.order.model.entity.PackageOption;
 import az.fitnest.order.model.entity.SubscriptionPackage;
 import az.fitnest.order.repository.SubscriptionPackageRepository;
@@ -21,14 +24,20 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class PackageCatalogService {
 
+    private static final Set<String> FEATURED_PACKAGE_NAMES = Set.of("bronze", "silver", "gold", "platinum");
+
     private final SubscriptionPackageRepository packageRepository;
     private final TranslationService translationService;
+    private final CatalogServiceGrpcClient catalogServiceGrpcClient;
 
     @Transactional(readOnly = true)
     public PackageListResponse getAllPackages(boolean activeOnly) {
@@ -82,6 +91,46 @@ public class PackageCatalogService {
                         .name(pkg.getName())
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public RandomSubscriptionPackageResponse getRandomFeaturedPackage() {
+        List<SubscriptionPackage> packages = packageRepository.findByIsActiveTrueOrdered().stream()
+                .filter(pkg -> pkg.getName() != null
+                        && FEATURED_PACKAGE_NAMES.contains(pkg.getName().trim().toLowerCase(Locale.ROOT)))
+                .collect(Collectors.toList());
+
+        if (packages.isEmpty()) {
+            throw new ResourceNotFoundException("error.plan_not_found");
+        }
+
+        SubscriptionPackage pkg = packages.get(ThreadLocalRandom.current().nextInt(packages.size()));
+        String lang = UserContext.getCurrentLanguage();
+        String localizedName = translationService.getTranslatedValue(
+                "SUBSCRIPTIONPACKAGE", pkg.getId().toString(), "name", lang);
+        if (localizedName == null || localizedName.isEmpty()) {
+            localizedName = pkg.getName();
+        }
+
+        List<String> services = pkg.getBenefits() == null
+                ? List.of()
+                : pkg.getBenefits().stream()
+                        .map(benefit -> {
+                            String entityId = pkg.getId() + "_" + benefit.getDescription();
+                            String localized = translationService.getTranslatedValue(
+                                    "PLANBENEFIT", entityId, "description", lang);
+                            return (localized != null && !localized.isEmpty())
+                                    ? localized
+                                    : benefit.getDescription();
+                        })
+                        .filter(description -> description != null && !description.isBlank())
+                        .collect(Collectors.toList());
+
+        return RandomSubscriptionPackageResponse.builder()
+                .subscriptionName(localizedName)
+                .gymCount(catalogServiceGrpcClient.countGymsByPackage(pkg.getId()))
+                .services(services)
+                .build();
     }
 
     @Transactional(readOnly = true)
