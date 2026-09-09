@@ -50,7 +50,7 @@ public class UserSubscriptionController {
     }
 
     @Operation(summary = "Aktiv abunəliyi əldə edin (v3)",
-            description = "Paket adı, plan müddəti, status və növbəti ödəniş tarixini qaytarır.")
+            description = "Paket adı, plan müddəti (ay sayı), status və növbəti ödəniş tarixini qaytarır.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Aktiv abunəlik əldə edildi",
                     content = @Content(schema = @Schema(implementation = ActiveSubscriptionResponseV3.class))),

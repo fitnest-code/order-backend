@@ -17,12 +17,8 @@ public record ActiveSubscriptionResponseV3(
         String subscriptionName,
 
         @JsonProperty("plan_duration_months")
-        @Schema(description = "Plan müddəti aylarla", example = "3")
+        @Schema(description = "Plan müddəti aylarla (1, 3, 6, 12). Müştəri tərəfində tərcümə olunur.", example = "3")
         Integer planDurationMonths,
-
-        @JsonProperty("plan_label")
-        @Schema(description = "Plan müddətinin oxunaqlı adı", example = "3 month plan")
-        String planLabel,
 
         @JsonProperty("status")
         @Schema(description = "Abunəlik statusu", example = "active")

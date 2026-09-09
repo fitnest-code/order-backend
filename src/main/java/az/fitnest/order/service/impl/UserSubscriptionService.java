@@ -318,22 +318,9 @@ public class UserSubscriptionService {
         return az.fitnest.order.dto.ActiveSubscriptionResponseV3.builder()
                 .subscriptionName(subscriptionName)
                 .planDurationMonths(durationMonths)
-                .planLabel(buildPlanLabel(durationMonths, lang))
                 .status(status)
                 .nextPaymentDueAt(subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null)
                 .build();
-    }
-
-    private String buildPlanLabel(Integer months, String lang) {
-        if (months == null) {
-            return null;
-        }
-        String normalized = lang == null ? "AZ" : lang.toUpperCase();
-        return switch (normalized) {
-            case "EN" -> months + " month plan";
-            case "RU" -> months + "-месячный план";
-            default -> months + " aylıq plan";
-        };
     }
 
     @Transactional
