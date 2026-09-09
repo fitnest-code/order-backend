@@ -27,6 +27,7 @@ public class PackageCatalogV3Controller {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Paketlər uğurla əldə edildi",
                     content = @Content(schema = @Schema(implementation = SubscriptionPackagesResponseV3.class))),
+            @ApiResponse(responseCode = "401", description = "İcazə verilmədi"),
             @ApiResponse(responseCode = "404", description = "Aktiv paket tapılmadı")
     })
     @GetMapping
