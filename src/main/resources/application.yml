@@ -184,7 +184,13 @@ grpc:
   server:
     port: 9090
   client:
-    # ✅ Updated gRPC client from payment-service to payment-backend
+    catalog-backend:
+      address: ${CATALOG_BACKEND_GRPC_ADDRESS:dns:///catalog-backend:9090}
+      negotiation-type: plaintext
+      deadline-after: 5s
     payment-backend:
       address: ${PAYMENT_BACKEND_GRPC_ADDRESS:dns:///payment-backend:9090}
+      negotiation-type: plaintext
+    notifications-backend:
+      address: ${NOTIFICATIONS_BACKEND_GRPC_ADDRESS:dns:///notifications-backend:9090}
       negotiation-type: plaintext

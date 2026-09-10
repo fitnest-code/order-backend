@@ -29,6 +29,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -108,8 +109,10 @@ public class PackageCatalogService {
         }
 
         String lang = UserContext.getCurrentLanguage();
+        Map<Long, Long> gymCounts = catalogServiceGrpcClient.countGymsByPackages(
+                packages.stream().map(SubscriptionPackage::getId).collect(Collectors.toList()));
         List<SubscriptionPackageSummaryV3> items = packages.stream()
-                .map(pkg -> toPackageSummary(pkg, lang))
+                .map(pkg -> toPackageSummary(pkg, lang, gymCounts.getOrDefault(pkg.getId(), 0L)))
                 .collect(Collectors.toList());
 
         return SubscriptionPackagesResponseV3.builder()
@@ -284,7 +287,7 @@ public class PackageCatalogService {
                 .build();
     }
 
-    private SubscriptionPackageSummaryV3 toPackageSummary(SubscriptionPackage pkg, String lang) {
+    private SubscriptionPackageSummaryV3 toPackageSummary(SubscriptionPackage pkg, String lang, long gymCount) {
         String localizedName = translationService.getTranslatedValue(
                 "SUBSCRIPTIONPACKAGE", pkg.getId().toString(), "name", lang);
         if (localizedName == null || localizedName.isEmpty()) {
@@ -293,7 +296,7 @@ public class PackageCatalogService {
 
         return SubscriptionPackageSummaryV3.builder()
                 .subscriptionName(localizedName)
-                .gymCount(catalogServiceGrpcClient.countGymsByPackage(pkg.getId()))
+                .gymCount(gymCount)
                 .monthlyPrice(resolveMonthlyPrice(pkg))
                 .services(uniqueServicesFromPackage(pkg, lang))
                 .build();

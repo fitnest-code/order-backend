@@ -2,6 +2,8 @@ package az.fitnest.order.client;
 
 import az.fitnest.catalog.grpc.CountGymsByPackageRequest;
 import az.fitnest.catalog.grpc.CountGymsByPackageResponse;
+import az.fitnest.catalog.grpc.CountGymsByPackagesRequest;
+import az.fitnest.catalog.grpc.CountGymsByPackagesResponse;
 import az.fitnest.catalog.grpc.GymServiceGrpc;
 import az.fitnest.catalog.grpc.GymSupportsPlanRequest;
 import az.fitnest.catalog.grpc.GymSupportsPlanResponse;
@@ -10,6 +12,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -34,8 +40,7 @@ public class CatalogServiceGrpcClient {
             return 0;
         }
         try {
-            CountGymsByPackageResponse response = blockingStub
-                    .withDeadlineAfter(5, TimeUnit.SECONDS)
+            CountGymsByPackageResponse response = stub()
                     .countGymsByPackage(
                             CountGymsByPackageRequest.newBuilder()
                                     .setPackageId(packageId)
@@ -43,8 +48,38 @@ public class CatalogServiceGrpcClient {
                     );
             return response.getGymCount();
         } catch (Exception e) {
-            log.warn("Failed to count gyms for packageId={}: {}", packageId, e.getMessage());
+            log.error("Failed to count gyms for packageId={}: {}", packageId, e.getMessage());
             return 0;
         }
+    }
+
+    public Map<Long, Long> countGymsByPackages(Collection<Long> packageIds) {
+        if (packageIds == null || packageIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        try {
+            CountGymsByPackagesRequest.Builder request = CountGymsByPackagesRequest.newBuilder();
+            packageIds.stream()
+                    .filter(id -> id != null && id > 0)
+                    .distinct()
+                    .forEach(request::addPackageIds);
+            CountGymsByPackagesResponse response = stub().countGymsByPackages(request.build());
+            Map<Long, Long> counts = new HashMap<>();
+            response.getGymCountsMap().forEach(counts::put);
+            return counts;
+        } catch (Exception e) {
+            log.error("Failed to count gyms by packages: {}", e.getMessage());
+            Map<Long, Long> fallback = new HashMap<>();
+            for (Long packageId : packageIds) {
+                if (packageId != null) {
+                    fallback.put(packageId, countGymsByPackage(packageId));
+                }
+            }
+            return fallback;
+        }
+    }
+
+    private GymServiceGrpc.GymServiceBlockingStub stub() {
+        return blockingStub.withDeadlineAfter(5, TimeUnit.SECONDS);
     }
 }

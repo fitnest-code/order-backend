@@ -23,6 +23,7 @@ service GymService {
   rpc PutGymImage(PutGymImageRequest) returns (PutGymImageResponse);
   rpc GymSupportsPlan(catalog.GymSupportsPlanRequest) returns (catalog.GymSupportsPlanResponse);
   rpc CountGymsByPackage(catalog.CountGymsByPackageRequest) returns (catalog.CountGymsByPackageResponse);
+  rpc CountGymsByPackages(catalog.CountGymsByPackagesRequest) returns (catalog.CountGymsByPackagesResponse);
 }
 
 message GetGymDetailRequest {

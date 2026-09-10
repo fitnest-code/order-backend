@@ -21,3 +21,11 @@ message CountGymsByPackageRequest {
 message CountGymsByPackageResponse {
   int64 gym_count = 1;
 }
+
+message CountGymsByPackagesRequest {
+  repeated int64 package_ids = 1;
+}
+
+message CountGymsByPackagesResponse {
+  map<int64, int64> gym_counts = 1;
+}
