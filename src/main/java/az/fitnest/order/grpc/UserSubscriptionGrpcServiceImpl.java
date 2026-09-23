@@ -65,11 +65,11 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
         }
         if (dto.subscription() != null) {
             var sub = dto.subscription();
-            if (sub.packageName() != null) grpcResponse.setPackageName(sub.packageName());
-            if (sub.packageId() != null) grpcResponse.setPackageId(Long.parseLong(sub.packageId()));
-            if (sub.totalLimit() != null) grpcResponse.setTotalLimit(sub.totalLimit());
-            if (sub.remainingLimit() != null) grpcResponse.setRemainingLimit(sub.remainingLimit());
-            if (sub.endAt() != null) grpcResponse.setExpiresAt(sub.endAt().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+            if (sub.getPackageName() != null) grpcResponse.setPackageName(sub.getPackageName());
+            if (sub.getPackageId() != null) grpcResponse.setPackageId(Long.parseLong(sub.getPackageId()));
+            if (sub.getTotalLimit() != null) grpcResponse.setTotalLimit(sub.getTotalLimit());
+            if (sub.getRemainingLimit() != null) grpcResponse.setRemainingLimit(sub.getRemainingLimit());
+            if (sub.getEndAt() != null) grpcResponse.setExpiresAt(sub.getEndAt().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
         }
         return grpcResponse.build();
     }

@@ -37,6 +37,10 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     long countByStatusInAndEndAtBetween(List<String> statuses, LocalDateTime start, LocalDateTime end);
     long countByIsUpgradedAndStartAtBetween(Boolean isUpgraded, LocalDateTime start, LocalDateTime end);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT s FROM Subscription s WHERE s.subscriptionId = :id")
+    Optional<Subscription> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
+
     void deleteByUserId(Long userId);
 }
 

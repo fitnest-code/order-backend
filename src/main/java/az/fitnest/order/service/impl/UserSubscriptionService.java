@@ -38,10 +38,16 @@ public class UserSubscriptionService {
     private final PaymentGrpcClient paymentGrpcClient;
     private final NotificationGrpcClient notificationGrpcClient;
     private final jakarta.persistence.EntityManager entityManager;
+    private final az.fitnest.order.service.freeze.FreezeEntitlementService freezeEntitlementService;
+    private final az.fitnest.order.service.freeze.FreezeTierPolicyProvider freezeTierPolicyProvider;
+    private final az.fitnest.order.service.freeze.SubscriptionFreezeService subscriptionFreezeService;
+    private final az.fitnest.order.repository.SubscriptionFreezeRepository subscriptionFreezeRepository;
+    private final az.fitnest.order.service.freeze.FreezeFinalizeService freezeFinalizeService;
 
     @Transactional
     public boolean checkIn(Long userId, Long gymId, boolean consumeFrozen) {
-        List<Subscription> activeSubs = subscriptionRepository.findByUserIdAndStatusIn(userId, List.of("ACTIVE", "FINISHED"));
+        List<Subscription> activeSubs = subscriptionRepository.findByUserIdAndStatusIn(userId,
+                List.of("ACTIVE", "FINISHED"));
         if (activeSubs.isEmpty()) {
             throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_active_subscription");
         }
@@ -71,7 +77,8 @@ public class UserSubscriptionService {
             }
             subscription.setFrozenSessions(subscription.getFrozenSessions() - 1);
             subscriptionRepository.save(subscription);
-            subscriptionEventPublisher.publishSubscriptionEvent(userId, "CHECKIN_FROZEN", subscription.getSubscriptionId());
+            subscriptionEventPublisher.publishSubscriptionEvent(userId, "CHECKIN_FROZEN",
+                    subscription.getSubscriptionId());
         } else {
             if ("FINISHED".equals(subscription.getStatus())) {
                 throw new az.fitnest.order.exception.BadRequestException("error.no_remaining_visits");
@@ -83,11 +90,13 @@ public class UserSubscriptionService {
                     throw new az.fitnest.order.exception.BadRequestException("error.no_remaining_visits");
                 }
                 subscription.setRemainingLimit(subscription.getRemainingLimit() - 1);
-                if (subscription.getRemainingLimit() == 0 && (subscription.getFrozenSessions() == null || subscription.getFrozenSessions() == 0)) {
+                if (subscription.getRemainingLimit() == 0
+                        && (subscription.getFrozenSessions() == null || subscription.getFrozenSessions() == 0)) {
                     subscription.setStatus("FINISHED");
                 }
                 subscriptionRepository.save(subscription);
-                subscriptionEventPublisher.publishSubscriptionEvent(userId, "CHECKIN", subscription.getSubscriptionId());
+                subscriptionEventPublisher.publishSubscriptionEvent(userId, "CHECKIN",
+                        subscription.getSubscriptionId());
             }
         }
 
@@ -123,15 +132,18 @@ public class UserSubscriptionService {
                             !subscription.getEndAt().isAfter(LocalDateTime.now().plusDays(7))) {
                         subscriptionStatus = "last_7_days";
                     } else {
-                        subscriptionStatus = translationService.getTranslatedValue("SUBSCRIPTION_STATUS", rawStatus, "name", lang);
+                        subscriptionStatus = translationService.getTranslatedValue("SUBSCRIPTION_STATUS", rawStatus,
+                                "name", lang);
                         if (subscriptionStatus == null || subscriptionStatus.isEmpty()) {
                             subscriptionStatus = rawStatus != null ? rawStatus.toLowerCase() : "unknown";
                             if (subscriptionStatus.length() > 0) {
-                                subscriptionStatus = subscriptionStatus.substring(0, 1).toUpperCase() + subscriptionStatus.substring(1);
+                                subscriptionStatus = subscriptionStatus.substring(0, 1).toUpperCase()
+                                        + subscriptionStatus.substring(1);
                             }
                         }
                     }
-                    log.info("Found latest subscription for userId={}, subscriptionId={}, status={}", userId, subscription.getSubscriptionId(), subscriptionStatus);
+                    log.info("Found latest subscription for userId={}, subscriptionId={}, status={}", userId,
+                            subscription.getSubscriptionId(), subscriptionStatus);
                 }
             }
             if (subscription == null) {
@@ -152,7 +164,8 @@ public class UserSubscriptionService {
             SubscriptionPackage pkg = packageRepository.findFullById(subscription.getPackageId())
                     .orElse(null);
             if (pkg == null) {
-                log.warn("Package not found for packageId={} (userId={}), returning fallback details with status={}", subscription.getPackageId(), userId, subscriptionStatus);
+                log.warn("Package not found for packageId={} (userId={}), returning fallback details with status={}",
+                        subscription.getPackageId(), userId, subscriptionStatus);
                 SubscriptionDetailsDto fallbackDetails = SubscriptionDetailsDto.builder()
                         .subscriptionId(subscription.getSubscriptionId())
                         .packageId(String.valueOf(subscription.getPackageId()))
@@ -177,8 +190,10 @@ public class UserSubscriptionService {
             }
             long durationMonths = 1;
             if (subscription.getEndAt() != null && subscription.getStartAt() != null) {
-                durationMonths = java.time.temporal.ChronoUnit.MONTHS.between(subscription.getStartAt(), subscription.getEndAt());
-                if (durationMonths == 0) durationMonths = 1;
+                durationMonths = java.time.temporal.ChronoUnit.MONTHS.between(subscription.getStartAt(),
+                        subscription.getEndAt());
+                if (durationMonths == 0)
+                    durationMonths = 1;
             }
             Integer duration = (int) durationMonths;
             java.math.BigDecimal effectivePrice = java.math.BigDecimal.ZERO;
@@ -201,19 +216,31 @@ public class UserSubscriptionService {
                         ? matchedOption.getPriceDiscounted()
                         : matchedOption.getPriceStandard();
             }
-            Integer allowedFreezeDays = 0;
-            Integer frozenDaysUsed = subscription.getFrozenDaysUsed() != null ? subscription.getFrozenDaysUsed() : 0;
-            Integer remainingFreezeDays = allowedFreezeDays - frozenDaysUsed;
+            az.fitnest.order.model.entity.SubscriptionFreezeEntitlement entitlement = freezeEntitlementService
+                    .getBySubscriptionId(subscription.getSubscriptionId()).orElse(null);
+            int totalFreezeDays     = entitlement != null ? entitlement.getTotalDays()    : 0;
+            int consumedFreezeDays  = entitlement != null ? entitlement.getConsumedDays() : 0;
+            int reservedFreezeDays  = entitlement != null ? entitlement.getReservedDays() : 0;
+            int availableFreezeDays = Math.max(0, totalFreezeDays - consumedFreezeDays - reservedFreezeDays);
+            boolean canFreeze       = "ACTIVE".equalsIgnoreCase(subscription.getStatus()) && availableFreezeDays > 0;
+            String rawStatus        = subscription.getStatus();
+
+            Integer allowedFreezeDays = totalFreezeDays;
+            Integer frozenDaysUsed = subscription.getFrozenDaysUsed() != null ? subscription.getFrozenDaysUsed() : consumedFreezeDays;
+            Integer remainingFreezeDays = availableFreezeDays;
             Long optionId = matchedOption != null ? matchedOption.getId() : -1L;
-            String localizedPackageName = translationService.getTranslatedValue("SUBSCRIPTIONPACKAGE", pkg.getId().toString(), "name", lang);
-            if (localizedPackageName == null || localizedPackageName.isEmpty()) localizedPackageName = pkg.getName();
+            String localizedPackageName = translationService.getTranslatedValue("SUBSCRIPTIONPACKAGE",
+                    pkg.getId().toString(), "name", lang);
+            if (localizedPackageName == null || localizedPackageName.isEmpty())
+                localizedPackageName = pkg.getName();
 
             java.util.List<az.fitnest.order.dto.PackageBenefitDto> benefitDtos = java.util.Collections.emptyList();
             if (pkg.getBenefits() != null && !pkg.getBenefits().isEmpty()) {
                 benefitDtos = pkg.getBenefits().stream()
                         .map(b -> {
                             String ebId = pkg.getId() + "_" + b.getDescription();
-                            String localizedBenefit = translationService.getTranslatedValue("PLANBENEFIT", ebId, "description", lang);
+                            String localizedBenefit = translationService.getTranslatedValue("PLANBENEFIT", ebId,
+                                    "description", lang);
                             return az.fitnest.order.dto.PackageBenefitDto.builder()
                                     .description(localizedBenefit != null ? localizedBenefit : b.getDescription())
                                     .build();
@@ -221,8 +248,10 @@ public class UserSubscriptionService {
                         .toList();
             }
 
-            String durationLabel = translationService.getTranslatedValue("DURATION", duration.toString(), "label", lang);
-            if (durationLabel == null || durationLabel.isEmpty()) durationLabel = duration + " ay";
+            String durationLabel = translationService.getTranslatedValue("DURATION", duration.toString(), "label",
+                    lang);
+            if (durationLabel == null || durationLabel.isEmpty())
+                durationLabel = duration + " ay";
 
             SubscriptionDetailsDto details = SubscriptionDetailsDto.builder()
                     .subscriptionId(subscription.getSubscriptionId())
@@ -237,15 +266,23 @@ public class UserSubscriptionService {
                     .startAt(subscription.getStartAt() != null ? subscription.getStartAt().toLocalDate() : null)
                     .endAt(subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null)
                     .frozenAt(subscription.getFrozenAt() != null ? subscription.getFrozenAt().toLocalDate() : null)
-                    .unfreezesAt(subscription.getUnfreezesAt() != null ? subscription.getUnfreezesAt().toLocalDate() : null)
+                    .unfreezesAt(
+                            subscription.getUnfreezesAt() != null ? subscription.getUnfreezesAt().toLocalDate() : null)
                     .frozenDaysUsed(frozenDaysUsed)
                     .allowedFreezeDays(allowedFreezeDays)
                     .remainingFreezeDays(Math.max(0, remainingFreezeDays))
+                    .totalFreezeDays(totalFreezeDays)
+                    .consumedFreezeDays(consumedFreezeDays)
+                    .reservedFreezeDays(reservedFreezeDays)
+                    .availableFreezeDays(availableFreezeDays)
+                    .canFreeze(canFreeze)
+                    .rawStatus(rawStatus)
                     .optionId(optionId)
                     .benefits(benefitDtos)
                     .automaticPaymentEnabled(Boolean.TRUE.equals(subscription.getAutoPaymentEnabled()))
                     .build();
-            log.info("Returning latest subscription details for userId={}, subscriptionId={}", userId, subscription.getSubscriptionId());
+            log.info("Returning latest subscription details for userId={}, subscriptionId={}", userId,
+                    subscription.getSubscriptionId());
             return ActiveSubscriptionResponse.builder()
                     .status(subscriptionStatus)
                     .subscription(details)
@@ -265,8 +302,7 @@ public class UserSubscriptionService {
                 v1,
                 coins.coinBalance(),
                 coins.aznEquivalent(),
-                coins.validityDate()
-        );
+                coins.validityDate());
     }
 
     @Transactional(readOnly = true)
@@ -329,74 +365,13 @@ public class UserSubscriptionService {
         if (activeSubs.isEmpty()) {
             throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_active_subscription");
         }
-        Subscription subscription = activeSubs.stream()
-                .max((a, b) -> {
-                    if (a.getEndAt() != null && b.getEndAt() != null) {
-                        return a.getEndAt().compareTo(b.getEndAt());
-                    } else if (a.getEndAt() != null) {
-                        return 1;
-                    } else if (b.getEndAt() != null) {
-                        return -1;
-                    } else if (a.getStartAt() != null && b.getStartAt() != null) {
-                        return a.getStartAt().compareTo(b.getStartAt());
-                    } else {
-                        return 0;
-                    }
-                })
-                .get();
-
-        if (subscription.getEndAt() != null && subscription.getEndAt().isBefore(LocalDateTime.now())) {
-            throw new az.fitnest.order.exception.BadRequestException("error.membership_expired_cannot_freeze");
+        Subscription sub = activeSubs.get(0);
+        var eligibility = subscriptionFreezeService.getEligibility(userId, sub.getSubscriptionId());
+        if (!eligibility.isEligible()) {
+            throw new az.fitnest.order.exception.BadRequestException(eligibility.getReason());
         }
-
-        SubscriptionPackage pkg = packageRepository.findById(subscription.getPackageId())
-                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
-
-        long tempDurationMonths = 1;
-        if (subscription.getEndAt() != null) {
-            tempDurationMonths = java.time.temporal.ChronoUnit.MONTHS.between(subscription.getStartAt(), subscription.getEndAt());
-            if (tempDurationMonths == 0) tempDurationMonths = 1;
-        }
-        final long durationMonths = tempDurationMonths;
-
-        PackageOption matchedOption = pkg.getOptions().stream()
-                .filter(o -> o.getDurationMonths().equals((int) durationMonths))
-                .findFirst()
-                .orElse(null);
-
-        Integer allowedFreezeDays = 0;
-
-        if (allowedFreezeDays == 0) {
-            throw new az.fitnest.order.exception.BadRequestException("error.freeze_not_allowed_for_plan");
-        }
-
-        if (subscription.getFrozenDaysUsed() == null) {
-            subscription.setFrozenDaysUsed(0);
-        }
-
-        int availableFreezeDays = allowedFreezeDays - subscription.getFrozenDaysUsed();
-
-        if (availableFreezeDays <= 0) {
-            throw new az.fitnest.order.exception.BadRequestException("error.freeze_days_exhausted");
-        }
-
-        int daysToFreeze = availableFreezeDays;
-
-        LocalDateTime unfreezesAt = LocalDateTime.now().plusDays(daysToFreeze);
-
-        if (subscription.getEndAt() != null) {
-            subscription.setEndAt(subscription.getEndAt().plusDays(daysToFreeze));
-        }
-
-        subscription.setStatus("FROZEN");
-        subscription.setFrozenAt(LocalDateTime.now());
-        subscription.setUnfreezesAt(unfreezesAt);
-        subscription.setFrozenDaysUsed(subscription.getFrozenDaysUsed() + daysToFreeze);
-        subscription.setAllowedFreezeDays(allowedFreezeDays);
-
-        subscriptionRepository.save(subscription);
-
-        subscriptionEventPublisher.publishSubscriptionEvent(userId, "FREEZE", subscription.getSubscriptionId());
+        var preview = subscriptionFreezeService.previewFreeze(userId, sub.getSubscriptionId(), eligibility.getAvailableDays());
+        subscriptionFreezeService.commitFreeze(userId, sub.getSubscriptionId(), new az.fitnest.order.dto.freeze.FreezeCommitRequest(preview.getPreviewId()), null);
     }
 
     @Transactional
@@ -405,58 +380,10 @@ public class UserSubscriptionService {
         if (frozenSubs.isEmpty()) {
             throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_frozen_subscription");
         }
-        Subscription subscription = frozenSubs.stream()
-                .max((a, b) -> {
-                    if (a.getEndAt() != null && b.getEndAt() != null) {
-                        return a.getEndAt().compareTo(b.getEndAt());
-                    } else if (a.getEndAt() != null) {
-                        return 1;
-                    } else if (b.getEndAt() != null) {
-                        return -1;
-                    } else if (a.getStartAt() != null && b.getStartAt() != null) {
-                        return a.getStartAt().compareTo(b.getStartAt());
-                    } else {
-                        return 0;
-                    }
-                })
-                .get();
-
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime frozenAt = subscription.getFrozenAt();
-        LocalDateTime unfreezesAt = subscription.getUnfreezesAt();
-
-        if (frozenAt == null || unfreezesAt == null) {
-            subscription.setStatus("ACTIVE");
-            subscription.setFrozenAt(null);
-            subscription.setUnfreezesAt(null);
-            subscriptionRepository.save(subscription);
-            return;
-        }
-
-        long hoursPassed = java.time.temporal.ChronoUnit.HOURS.between(frozenAt, now);
-        int actualDaysUsed = (int) (hoursPassed / 24) + 1;
-
-        long daysOriginallyFrozen = java.time.temporal.ChronoUnit.DAYS.between(frozenAt.toLocalDate(), unfreezesAt.toLocalDate());
-
-        int daysToRefund = (int) daysOriginallyFrozen - actualDaysUsed;
-
-        if (daysToRefund > 0) {
-            if (subscription.getEndAt() != null) {
-                subscription.setEndAt(subscription.getEndAt().minusDays(daysToRefund));
-            }
-            subscription.setFrozenDaysUsed(Math.max(0, subscription.getFrozenDaysUsed() - daysToRefund));
-        }
-
-        subscription.setStatus("ACTIVE");
-        subscription.setFrozenAt(null);
-        subscription.setUnfreezesAt(null);
-
-        subscriptionRepository.save(subscription);
-
-        subscriptionEventPublisher.publishSubscriptionEvent(userId, "UNFREEZE", subscription.getSubscriptionId());
-
-        log.info("Manually unfroze subscription {} for user {}. Refunded {} days.",
-                subscription.getSubscriptionId(), userId, Math.max(0, daysToRefund));
+        Subscription sub = frozenSubs.get(0);
+        var activeFreeze = subscriptionFreezeRepository.findBySubscriptionIdAndStatus(sub.getSubscriptionId(), az.fitnest.order.model.enums.FreezeStatus.ACTIVE)
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.freeze.not_frozen"));
+        subscriptionFreezeService.resumeCommit(userId, activeFreeze.getId(), null, null);
     }
 
     @Scheduled(cron = "0 0 * * * *")
@@ -484,12 +411,13 @@ public class UserSubscriptionService {
     @Transactional
     public void autoFinishExpiredSubscriptions() {
         LocalDateTime now = LocalDateTime.now();
-        List<String> statuses = List.of("ACTIVE", "FROZEN");
+        List<String> statuses = List.of("ACTIVE");
         List<Subscription> expiredSubs = subscriptionRepository.findByStatusInAndEndAtBefore(statuses, now);
         for (Subscription subscription : expiredSubs) {
             subscription.setStatus("EXPIRED");
             subscriptionRepository.save(subscription);
-            log.info("Auto-expired subscription {} for user {} (endAt={})", subscription.getSubscriptionId(), subscription.getUserId(), subscription.getEndAt());
+            log.info("Auto-expired subscription {} for user {} (endAt={})", subscription.getSubscriptionId(),
+                    subscription.getUserId(), subscription.getEndAt());
         }
         if (!expiredSubs.isEmpty()) {
             log.info("Auto-expired {} subscriptions.", expiredSubs.size());
@@ -564,7 +492,8 @@ public class UserSubscriptionService {
 
         PackageOption option = packageRepository.findById(sub.getPackageId())
                 .flatMap(pkg -> pkg.getOptions().stream().filter(o -> o.getId().equals(sub.getOptionId())).findFirst())
-                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.duration_config_not_found"));
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException(
+                        "error.duration_config_not_found"));
 
         if (option.getDurationMonths() != 1) {
             throw new az.fitnest.order.exception.BadRequestException("error.auto_payment_only_for_1_month");
@@ -575,10 +504,13 @@ public class UserSubscriptionService {
         log.info("Enabled auto-payment for user {}, subscription ID: {}", userId, sub.getSubscriptionId());
     }
 
+
+
     private void renewSubscription(Subscription current) {
         current.setStatus("FINISHED");
         subscriptionRepository.save(current);
-        subscriptionEventPublisher.publishSubscriptionEvent(current.getUserId(), "FINISHED", current.getSubscriptionId());
+        subscriptionEventPublisher.publishSubscriptionEvent(current.getUserId(), "FINISHED",
+                current.getSubscriptionId());
 
         SubscriptionPackage pkg = packageRepository.findById(current.getPackageId())
                 .orElseThrow(() -> new RuntimeException("Package not found"));
@@ -606,6 +538,9 @@ public class UserSubscriptionService {
 
         Subscription saved = subscriptionRepository.save(next);
         subscriptionEventPublisher.publishSubscriptionEvent(saved.getUserId(), "ASSIGNED", saved.getSubscriptionId());
+
+        freezeEntitlementService.createForSubscription(
+                saved, pkg.getName(), freezeTierPolicyProvider.getPolicyVersion());
     }
 
     @Transactional
@@ -622,20 +557,25 @@ public class UserSubscriptionService {
         PackageOption option = pkg.getOptions().stream()
                 .filter(o -> o.getId().equals(request.optionId()))
                 .findFirst()
-                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.duration_config_not_found"));
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException(
+                        "error.duration_config_not_found"));
 
-        List<Subscription> toFinish = subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "ACTIVE");
+        List<Subscription> toFinish = subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(),
+                "ACTIVE");
         toFinish.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "FINISHED"));
         toFinish.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "FROZEN"));
         toFinish.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "PENDING"));
         for (Subscription existing : toFinish) {
-            if (!"CANCELLED".equals(existing.getStatus()) && !"EXPIRED".equals(existing.getStatus()) && !"FINISHED".equals(existing.getStatus())) {
+            if (!"CANCELLED".equals(existing.getStatus()) && !"EXPIRED".equals(existing.getStatus())
+                    && !"FINISHED".equals(existing.getStatus())) {
                 existing.setStatus("FINISHED");
                 existing.setFrozenAt(null);
                 existing.setUnfreezesAt(null);
                 subscriptionRepository.save(existing);
-                log.info("Set previous subscription {} for user {} to FINISHED", existing.getSubscriptionId(), request.userId());
-                subscriptionEventPublisher.publishSubscriptionEvent(request.userId(), "FINISHED", existing.getSubscriptionId());
+                log.info("Set previous subscription {} for user {} to FINISHED", existing.getSubscriptionId(),
+                        request.userId());
+                subscriptionEventPublisher.publishSubscriptionEvent(request.userId(), "FINISHED",
+                        existing.getSubscriptionId());
             }
         }
 
@@ -674,6 +614,9 @@ public class UserSubscriptionService {
                 pkg.getName(), option.getId(), option.getDurationMonths(), request.userId(), saved.getSubscriptionId());
         subscriptionEventPublisher.publishSubscriptionEvent(request.userId(), "ASSIGNED", saved.getSubscriptionId());
 
+        freezeEntitlementService.createForSubscription(
+                saved, pkg.getName(), freezeTierPolicyProvider.getPolicyVersion());
+
         return az.fitnest.order.dto.AdminAssignSubscriptionResponse.builder()
                 .subscriptionId(saved.getSubscriptionId())
                 .userId(saved.getUserId())
@@ -683,6 +626,7 @@ public class UserSubscriptionService {
     @Transactional
     public void revokeSubscription(Long userId) {
         List<Subscription> activeSubs = subscriptionRepository.findByUserIdAndStatus(userId, "ACTIVE");
+        activeSubs.addAll(subscriptionRepository.findByUserIdAndStatus(userId, "FROZEN"));
         if (activeSubs.isEmpty()) {
             throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_active_subscription");
         }
@@ -702,6 +646,8 @@ public class UserSubscriptionService {
                 })
                 .get();
 
+        freezeFinalizeService.terminateActive(subscription.getSubscriptionId(), "REVOKE");
+
         subscription.setStatus("CANCELLED");
         subscription.setFrozenAt(null);
         subscription.setUnfreezesAt(null);
@@ -718,6 +664,7 @@ public class UserSubscriptionService {
         allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "PENDING"));
         for (Subscription sub : allSubs) {
             if (!"CANCELLED".equals(sub.getStatus()) && !"EXPIRED".equals(sub.getStatus())) {
+                freezeFinalizeService.terminateActive(sub.getSubscriptionId(), "REVOKE");
                 sub.setStatus("CANCELLED");
                 sub.setFrozenAt(null);
                 sub.setUnfreezesAt(null);
@@ -755,7 +702,7 @@ public class UserSubscriptionService {
                     .distinct()
                     .toList();
             case "last_7_days" -> subscriptionRepository.findByStatusInAndEndAtBetween(
-                            List.of("ACTIVE", "FROZEN"), now, now.plusDays(7)).stream()
+                    List.of("ACTIVE", "FROZEN"), now, now.plusDays(7)).stream()
                     .map(Subscription::getUserId)
                     .distinct()
                     .toList();
@@ -845,7 +792,8 @@ public class UserSubscriptionService {
         LocalDateTime now = LocalDateTime.now();
         long activeOrFrozen = subscriptionRepository.countByStatusIn(List.of("ACTIVE", "FROZEN"));
         long finished = subscriptionRepository.countByStatus("FINISHED");
-        long last7Days = subscriptionRepository.countByStatusInAndEndAtBetween(List.of("ACTIVE", "FROZEN"), now, now.plusDays(7));
+        long last7Days = subscriptionRepository.countByStatusInAndEndAtBetween(List.of("ACTIVE", "FROZEN"), now,
+                now.plusDays(7));
 
         return az.fitnest.order.grpc.SubscriptionStatisticsResponse.newBuilder()
                 .setUsersActiveOrFrozen(activeOrFrozen)
@@ -857,19 +805,19 @@ public class UserSubscriptionService {
     @Transactional(readOnly = true)
     public az.fitnest.order.dto.AdminUserSubscriptionResponse getUserSubscriptionDetail(Long userId) {
         log.info("Fetching user subscription detail for admin. User ID: {}", userId);
-        
+
         List<Subscription> allSubs = subscriptionRepository.findAllByUserIdOrderByStartAtDesc(userId);
         if (allSubs.isEmpty()) {
             throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_subscription_found");
         }
-        
+
         Subscription sub = allSubs.get(0);
         if ("CANCELLED".equals(sub.getStatus()) || "EXPIRED".equals(sub.getStatus())) {
             throw new az.fitnest.order.exception.ResourceNotFoundException("error.no_subscription_found");
         }
         SubscriptionPackage pkg = packageRepository.findById(sub.getPackageId())
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
-        
+
         PackageOption option = pkg.getOptions().stream()
                 .filter(o -> o.getId().equals(sub.getOptionId()))
                 .findFirst()
@@ -961,7 +909,8 @@ public class UserSubscriptionService {
         }
 
         subscriptionRepository.save(subscription);
-        log.info("Froze 1 session for user {}. Remaining: {}, Frozen: {}", userId, subscription.getRemainingLimit(), subscription.getFrozenSessions());
+        log.info("Froze 1 session for user {}. Remaining: {}, Frozen: {}", userId, subscription.getRemainingLimit(),
+                subscription.getFrozenSessions());
     }
 
     @Transactional
@@ -984,13 +933,14 @@ public class UserSubscriptionService {
             subscription.setRemainingLimit(0);
         }
         subscription.setRemainingLimit(subscription.getRemainingLimit() + 1);
-        
+
         if ("FINISHED".equals(subscription.getStatus()) && subscription.getRemainingLimit() > 0) {
             subscription.setStatus("ACTIVE");
         }
 
         subscriptionRepository.save(subscription);
-        log.info("Restored 1 session for user {}. Remaining: {}, Frozen: {}", userId, subscription.getRemainingLimit(), subscription.getFrozenSessions());
+        log.info("Restored 1 session for user {}. Remaining: {}, Frozen: {}", userId, subscription.getRemainingLimit(),
+                subscription.getFrozenSessions());
     }
 
     @Transactional
@@ -1022,6 +972,7 @@ public class UserSubscriptionService {
 
         subscription.setFrozenSessions(subscription.getFrozenSessions() - 1);
         subscriptionRepository.save(subscription);
-        log.info("Consumed/Deleted 1 frozen session for user {}. Remaining frozen: {}", userId, subscription.getFrozenSessions());
+        log.info("Consumed/Deleted 1 frozen session for user {}. Remaining frozen: {}", userId,
+                subscription.getFrozenSessions());
     }
 }

@@ -24,9 +24,17 @@ public class UpgradeService {
     private final SubscriptionPackageRepository packageRepository;
     private final MockPaymentService paymentService;
     private final OrderRepository orderRepository;
+    private final az.fitnest.order.service.freeze.FreezeEntitlementService freezeEntitlementService;
+    private final az.fitnest.order.service.freeze.FreezeFinalizeService freezeFinalizeService;
 
     @Transactional(readOnly = true)
     public UpgradeOptionsResponse getUpgradeOptions(Long userId, Integer targetDurationMonths) {
+        List<Subscription> frozenSubs = subscriptionRepository.findByUserIdAndStatus(userId, "FROZEN");
+        if (!frozenSubs.isEmpty()) {
+            throw new ServiceException("error.freeze.already_frozen",
+                    "ALREADY_FROZEN", org.springframework.http.HttpStatus.CONFLICT);
+        }
+
         List<Subscription> activeSubs = subscriptionRepository.findByUserIdAndStatus(userId, "ACTIVE");
         if (activeSubs.isEmpty()) {
             throw new ServiceException("error.no_active_subscription",
@@ -148,6 +156,10 @@ public class UpgradeService {
             throw new ServiceException("error.upgrade_unauthorized",
                     "UNAUTHORIZED", org.springframework.http.HttpStatus.UNAUTHORIZED);
         }
+        if ("FROZEN".equals(currentSub.getStatus())) {
+            throw new ServiceException("error.freeze.already_frozen",
+                    "ALREADY_FROZEN", org.springframework.http.HttpStatus.CONFLICT);
+        }
         if (!"ACTIVE".equals(currentSub.getStatus())) {
             throw new ServiceException("error.no_active_subscription",
                     "NO_ACTIVE_SUBSCRIPTION", org.springframework.http.HttpStatus.CONFLICT);
@@ -228,6 +240,9 @@ public class UpgradeService {
             currentSub.setEndAt(currentSub.getStartAt().plusMonths(targetOption.getDurationMonths()));
             currentSub.setIsUpgraded(true);
             subscriptionRepository.save(currentSub);
+
+            freezeFinalizeService.terminateActive(currentSub.getSubscriptionId(), "UPGRADE");
+            freezeEntitlementService.onUpgrade(currentSub, targetPackage.getName());
 
             subDetails = SubscriptionDetailsDto.builder()
                     .subscriptionId(currentSub.getSubscriptionId())

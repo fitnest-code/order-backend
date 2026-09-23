@@ -3,52 +3,94 @@ package az.fitnest.order.dto;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.*;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import lombok.Builder;
+import java.util.List;
 
-@JsonInclude(JsonInclude.Include.ALWAYS)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
-public record SubscriptionDetailsDto(
+@JsonInclude(JsonInclude.Include.ALWAYS)
+public class SubscriptionDetailsDto {
     @JsonProperty("subscription_id")
-    Long subscriptionId,
+    private Long subscriptionId;
+
     @JsonProperty("package_id")
-    String packageId,
+    private String packageId;
+
     @JsonProperty("package_name")
-    String packageName,
+    private String packageName;
+
     @JsonProperty("duration_months")
-    Integer durationMonths,
+    private Integer durationMonths;
+
     @JsonProperty("duration_label")
-    String durationLabel,
+    private String durationLabel;
+
     @JsonProperty("effective_price")
-    BigDecimal effectivePrice,
-    String currency,
+    private BigDecimal effectivePrice;
+
+    private String currency;
+
     @JsonProperty("total_limit")
-    Integer totalLimit,
+    private Integer totalLimit;
+
     @JsonProperty("remaining_limit")
-    Integer remainingLimit,
+    private Integer remainingLimit;
+
     @JsonProperty("start_at")
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd/MM/yyyy")
-    LocalDate startAt,
+    private LocalDate startAt;
+
     @JsonProperty("end_at")
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd/MM/yyyy")
-    LocalDate endAt,
+    private LocalDate endAt;
+
     @JsonProperty("frozen_at")
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd/MM/yyyy")
-    LocalDate frozenAt,
+    private LocalDate frozenAt;
+
     @JsonProperty("unfreezes_at")
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd/MM/yyyy")
-    LocalDate unfreezesAt,
+    private LocalDate unfreezesAt;
+
     @JsonProperty("frozen_days_used")
-    Integer frozenDaysUsed,
+    private Integer frozenDaysUsed;
+
     @JsonProperty("allowed_freeze_days")
-    Integer allowedFreezeDays,
-     @JsonProperty("remaining_freeze_days")
-     Integer remainingFreezeDays,
-     @JsonProperty("option_id")
-     Long optionId,
-     @JsonProperty("benefits")
-     java.util.List<PackageBenefitDto> benefits,
-     @JsonProperty("automatic_payment_enabled")
-     Boolean automaticPaymentEnabled
- ) {}
+    private Integer allowedFreezeDays;
+
+    @JsonProperty("remaining_freeze_days")
+    private Integer remainingFreezeDays;
+
+    @JsonProperty("total_freeze_days")
+    private Integer totalFreezeDays;
+
+    @JsonProperty("consumed_freeze_days")
+    private Integer consumedFreezeDays;
+
+    @JsonProperty("reserved_freeze_days")
+    private Integer reservedFreezeDays;
+
+    @JsonProperty("available_freeze_days")
+    private Integer availableFreezeDays;
+
+    @JsonProperty("can_freeze")
+    private Boolean canFreeze;
+
+    @JsonProperty("raw_status")
+    private String rawStatus;
+
+    @JsonProperty("option_id")
+    private Long optionId;
+
+    @JsonProperty("benefits")
+    private List<PackageBenefitDto> benefits;
+
+    @JsonProperty("automatic_payment_enabled")
+    private Boolean automaticPaymentEnabled;
+}

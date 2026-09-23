@@ -45,6 +45,8 @@ dependencies {
 
     // DB (pin for reproducible builds)
     runtimeOnly "org.postgresql:postgresql:42.7.10"
+    implementation 'org.flywaydb:flyway-core'
+    runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 
     implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2"
 

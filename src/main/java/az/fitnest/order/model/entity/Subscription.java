@@ -51,15 +51,35 @@ public class Subscription {
     @Column(name = "remaining_limit")
     private Integer remainingLimit;
 
+    /**
+     * @deprecated BRD v1.1: frozenAt is now tracked on SubscriptionFreeze.startAt.
+     * Kept for backward sync with mobile until cutover. Do not write new business logic against this.
+     */
+    @Deprecated(since = "BRD-v1.1", forRemoval = false)
     @Column(name = "frozen_at")
     private LocalDateTime frozenAt;
 
+    /**
+     * @deprecated BRD v1.1: consumed days tracked on SubscriptionFreezeEntitlement.consumedDays.
+     * Written for backward sync only.
+     */
+    @Deprecated(since = "BRD-v1.1", forRemoval = false)
     @Column(name = "frozen_days_used")
     private Integer frozenDaysUsed = 0;
 
+    /**
+     * @deprecated BRD v1.1: entitlement now sourced from SubscriptionFreezeEntitlement.totalDays.
+     * Hardcoded to 0 in legacy code — do not use as source of truth.
+     */
+    @Deprecated(since = "BRD-v1.1", forRemoval = false)
     @Column(name = "allowed_freeze_days")
     private Integer allowedFreezeDays;
 
+    /**
+     * @deprecated BRD v1.1: unfreeze time tracked on SubscriptionFreeze.planEndAt.
+     * Kept for backward sync with mobile until cutover.
+     */
+    @Deprecated(since = "BRD-v1.1", forRemoval = false)
     @Column(name = "unfreezes_at")
     private LocalDateTime unfreezesAt;
 
@@ -71,4 +91,8 @@ public class Subscription {
 
     @Column(name = "frozen_sessions")
     private Integer frozenSessions = 0;
+
+    @Version
+    @Column(name = "version")
+    private long version = 0L;
 }
