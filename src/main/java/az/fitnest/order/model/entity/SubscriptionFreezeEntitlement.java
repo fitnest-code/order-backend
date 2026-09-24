@@ -39,13 +39,11 @@ public class SubscriptionFreezeEntitlement {
     @Column(name = "policy_version", nullable = false, length = 20)
     private String policyVersion;
 
+    // Field access: Hibernate increments this directly — never mask null in a getter.
     @Version
-    @Column(name = "version")
+    @Builder.Default
+    @Column(name = "version", nullable = false)
     private Long version = 0L;
-
-    public Long getVersion() {
-        return version != null ? version : 0L;
-    }
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -53,8 +51,18 @@ public class SubscriptionFreezeEntitlement {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @PostLoad
+    void normalizeVersion() {
+        if (version == null) {
+            version = 0L;
+        }
+    }
+
     @PrePersist
     protected void onCreate() {
+        if (version == null) {
+            version = 0L;
+        }
         createdAt = updatedAt = LocalDateTime.now();
     }
 

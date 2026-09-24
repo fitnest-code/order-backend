@@ -92,11 +92,15 @@ public class Subscription {
     @Column(name = "frozen_sessions")
     private Integer frozenSessions = 0;
 
+    // Field access: Hibernate increments this directly — never mask null in a getter.
     @Version
-    @Column(name = "version")
+    @Column(name = "version", nullable = false)
     private Long version = 0L;
 
-    public Long getVersion() {
-        return version != null ? version : 0L;
+    @PostLoad
+    void normalizeVersion() {
+        if (version == null) {
+            version = 0L;
+        }
     }
 }
