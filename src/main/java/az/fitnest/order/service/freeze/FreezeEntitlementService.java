@@ -6,6 +6,7 @@ import az.fitnest.order.repository.SubscriptionFreezeEntitlementRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
@@ -78,7 +79,7 @@ public class FreezeEntitlementService {
 
     // ─── Read ─────────────────────────────────────────────────────────────────
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<SubscriptionFreezeEntitlement> getBySubscriptionId(Long subscriptionId) {
         Optional<SubscriptionFreezeEntitlement> existing = entitlementRepository.findBySubscriptionId(subscriptionId);
         if (existing.isPresent()) {

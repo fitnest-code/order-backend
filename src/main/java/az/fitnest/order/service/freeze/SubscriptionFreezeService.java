@@ -35,7 +35,7 @@ public class SubscriptionFreezeService {
     private final az.fitnest.order.client.CatalogServiceGrpcClient catalogServiceGrpcClient;
     private final FreezeFinalizeService freezeFinalizeService;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public FreezeEligibilityResponse getEligibility(Long userId, Long subscriptionId) {
         Subscription sub = subscriptionRepository.findById(subscriptionId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.subscription_not_found"));
