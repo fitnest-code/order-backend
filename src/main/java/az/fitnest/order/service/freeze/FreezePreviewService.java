@@ -22,9 +22,13 @@ public class FreezePreviewService {
     public FreezePreviewResponse createPreview(Long userId, Subscription subscription, int requestedDays) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime freezeStartAt = now;
-        LocalDateTime freezePlanEndAt = now.plusDays(requestedDays);
+        // FIX-10: BRD §2.3 — 1 freeze day = exactly 86400 seconds
+        LocalDateTime freezePlanEndAt = now.plusSeconds((long) requestedDays * 86400L);
         LocalDateTime currentExpiryDate = subscription.getEndAt();
-        LocalDateTime newExpiryDate = currentExpiryDate != null ? currentExpiryDate.plusDays(requestedDays) : freezePlanEndAt;
+        LocalDateTime newExpiryDate = currentExpiryDate != null
+                ? currentExpiryDate.plusSeconds((long) requestedDays * 86400L)
+                : freezePlanEndAt;
+        // FIX-16: Resume quote TTL = 5 minutes (adequate for commit window)
         LocalDateTime expiresAt = now.plusMinutes(5);
 
         FreezePreview preview = FreezePreview.builder()

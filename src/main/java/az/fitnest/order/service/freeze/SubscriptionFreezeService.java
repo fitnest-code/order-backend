@@ -363,6 +363,9 @@ public class SubscriptionFreezeService {
         }
         subscriptionRepository.save(sub);
 
+        // FIX-15: Shift any PENDING successor subscriptions if new endAt changed
+        freezeFinalizeService.shiftSuccessorStartDates(userId, expiryAfter);
+
         // Audit log
         Map<String, Object> payload = new HashMap<>();
         payload.put("usedDays", usedDays);

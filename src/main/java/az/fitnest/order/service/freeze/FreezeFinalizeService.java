@@ -48,8 +48,9 @@ public class FreezeFinalizeService {
         lockedFreeze.setUsedDays(requestedDays);
         lockedFreeze.setReturnedDays(0);
 
+        // FIX-10: BRD §2.3 — 1 freeze day = exactly 86400 seconds (not calendar plusDays)
         LocalDateTime newEndAt = lockedFreeze.getExpiryBefore() != null
-                ? lockedFreeze.getExpiryBefore().plusDays(requestedDays)
+                ? lockedFreeze.getExpiryBefore().plusSeconds((long) requestedDays * 86400L)
                 : planEndAt;
         lockedFreeze.setExpiryAfter(newEndAt);
 
@@ -94,9 +95,9 @@ public class FreezeFinalizeService {
                 .payload(payload)
                 .build());
 
-        // Outbox event
+        // Outbox event (FIX-12: align event type with BRD — freeze_completed)
         outboxEventRepository.save(FreezeOutboxEvent.builder()
-                .eventType("subscription_unfrozen")
+                .eventType("freeze_completed")
                 .userId(lockedFreeze.getUserId())
                 .freezeId(lockedFreeze.getId())
                 .payload(payload)
@@ -104,6 +105,11 @@ public class FreezeFinalizeService {
                 .build());
 
         log.info("Freeze completed for freezeId={}, subscriptionId={}, newEndAt={}", lockedFreeze.getId(), lockedFreeze.getSubscriptionId(), newEndAt);
+
+        // FIX-15: Update queued/PENDING successor subscriptions whose startAt predates the new endAt
+        if (subOpt.isPresent()) {
+            shiftSuccessorStartDates(subOpt.get().getUserId(), newEndAt);
+        }
     }
 
     @Transactional
@@ -161,5 +167,36 @@ public class FreezeFinalizeService {
                 .build());
 
         log.info("Terminated active freeze id={} for subscriptionId={}, endedBy={}", freeze.getId(), subscriptionId, endedBy);
+    }
+
+    /**
+     * FIX-15: After a freeze extends a subscription's endAt, any PENDING (queued) successor
+     * subscriptions for the same user whose startAt falls before newEndAt are shifted forward.
+     * This prevents subscription window overlap after freeze extension.
+     *
+     * @param userId     the user whose pending subscriptions should be checked
+     * @param newEndAt   the updated end date of the current active subscription
+     */
+    @Transactional
+    public void shiftSuccessorStartDates(Long userId, LocalDateTime newEndAt) {
+        if (userId == null || newEndAt == null) return;
+
+        java.util.List<Subscription> pendingSubs =
+                subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "PENDING");
+
+        for (Subscription pending : pendingSubs) {
+            if (pending.getStartAt() != null && pending.getStartAt().isBefore(newEndAt)) {
+                LocalDateTime oldStart = pending.getStartAt();
+                pending.setStartAt(newEndAt);
+                // Preserve original duration: shift endAt by the same delta
+                if (pending.getEndAt() != null && oldStart != null) {
+                    long durationSeconds = java.time.Duration.between(oldStart, pending.getEndAt()).getSeconds();
+                    pending.setEndAt(newEndAt.plusSeconds(durationSeconds));
+                }
+                subscriptionRepository.save(pending);
+                log.info("FIX-15: Shifted PENDING subscriptionId={} startAt from {} to {} (endAt now={})",
+                        pending.getSubscriptionId(), oldStart, newEndAt, pending.getEndAt());
+            }
+        }
     }
 }

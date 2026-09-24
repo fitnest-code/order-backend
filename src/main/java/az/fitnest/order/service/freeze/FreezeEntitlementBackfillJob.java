@@ -37,12 +37,17 @@ public class FreezeEntitlementBackfillJob {
     private final FreezeTierPolicyProvider tierPolicyProvider;
 
     /**
-     * Runs once at startup (large fixedDelay ensures it won't repeat).
+     * Runs once at startup after initial-delay-ms, then repeats with delay-ms.
+     * Large delay-ms (default 24h) effectively makes this a one-shot job.
+     *
+     * FIX-16: Fixed property name swap — initialDelay should use initial-delay-ms,
+     *          fixedDelay should use delay-ms (was previously swapped).
+     *
      * Set FREEZE_BACKFILL_ENABLED=true env var to activate.
-     * Default: disabled via condition below.
+     * Default: disabled.
      */
-    @Scheduled(fixedDelayString = "${freeze.backfill.initial-delay-ms:86400000}",
-               initialDelayString = "${freeze.backfill.delay-ms:3600000}")
+    @Scheduled(initialDelayString = "${freeze.backfill.initial-delay-ms:3000}",
+               fixedDelayString = "${freeze.backfill.delay-ms:86400000}")
     @Transactional
     public void runBackfill() {
         String enabled = System.getenv("FREEZE_BACKFILL_ENABLED");
