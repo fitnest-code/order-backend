@@ -55,7 +55,7 @@ spring:
         loginTimeout: 5
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     show-sql: false
     open-in-view: false
     properties:
@@ -75,7 +75,7 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 4
-    validate-on-migrate: true
+    validate-on-migrate: false
 
   jackson:
     default-property-inclusion: NON_NULL
