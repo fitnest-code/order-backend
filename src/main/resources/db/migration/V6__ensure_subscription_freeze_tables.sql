@@ -4,6 +4,7 @@
 
 -- 0. Version column on subscriptions
 ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
+UPDATE subscriptions SET version = 0 WHERE version IS NULL;
 
 -- 1. Freeze Entitlements
 CREATE TABLE IF NOT EXISTS subscription_freeze_entitlements (

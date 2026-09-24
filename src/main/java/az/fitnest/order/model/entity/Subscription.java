@@ -94,5 +94,9 @@ public class Subscription {
 
     @Version
     @Column(name = "version")
-    private long version = 0L;
+    private Long version = 0L;
+
+    public Long getVersion() {
+        return version != null ? version : 0L;
+    }
 }
