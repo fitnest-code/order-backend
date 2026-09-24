@@ -17,6 +17,7 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
     private static final Logger log = LoggerFactory.getLogger(UserSubscriptionGrpcServiceImpl.class);
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
     private final UserSubscriptionService subscriptionService;
+    private final az.fitnest.order.service.freeze.FreezeFinalizeService freezeFinalizeService;
 
     @Override
     public void getActiveSubscription(GetActiveSubscriptionRequest request, StreamObserver<az.fitnest.order.grpc.ActiveSubscriptionResponse> responseObserver) {
@@ -60,10 +61,14 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
     private az.fitnest.order.grpc.ActiveSubscriptionResponse buildGrpcActiveSubscriptionResponse(ActiveSubscriptionResponse dto) {
         az.fitnest.order.grpc.ActiveSubscriptionResponse.Builder grpcResponse = az.fitnest.order.grpc.ActiveSubscriptionResponse.newBuilder();
 
-        if (dto.status() != null) {
-            grpcResponse.setSubscriptionStatus(dto.status());
+        String rawStatus = (dto != null && dto.subscription() != null && dto.subscription().getRawStatus() != null)
+                ? dto.subscription().getRawStatus()
+                : (dto != null ? dto.status() : "None");
+
+        if (rawStatus != null) {
+            grpcResponse.setSubscriptionStatus(rawStatus);
         }
-        if (dto.subscription() != null) {
+        if (dto != null && dto.subscription() != null) {
             var sub = dto.subscription();
             if (sub.getPackageName() != null) grpcResponse.setPackageName(sub.getPackageName());
             if (sub.getPackageId() != null) grpcResponse.setPackageId(Long.parseLong(sub.getPackageId()));
@@ -226,6 +231,20 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
             log.error("[gRPC] Failed to consume frozen session for user {}", request.getUserId(), e);
             responseObserver.onError(io.grpc.Status.INTERNAL
                     .withDescription("Failed to consume frozen session: " + e.getMessage())
+                    .asRuntimeException());
+        }
+    }
+
+    @Override
+    public void terminateActiveFreeze(az.fitnest.order.grpc.TerminateActiveFreezeRequest request, StreamObserver<az.fitnest.order.grpc.TerminateActiveFreezeResponse> responseObserver) {
+        try {
+            freezeFinalizeService.terminateActive(request.getSubscriptionId(), request.getReason());
+            responseObserver.onNext(az.fitnest.order.grpc.TerminateActiveFreezeResponse.newBuilder().setSuccess(true).build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            log.error("[gRPC] Failed to terminate active freeze for subscription {}", request.getSubscriptionId(), e);
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to terminate active freeze: " + e.getMessage())
                     .asRuntimeException());
         }
     }

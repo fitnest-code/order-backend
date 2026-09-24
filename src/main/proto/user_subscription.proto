@@ -18,7 +18,18 @@ service UserSubscriptionService {
   rpc FreezeSession(FreezeSessionRequest) returns (FreezeSessionResponse);
   rpc RestoreSession(RestoreSessionRequest) returns (RestoreSessionResponse);
   rpc ConsumeFrozenSession(ConsumeFrozenSessionRequest) returns (ConsumeFrozenSessionResponse);
+  rpc TerminateActiveFreeze(TerminateActiveFreezeRequest) returns (TerminateActiveFreezeResponse);
 }
+
+message TerminateActiveFreezeRequest {
+  int64 subscription_id = 1;
+  string reason = 2;
+}
+
+message TerminateActiveFreezeResponse {
+  bool success = 1;
+}
+
 
 message FreezeSessionRequest {
   int64 user_id = 1;

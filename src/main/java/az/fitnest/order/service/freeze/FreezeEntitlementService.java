@@ -27,6 +27,8 @@ public class FreezeEntitlementService {
 
     private final SubscriptionFreezeEntitlementRepository entitlementRepository;
     private final FreezeTierPolicyProvider tierPolicyProvider;
+    private final az.fitnest.order.repository.SubscriptionRepository subscriptionRepository;
+    private final az.fitnest.order.repository.SubscriptionPackageRepository packageRepository;
 
     // ─── Create ───────────────────────────────────────────────────────────────
 
@@ -76,8 +78,37 @@ public class FreezeEntitlementService {
 
     // ─── Read ─────────────────────────────────────────────────────────────────
 
+    @Transactional
     public Optional<SubscriptionFreezeEntitlement> getBySubscriptionId(Long subscriptionId) {
-        return entitlementRepository.findBySubscriptionId(subscriptionId);
+        Optional<SubscriptionFreezeEntitlement> existing = entitlementRepository.findBySubscriptionId(subscriptionId);
+        if (existing.isPresent()) {
+            return existing;
+        }
+
+        // Lazy-provision for legacy active subscriptions (e.g. Bronze #170)
+        return subscriptionRepository.findById(subscriptionId).flatMap(sub -> {
+            String packageName = "Bronze";
+            if (sub.getPackageId() != null) {
+                var pkgOpt = packageRepository.findById(sub.getPackageId());
+                if (pkgOpt.isPresent() && pkgOpt.get().getName() != null) {
+                    packageName = pkgOpt.get().getName();
+                }
+            }
+            int totalDays = tierPolicyProvider.getAllowedDays(packageName);
+            if (totalDays <= 0) {
+                totalDays = 2; // Default to 2 days for active subscriptions if package not found
+            }
+            SubscriptionFreezeEntitlement entitlement = SubscriptionFreezeEntitlement.builder()
+                    .subscriptionId(subscriptionId)
+                    .userId(sub.getUserId())
+                    .totalDays(totalDays)
+                    .consumedDays(sub.getFrozenDaysUsed() != null ? sub.getFrozenDaysUsed() : 0)
+                    .reservedDays(0)
+                    .policyVersion(tierPolicyProvider.getPolicyVersion())
+                    .build();
+            log.info("Lazy-provisioned entitlement for subId={}: packageName={}, totalDays={}", subscriptionId, packageName, totalDays);
+            return Optional.of(entitlementRepository.save(entitlement));
+        });
     }
 
     // ─── Reserve / Release ───────────────────────────────────────────────────

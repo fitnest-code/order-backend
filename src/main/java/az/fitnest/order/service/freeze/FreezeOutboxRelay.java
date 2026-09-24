@@ -33,7 +33,8 @@ public class FreezeOutboxRelay {
 
         for (FreezeOutboxEvent event : events) {
             try {
-                kafkaTemplate.send(FREEZE_TOPIC, String.valueOf(event.getUserId()), event);
+                kafkaTemplate.send(FREEZE_TOPIC, String.valueOf(event.getUserId()), event)
+                        .get(5, java.util.concurrent.TimeUnit.SECONDS);
                 outboxRepository.markPublished(event.getId());
             } catch (Exception e) {
                 log.error("Failed to publish outbox event id={}: {}", event.getId(), e.getMessage(), e);

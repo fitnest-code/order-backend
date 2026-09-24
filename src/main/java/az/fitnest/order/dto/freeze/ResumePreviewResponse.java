@@ -20,4 +20,5 @@ public class ResumePreviewResponse {
     private LocalDateTime expiryBefore;
     private LocalDateTime newExpiryDate;
     private boolean isPlanEndReached;
+    private LocalDateTime expiresAt;
 }

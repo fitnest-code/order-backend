@@ -124,6 +124,7 @@ public class UserSubscriptionService {
                 Subscription latest = allSubs.get(0);
                 if (!"CANCELLED".equals(latest.getStatus()) && !"EXPIRED".equals(latest.getStatus())) {
                     subscription = latest;
+                    checkLazyFinalize(subscription);
                     String rawStatus = subscription.getStatus();
                     if (Boolean.TRUE.equals(subscription.getIsUpgraded())) {
                         subscriptionStatus = "changed";
@@ -389,22 +390,8 @@ public class UserSubscriptionService {
     @Scheduled(cron = "0 0 * * * *")
     @Transactional
     public void autoUnfreezeExpiredSubscriptions() {
-        LocalDateTime now = LocalDateTime.now();
-        List<Subscription> expiredFrozenSubs = subscriptionRepository.findExpiredFrozen(now);
-
-        for (Subscription subscription : expiredFrozenSubs) {
-            subscription.setStatus("ACTIVE");
-            subscription.setFrozenAt(null);
-            subscription.setUnfreezesAt(null);
-            subscriptionRepository.save(subscription);
-
-            log.info("Auto-unfroze subscription {} for user {}",
-                    subscription.getSubscriptionId(), subscription.getUserId());
-        }
-
-        if (!expiredFrozenSubs.isEmpty()) {
-            log.info("Auto-unfroze {} subscriptions", expiredFrozenSubs.size());
-        }
+        // BRD v1.1: Legacy unfreeze job disabled to prevent race conditions with SubscriptionFreezeFinalizeWorker and lazy finalize.
+        log.debug("Legacy autoUnfreezeExpiredSubscriptions called — no-op under BRD v1.1.");
     }
 
     @Scheduled(cron = "0 0 * * * *")
@@ -568,6 +555,7 @@ public class UserSubscriptionService {
         for (Subscription existing : toFinish) {
             if (!"CANCELLED".equals(existing.getStatus()) && !"EXPIRED".equals(existing.getStatus())
                     && !"FINISHED".equals(existing.getStatus())) {
+                freezeFinalizeService.terminateActive(existing.getSubscriptionId(), "ASSIGN");
                 existing.setStatus("FINISHED");
                 existing.setFrozenAt(null);
                 existing.setUnfreezesAt(null);
@@ -974,5 +962,23 @@ public class UserSubscriptionService {
         subscriptionRepository.save(subscription);
         log.info("Consumed/Deleted 1 frozen session for user {}. Remaining frozen: {}", userId,
                 subscription.getFrozenSessions());
+    }
+
+    private void checkLazyFinalize(Subscription subscription) {
+        if (subscription != null && "FROZEN".equalsIgnoreCase(subscription.getStatus())) {
+            subscriptionFreezeRepository.findBySubscriptionIdAndStatus(subscription.getSubscriptionId(), az.fitnest.order.model.enums.FreezeStatus.ACTIVE)
+                    .ifPresent(activeFreeze -> {
+                        if (activeFreeze.getPlanEndAt() != null && !activeFreeze.getPlanEndAt().isAfter(LocalDateTime.now())) {
+                            log.info("Lazy-completing expired freeze id={} for subscriptionId={}", activeFreeze.getId(), subscription.getSubscriptionId());
+                            freezeFinalizeService.complete(activeFreeze);
+                            subscriptionRepository.findById(subscription.getSubscriptionId()).ifPresent(updated -> {
+                                subscription.setStatus(updated.getStatus());
+                                subscription.setEndAt(updated.getEndAt());
+                                subscription.setFrozenAt(updated.getFrozenAt());
+                                subscription.setUnfreezesAt(updated.getUnfreezesAt());
+                            });
+                        }
+                    });
+        }
     }
 }

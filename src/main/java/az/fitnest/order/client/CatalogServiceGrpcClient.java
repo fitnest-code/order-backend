@@ -79,6 +79,24 @@ public class CatalogServiceGrpcClient {
         }
     }
 
+    public boolean hasActiveReservations(Long userId, java.time.LocalDateTime startTime, java.time.LocalDateTime endTime) {
+        if (userId == null) {
+            return false;
+        }
+        try {
+            az.fitnest.catalog.grpc.HasActiveReservationsRequest request = az.fitnest.catalog.grpc.HasActiveReservationsRequest.newBuilder()
+                    .setUserId(userId)
+                    .setStartTime(startTime != null ? startTime.toString() : "")
+                    .setEndTime(endTime != null ? endTime.toString() : "")
+                    .build();
+            az.fitnest.catalog.grpc.HasActiveReservationsResponse response = stub().hasActiveReservations(request);
+            return response.getHasActiveReservations();
+        } catch (Exception e) {
+            log.error("Failed to check active reservations for userId={}: {}", userId, e.getMessage());
+            return false;
+        }
+    }
+
     private GymServiceGrpc.GymServiceBlockingStub stub() {
         return blockingStub.withDeadlineAfter(5, TimeUnit.SECONDS);
     }

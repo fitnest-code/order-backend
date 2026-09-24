@@ -3,6 +3,9 @@
 --  Freeze plan lifecycle tables (NOT visit-hold)
 -- ===================================================
 
+-- 0. Subscriptions version column for optimistic locking (@Version)
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
+
 -- 1. Freeze Entitlements
 -- Per-subscription freeze day budget (tier-driven)
 CREATE TABLE subscription_freeze_entitlements (

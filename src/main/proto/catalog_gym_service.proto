@@ -29,3 +29,14 @@ message CountGymsByPackagesRequest {
 message CountGymsByPackagesResponse {
   map<int64, int64> gym_counts = 1;
 }
+
+message HasActiveReservationsRequest {
+  int64 user_id = 1;
+  string start_time = 2;
+  string end_time = 3;
+}
+
+message HasActiveReservationsResponse {
+  bool has_active_reservations = 1;
+}
+
