@@ -34,7 +34,7 @@ public class SubscriptionFreezeController {
             @PathVariable("id") Long subscriptionId,
             @Valid @RequestBody FreezePreviewRequest request) {
         Long userId = UserContext.getCurrentUserId();
-        return ResponseEntity.ok(freezeService.previewFreeze(userId, subscriptionId, request.getDays()));
+        return ResponseEntity.ok(freezeService.previewFreeze(userId, subscriptionId, request.days()));
     }
 
     @Operation(summary = "Commit a freeze for a subscription")
@@ -42,7 +42,7 @@ public class SubscriptionFreezeController {
     public ResponseEntity<FreezeCommitResponse> commitFreeze(
             @PathVariable("id") Long subscriptionId,
             @Valid @RequestBody FreezeCommitRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+            @RequestHeader(value = "Idempotency-Key", required = true) String idempotencyKey) {
         Long userId = UserContext.getCurrentUserId();
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(freezeService.commitFreeze(userId, subscriptionId, request, idempotencyKey));
@@ -60,7 +60,7 @@ public class SubscriptionFreezeController {
     public ResponseEntity<ResumeCommitResponse> resumeCommit(
             @PathVariable("id") Long freezeId,
             @RequestBody(required = false) ResumeCommitRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+            @RequestHeader(value = "Idempotency-Key", required = true) String idempotencyKey) {
         Long userId = UserContext.getCurrentUserId();
         return ResponseEntity.ok(freezeService.resumeCommit(userId, freezeId, request, idempotencyKey));
     }

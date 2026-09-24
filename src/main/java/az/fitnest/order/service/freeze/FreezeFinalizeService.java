@@ -6,6 +6,7 @@ import az.fitnest.order.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -24,7 +25,10 @@ public class FreezeFinalizeService {
     private final FreezeAuditEventRepository auditEventRepository;
     private final FreezeOutboxEventRepository outboxEventRepository;
 
-    @Transactional
+    /**
+     * REQUIRES_NEW so lazy finalize from read-only getActiveSubscription can commit writes.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void complete(SubscriptionFreeze freeze) {
         if (freeze == null || freeze.getStatus() != FreezeStatus.ACTIVE) {
             return;
@@ -112,14 +116,20 @@ public class FreezeFinalizeService {
         }
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void terminateActive(Long subscriptionId, String endedBy) {
         Optional<SubscriptionFreeze> activeFreezeOpt = freezeRepository.findBySubscriptionIdAndStatus(subscriptionId, FreezeStatus.ACTIVE);
         if (activeFreezeOpt.isEmpty()) {
             return;
         }
 
-        SubscriptionFreeze freeze = activeFreezeOpt.get();
+        // Lock freeze row to avoid race with resume/worker complete
+        SubscriptionFreeze freeze = freezeRepository.findByIdForUpdate(activeFreezeOpt.get().getId())
+                .orElse(activeFreezeOpt.get());
+        if (freeze.getStatus() != FreezeStatus.ACTIVE) {
+            return;
+        }
+
         LocalDateTime now = LocalDateTime.now();
 
         freeze.setStatus(FreezeStatus.TERMINATED);

@@ -43,25 +43,24 @@ public class FreezePreviewService {
 
         preview = previewRepository.save(preview);
 
-        return FreezePreviewResponse.builder()
-                .previewId(String.valueOf(preview.getId()))
-                .subscriptionId(subscription.getSubscriptionId())
-                .requestedDays(requestedDays)
-                .currentExpiryDate(currentExpiryDate)
-                .newExpiryDate(newExpiryDate)
-                .freezeStartAt(freezeStartAt)
-                .freezePlanEndAt(freezePlanEndAt)
-                .expiresAt(expiresAt)
-                .build();
+        return new FreezePreviewResponse(
+                String.valueOf(preview.getId()),
+                subscription.getSubscriptionId(),
+                requestedDays,
+                currentExpiryDate,
+                newExpiryDate,
+                freezeStartAt,
+                freezePlanEndAt,
+                expiresAt);
     }
 
     @Transactional(readOnly = true)
     public FreezePreview getValidPreview(Long previewId, Long userId) {
         FreezePreview preview = previewRepository.findByIdAndUserId(previewId, userId)
-                .orElseThrow(() -> new IllegalArgumentException("Preview not found or expired"));
+                .orElseThrow(() -> new az.fitnest.order.exception.BadRequestException("error.freeze.preview_not_found"));
 
         if (preview.isExpired()) {
-            throw new IllegalStateException("Preview has expired. Please create a new preview.");
+            throw new az.fitnest.order.exception.ConflictException("error.freeze.preview_changed");
         }
 
         return preview;

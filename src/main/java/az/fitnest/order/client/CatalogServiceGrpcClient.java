@@ -92,8 +92,9 @@ public class CatalogServiceGrpcClient {
             az.fitnest.catalog.grpc.HasActiveReservationsResponse response = stub().hasActiveReservations(request);
             return response.getHasActiveReservations();
         } catch (Exception e) {
-            log.error("Failed to check active reservations for userId={}: {}", userId, e.getMessage());
-            return false;
+            // Fail closed: do not allow freeze when catalog conflict check is unavailable
+            log.error("Failed to check active reservations for userId={}: {} — treating as conflict", userId, e.getMessage());
+            throw new az.fitnest.order.exception.ConflictException("error.freeze.booking_conflict_check_failed");
         }
     }
 

@@ -1,12 +1,6 @@
 package az.fitnest.order.dto.freeze;
 
-import lombok.*;
-
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class ResumeCommitRequest {
-    private Integer expectedUsedDays;
-}
+/** Optional guard so resume fails with preview_changed if the day bucket rolled. */
+public record ResumeCommitRequest(
+        Integer expectedUsedDays
+) {}

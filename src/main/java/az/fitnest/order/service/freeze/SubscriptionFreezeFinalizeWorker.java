@@ -15,19 +15,22 @@ import java.util.List;
 @Slf4j
 public class SubscriptionFreezeFinalizeWorker {
 
+    private static final int BATCH_SIZE = 50;
+
     private final SubscriptionFreezeRepository freezeRepository;
     private final FreezeFinalizeService finalizeService;
 
     @Scheduled(fixedDelay = 60000)
     public void processExpiredFreezes() {
         LocalDateTime now = LocalDateTime.now();
-        List<SubscriptionFreeze> expiredFreezes = freezeRepository.findExpiredActiveFreezes(now);
+        List<SubscriptionFreeze> expiredFreezes = freezeRepository.findExpiredActiveFreezes(now, BATCH_SIZE);
 
         if (expiredFreezes.isEmpty()) {
             return;
         }
 
-        log.info("SubscriptionFreezeFinalizeWorker found {} expired freezes to process", expiredFreezes.size());
+        log.info("SubscriptionFreezeFinalizeWorker processing {} expired freezes (batch={})",
+                expiredFreezes.size(), BATCH_SIZE);
 
         for (SubscriptionFreeze freeze : expiredFreezes) {
             try {

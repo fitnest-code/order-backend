@@ -368,11 +368,13 @@ public class UserSubscriptionService {
         }
         Subscription sub = activeSubs.get(0);
         var eligibility = subscriptionFreezeService.getEligibility(userId, sub.getSubscriptionId());
-        if (!eligibility.isEligible()) {
-            throw new az.fitnest.order.exception.BadRequestException(eligibility.getReason());
+        if (!eligibility.eligible()) {
+            throw new az.fitnest.order.exception.BadRequestException(eligibility.reason());
         }
-        var preview = subscriptionFreezeService.previewFreeze(userId, sub.getSubscriptionId(), eligibility.getAvailableDays());
-        subscriptionFreezeService.commitFreeze(userId, sub.getSubscriptionId(), new az.fitnest.order.dto.freeze.FreezeCommitRequest(preview.getPreviewId()), null);
+        var preview = subscriptionFreezeService.previewFreeze(userId, sub.getSubscriptionId(), eligibility.availableDays());
+        // Legacy bridge: generate Idempotency-Key so commit does not reject null key
+        String idempotencyKey = "legacy-freeze-" + userId + "-" + sub.getSubscriptionId() + "-" + java.util.UUID.randomUUID();
+        subscriptionFreezeService.commitFreeze(userId, sub.getSubscriptionId(), new az.fitnest.order.dto.freeze.FreezeCommitRequest(preview.previewId()), idempotencyKey);
     }
 
     @Transactional
@@ -384,7 +386,8 @@ public class UserSubscriptionService {
         Subscription sub = frozenSubs.get(0);
         var activeFreeze = subscriptionFreezeRepository.findBySubscriptionIdAndStatus(sub.getSubscriptionId(), az.fitnest.order.model.enums.FreezeStatus.ACTIVE)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.freeze.not_frozen"));
-        subscriptionFreezeService.resumeCommit(userId, activeFreeze.getId(), null, null);
+        String idempotencyKey = "legacy-resume-" + userId + "-" + activeFreeze.getId() + "-" + java.util.UUID.randomUUID();
+        subscriptionFreezeService.resumeCommit(userId, activeFreeze.getId(), null, idempotencyKey);
     }
 
     @Scheduled(cron = "0 0 * * * *")

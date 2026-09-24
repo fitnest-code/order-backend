@@ -16,11 +16,16 @@ public interface SubscriptionFreezeRepository extends JpaRepository<Subscription
 
     Optional<SubscriptionFreeze> findBySubscriptionIdAndStatus(Long subscriptionId, FreezeStatus status);
 
-    @Query("""
-            SELECT f FROM SubscriptionFreeze f
-            WHERE f.status = 'ACTIVE' AND f.planEndAt <= :now
-            """)
-    List<SubscriptionFreeze> findExpiredActiveFreezes(@Param("now") LocalDateTime now);
+    List<SubscriptionFreeze> findByUserIdAndStatus(Long userId, FreezeStatus status);
+
+    /** Worker batch — indexed partial index on (plan_end_at) WHERE status=ACTIVE. */
+    @Query(value = """
+            SELECT * FROM subscription_freezes f
+            WHERE f.status = 'ACTIVE' AND f.plan_end_at <= :now
+            ORDER BY f.plan_end_at ASC
+            LIMIT :batchSize
+            """, nativeQuery = true)
+    List<SubscriptionFreeze> findExpiredActiveFreezes(@Param("now") LocalDateTime now, @Param("batchSize") int batchSize);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT f FROM SubscriptionFreeze f WHERE f.id = :id")
@@ -28,5 +33,5 @@ public interface SubscriptionFreezeRepository extends JpaRepository<Subscription
 
     boolean existsBySubscriptionIdAndStatus(Long subscriptionId, FreezeStatus status);
 
-    List<SubscriptionFreeze> findByUserIdOrderByCreatedAtDesc(Long userId);
+    List<SubscriptionFreeze> findTop50ByUserIdOrderByCreatedAtDesc(Long userId);
 }

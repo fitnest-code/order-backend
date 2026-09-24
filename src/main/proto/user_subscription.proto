@@ -24,6 +24,8 @@ service UserSubscriptionService {
 message TerminateActiveFreezeRequest {
   int64 subscription_id = 1;
   string reason = 2;
+  // When subscription_id is 0, terminate all ACTIVE freezes for this user (payment refund path).
+  int64 user_id = 3;
 }
 
 message TerminateActiveFreezeResponse {

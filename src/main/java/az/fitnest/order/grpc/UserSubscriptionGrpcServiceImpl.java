@@ -18,6 +18,8 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
     private final UserSubscriptionService subscriptionService;
     private final az.fitnest.order.service.freeze.FreezeFinalizeService freezeFinalizeService;
+    private final az.fitnest.order.repository.SubscriptionRepository subscriptionRepository;
+    private final az.fitnest.order.repository.SubscriptionFreezeRepository subscriptionFreezeRepository;
 
     @Override
     public void getActiveSubscription(GetActiveSubscriptionRequest request, StreamObserver<az.fitnest.order.grpc.ActiveSubscriptionResponse> responseObserver) {
@@ -238,11 +240,32 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
     @Override
     public void terminateActiveFreeze(az.fitnest.order.grpc.TerminateActiveFreezeRequest request, StreamObserver<az.fitnest.order.grpc.TerminateActiveFreezeResponse> responseObserver) {
         try {
-            freezeFinalizeService.terminateActive(request.getSubscriptionId(), request.getReason());
+            String reason = request.getReason() != null && !request.getReason().isBlank()
+                    ? request.getReason()
+                    : "SYSTEM";
+            if (request.getSubscriptionId() > 0) {
+                freezeFinalizeService.terminateActive(request.getSubscriptionId(), reason);
+            } else if (request.getUserId() > 0) {
+                Long userId = request.getUserId();
+                // Indexed (user_id, status) lookup — avoid loading full history
+                subscriptionFreezeRepository.findByUserIdAndStatus(userId, az.fitnest.order.model.enums.FreezeStatus.ACTIVE)
+                        .stream()
+                        .map(az.fitnest.order.model.entity.SubscriptionFreeze::getSubscriptionId)
+                        .distinct()
+                        .forEach(subId -> freezeFinalizeService.terminateActive(subId, reason));
+                subscriptionRepository.findByUserIdAndStatus(userId, "FROZEN")
+                        .forEach(sub -> freezeFinalizeService.terminateActive(sub.getSubscriptionId(), reason));
+            } else {
+                responseObserver.onError(io.grpc.Status.INVALID_ARGUMENT
+                        .withDescription("subscription_id or user_id required")
+                        .asRuntimeException());
+                return;
+            }
             responseObserver.onNext(az.fitnest.order.grpc.TerminateActiveFreezeResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
         } catch (Exception e) {
-            log.error("[gRPC] Failed to terminate active freeze for subscription {}", request.getSubscriptionId(), e);
+            log.error("[gRPC] Failed to terminate active freeze subscriptionId={} userId={}",
+                    request.getSubscriptionId(), request.getUserId(), e);
             responseObserver.onError(io.grpc.Status.INTERNAL
                     .withDescription("Failed to terminate active freeze: " + e.getMessage())
                     .asRuntimeException());

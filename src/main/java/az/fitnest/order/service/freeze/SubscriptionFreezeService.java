@@ -35,7 +35,7 @@ public class SubscriptionFreezeService {
     private final az.fitnest.order.client.CatalogServiceGrpcClient catalogServiceGrpcClient;
     private final FreezeFinalizeService freezeFinalizeService;
 
-    @Transactional
+    @Transactional(readOnly = true)
     public FreezeEligibilityResponse getEligibility(Long userId, Long subscriptionId) {
         Subscription sub = subscriptionRepository.findById(subscriptionId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.subscription_not_found"));
@@ -46,28 +46,15 @@ public class SubscriptionFreezeService {
 
         Optional<SubscriptionFreeze> activeFreeze = freezeRepository.findBySubscriptionIdAndStatus(subscriptionId, FreezeStatus.ACTIVE);
         if (activeFreeze.isPresent()) {
-            return FreezeEligibilityResponse.builder()
-                    .eligible(false)
-                    .reason("error.freeze.already_frozen")
-                    .isCurrentlyFrozen(true)
-                    .activeFreezeId(activeFreeze.get().getId())
-                    .build();
+            return FreezeEligibilityResponse.denied("error.freeze.already_frozen", true, activeFreeze.get().getId());
         }
 
         if (!"ACTIVE".equalsIgnoreCase(sub.getStatus())) {
-            return FreezeEligibilityResponse.builder()
-                    .eligible(false)
-                    .reason("error.subscription_not_active")
-                    .isCurrentlyFrozen(false)
-                    .build();
+            return FreezeEligibilityResponse.denied("error.subscription_not_active", false, null);
         }
 
         if (sub.getEndAt() != null && !sub.getEndAt().isAfter(LocalDateTime.now())) {
-            return FreezeEligibilityResponse.builder()
-                    .eligible(false)
-                    .reason("error.subscription_expired")
-                    .isCurrentlyFrozen(false)
-                    .build();
+            return FreezeEligibilityResponse.denied("error.subscription_expired", false, null);
         }
 
         SubscriptionFreezeEntitlement entitlement = entitlementService.getBySubscriptionId(subscriptionId).orElse(null);
@@ -77,35 +64,21 @@ public class SubscriptionFreezeService {
         int availableDays = Math.max(0, totalDays - consumedDays - reservedDays);
 
         if (availableDays <= 0) {
-            return FreezeEligibilityResponse.builder()
-                    .eligible(false)
-                    .reason("error.freeze_days_exhausted")
-                    .totalDays(totalDays)
-                    .consumedDays(consumedDays)
-                    .reservedDays(reservedDays)
-                    .availableDays(0)
-                    .isCurrentlyFrozen(false)
-                    .build();
+            return FreezeEligibilityResponse.deniedWithBalance(
+                    "error.freeze_days_exhausted", totalDays, consumedDays, reservedDays, 0);
         }
 
-        return FreezeEligibilityResponse.builder()
-                .eligible(true)
-                .totalDays(totalDays)
-                .consumedDays(consumedDays)
-                .reservedDays(reservedDays)
-                .availableDays(availableDays)
-                .isCurrentlyFrozen(false)
-                .build();
+        return FreezeEligibilityResponse.ok(totalDays, consumedDays, reservedDays, availableDays);
     }
 
     @Transactional
     public FreezePreviewResponse previewFreeze(Long userId, Long subscriptionId, int days) {
         FreezeEligibilityResponse eligibility = getEligibility(userId, subscriptionId);
-        if (!eligibility.isEligible()) {
-            throw new az.fitnest.order.exception.ConflictException(eligibility.getReason());
+        if (!eligibility.eligible()) {
+            throw new az.fitnest.order.exception.ConflictException(eligibility.reason());
         }
 
-        if (days > eligibility.getAvailableDays()) {
+        if (days > eligibility.availableDays()) {
             throw new az.fitnest.order.exception.ConflictException("error.freeze.limit_exceeded");
         }
 
@@ -138,7 +111,7 @@ public class SubscriptionFreezeService {
             }
         }
 
-        FreezePreview preview = previewService.getValidPreview(Long.parseLong(request.getPreviewId()), userId);
+        FreezePreview preview = previewService.getValidPreview(Long.parseLong(request.previewId()), userId);
         if (!preview.getSubscriptionId().equals(subscriptionId)) {
             throw new az.fitnest.order.exception.BadRequestException("error.preview_subscription_mismatch");
         }
@@ -218,16 +191,15 @@ public class SubscriptionFreezeService {
                 .published(false)
                 .build());
 
-        FreezeCommitResponse response = FreezeCommitResponse.builder()
-                .freezeId(freeze.getId())
-                .subscriptionId(subscriptionId)
-                .requestedDays(freeze.getRequestedDays())
-                .startAt(freeze.getStartAt())
-                .planEndAt(freeze.getPlanEndAt())
-                .expiryBefore(freeze.getExpiryBefore())
-                .expiryAfter(preview.getExpiryAfter())
-                .status(freeze.getStatus())
-                .build();
+        FreezeCommitResponse response = new FreezeCommitResponse(
+                freeze.getId(),
+                subscriptionId,
+                freeze.getRequestedDays(),
+                freeze.getStartAt(),
+                freeze.getPlanEndAt(),
+                freeze.getExpiryBefore(),
+                preview.getExpiryAfter(),
+                freeze.getStatus());
 
         idempotencyService.saveRecord(userId, endpoint, idempotencyKey, request, response);
 
@@ -257,19 +229,18 @@ public class SubscriptionFreezeService {
         LocalDateTime newExpiryDate = freeze.getExpiryBefore() != null ? freeze.getExpiryBefore().plusSeconds(secondsElapsed) : null;
         LocalDateTime expiresAt = now.plusSeconds(60).isBefore(freeze.getPlanEndAt()) ? now.plusSeconds(60) : freeze.getPlanEndAt();
 
-        return ResumePreviewResponse.builder()
-                .freezeId(freeze.getId())
-                .subscriptionId(freeze.getSubscriptionId())
-                .requestedDays(freeze.getRequestedDays())
-                .usedDays(usedDays)
-                .returnedDays(returnedDays)
-                .startAt(freeze.getStartAt())
-                .actualEndAt(actualEndAt)
-                .expiryBefore(freeze.getExpiryBefore())
-                .newExpiryDate(newExpiryDate)
-                .isPlanEndReached(isPlanEndReached)
-                .expiresAt(expiresAt)
-                .build();
+        return new ResumePreviewResponse(
+                freeze.getId(),
+                freeze.getSubscriptionId(),
+                freeze.getRequestedDays(),
+                usedDays,
+                returnedDays,
+                freeze.getStartAt(),
+                actualEndAt,
+                freeze.getExpiryBefore(),
+                newExpiryDate,
+                isPlanEndReached,
+                expiresAt);
     }
 
     @Transactional
@@ -306,18 +277,17 @@ public class SubscriptionFreezeService {
         if (freeze.isPlanEndReached() || !now.isBefore(freeze.getPlanEndAt())) {
             freezeFinalizeService.complete(freeze);
             Subscription sub = subscriptionRepository.findById(freeze.getSubscriptionId()).orElseThrow();
-            ResumeCommitResponse response = ResumeCommitResponse.builder()
-                    .freezeId(freeze.getId())
-                    .subscriptionId(freeze.getSubscriptionId())
-                    .requestedDays(freeze.getRequestedDays())
-                    .usedDays(freeze.getRequestedDays())
-                    .returnedDays(0)
-                    .startAt(freeze.getStartAt())
-                    .actualEndAt(freeze.getPlanEndAt())
-                    .expiryBefore(freeze.getExpiryBefore())
-                    .newExpiryDate(sub.getEndAt())
-                    .isPlanEndReached(true)
-                    .build();
+            ResumeCommitResponse response = new ResumeCommitResponse(
+                    freeze.getId(),
+                    freeze.getSubscriptionId(),
+                    freeze.getRequestedDays(),
+                    freeze.getRequestedDays(),
+                    0,
+                    freeze.getStartAt(),
+                    freeze.getPlanEndAt(),
+                    freeze.getExpiryBefore(),
+                    sub.getEndAt(),
+                    true);
             idempotencyService.saveRecord(userId, endpoint, idempotencyKey, request, response);
             return response;
         }
@@ -325,7 +295,7 @@ public class SubscriptionFreezeService {
         long secondsElapsed = Math.max(0, Duration.between(freeze.getStartAt(), now).getSeconds());
         int usedDays = Math.min(freeze.getRequestedDays(), Math.max(1, (int) Math.ceil(secondsElapsed / 86400.0)));
 
-        if (request != null && request.getExpectedUsedDays() != null && request.getExpectedUsedDays() != usedDays) {
+        if (request != null && request.expectedUsedDays() != null && !request.expectedUsedDays().equals(usedDays)) {
             throw new az.fitnest.order.exception.ConflictException("error.freeze.preview_changed");
         }
 
@@ -389,18 +359,17 @@ public class SubscriptionFreezeService {
                 .published(false)
                 .build());
 
-        ResumeCommitResponse response = ResumeCommitResponse.builder()
-                .freezeId(freeze.getId())
-                .subscriptionId(freeze.getSubscriptionId())
-                .requestedDays(freeze.getRequestedDays())
-                .usedDays(usedDays)
-                .returnedDays(returnedDays)
-                .startAt(freeze.getStartAt())
-                .actualEndAt(now)
-                .expiryBefore(freeze.getExpiryBefore())
-                .newExpiryDate(expiryAfter)
-                .isPlanEndReached(false)
-                .build();
+        ResumeCommitResponse response = new ResumeCommitResponse(
+                freeze.getId(),
+                freeze.getSubscriptionId(),
+                freeze.getRequestedDays(),
+                usedDays,
+                returnedDays,
+                freeze.getStartAt(),
+                now,
+                freeze.getExpiryBefore(),
+                expiryAfter,
+                false);
 
         idempotencyService.saveRecord(userId, endpoint, idempotencyKey, request, response);
 
@@ -409,7 +378,8 @@ public class SubscriptionFreezeService {
 
     @Transactional(readOnly = true)
     public List<FreezeRecordDto> listUserFreezes(Long userId) {
-        return freezeRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+        // Cap history for mobile list latency (newest first)
+        return freezeRepository.findTop50ByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
     }
@@ -417,31 +387,30 @@ public class SubscriptionFreezeService {
     @Transactional(readOnly = true)
     public FreezeRecordDto getFreezeById(Long userId, Long freezeId) {
         SubscriptionFreeze freeze = freezeRepository.findById(freezeId)
-                .orElseThrow(() -> new IllegalArgumentException("Freeze record not found"));
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.freeze.not_found"));
 
         if (!freeze.getUserId().equals(userId)) {
-            throw new IllegalArgumentException("Freeze does not belong to user");
+            throw new az.fitnest.order.exception.ForbiddenException("error.freeze_ownership_mismatch");
         }
 
         return mapToDto(freeze);
     }
 
     private FreezeRecordDto mapToDto(SubscriptionFreeze f) {
-        return FreezeRecordDto.builder()
-                .id(f.getId())
-                .subscriptionId(f.getSubscriptionId())
-                .userId(f.getUserId())
-                .requestedDays(f.getRequestedDays())
-                .usedDays(f.getUsedDays())
-                .returnedDays(f.getReturnedDays())
-                .startAt(f.getStartAt())
-                .planEndAt(f.getPlanEndAt())
-                .actualEndAt(f.getActualEndAt())
-                .expiryBefore(f.getExpiryBefore())
-                .expiryAfter(f.getExpiryAfter())
-                .status(f.getStatus())
-                .endedBy(f.getEndedBy())
-                .createdAt(f.getCreatedAt())
-                .build();
+        return new FreezeRecordDto(
+                f.getId(),
+                f.getSubscriptionId(),
+                f.getUserId(),
+                f.getRequestedDays(),
+                f.getUsedDays(),
+                f.getReturnedDays(),
+                f.getStartAt(),
+                f.getPlanEndAt(),
+                f.getActualEndAt(),
+                f.getExpiryBefore(),
+                f.getExpiryAfter(),
+                f.getStatus(),
+                f.getEndedBy(),
+                f.getCreatedAt());
     }
 }
