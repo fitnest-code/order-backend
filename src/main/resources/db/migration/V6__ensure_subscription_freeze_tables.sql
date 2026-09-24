@@ -1,13 +1,11 @@
 -- ===================================================
---  V5: FitNest Subscription Freeze BRD v1.1
---  Freeze plan lifecycle tables (NOT visit-hold)
+--  V6: Ensure FitNest Subscription Freeze Tables Exist
 -- ===================================================
 
--- 0. Subscriptions version column for optimistic locking (@Version)
+-- 0. Version column on subscriptions
 ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
 
 -- 1. Freeze Entitlements
--- Per-subscription freeze day budget (tier-driven)
 CREATE TABLE IF NOT EXISTS subscription_freeze_entitlements (
     id                  BIGSERIAL PRIMARY KEY,
     subscription_id     BIGINT      NOT NULL,
@@ -32,7 +30,6 @@ CREATE INDEX IF NOT EXISTS idx_entitlement_user_id     ON subscription_freeze_en
 CREATE INDEX IF NOT EXISTS idx_entitlement_sub_id      ON subscription_freeze_entitlements(subscription_id);
 
 -- 2. Subscription Freezes
--- One row per freeze episode. Only one ACTIVE row per subscription at a time.
 CREATE TABLE IF NOT EXISTS subscription_freezes (
     id                  BIGSERIAL   PRIMARY KEY,
     subscription_id     BIGINT      NOT NULL,
@@ -58,7 +55,6 @@ CREATE TABLE IF NOT EXISTS subscription_freezes (
         CHECK (requested_days >= 1)
 );
 
--- Enforces only one ACTIVE freeze per subscription
 CREATE UNIQUE INDEX IF NOT EXISTS uq_one_active_freeze_per_sub
     ON subscription_freezes(subscription_id)
     WHERE status = 'ACTIVE';
@@ -68,7 +64,7 @@ CREATE INDEX IF NOT EXISTS idx_freeze_user_id          ON subscription_freezes(u
 CREATE INDEX IF NOT EXISTS idx_freeze_status           ON subscription_freezes(status);
 CREATE INDEX IF NOT EXISTS idx_freeze_plan_end_at      ON subscription_freezes(plan_end_at) WHERE status = 'ACTIVE';
 
--- 3. Freeze Preview Cache (DB-backed for multi-instance)
+-- 3. Freeze Preview Cache
 CREATE TABLE IF NOT EXISTS freeze_previews (
     id              BIGSERIAL   PRIMARY KEY,
     subscription_id BIGINT      NOT NULL,
@@ -116,7 +112,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_freeze_id  ON freeze_audit_events(freeze_id
 CREATE INDEX IF NOT EXISTS idx_audit_user_id    ON freeze_audit_events(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_sub_id     ON freeze_audit_events(subscription_id);
 
--- 6. Freeze Outbox Events (durable publish-once relay)
+-- 6. Freeze Outbox Events
 CREATE TABLE IF NOT EXISTS freeze_outbox_events (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     event_type  VARCHAR(40) NOT NULL,
