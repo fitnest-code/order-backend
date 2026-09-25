@@ -20,6 +20,16 @@ import java.util.List;
 public class SubscriptionFreezeController {
 
     private final SubscriptionFreezeService freezeService;
+    private final az.fitnest.order.service.freeze.FreezeTermsService freezeTermsService;
+
+    @Operation(summary = "Get freeze terms and conditions (HTML)", description = "İstifadəçi dilinə uyğun dondurma (freeze) qaydaları HTML sənədini qaytarır")
+    @GetMapping("/freezes/terms")
+    public ResponseEntity<FreezeTermsResponse> getTerms(
+            @RequestParam(required = false) String lang,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+        String language = lang != null && !lang.isBlank() ? lang : acceptLanguage;
+        return ResponseEntity.ok(freezeTermsService.getLocalizedTerms(language));
+    }
 
     @Operation(summary = "Check freeze eligibility for a subscription")
     @GetMapping("/subscriptions/{id}/freeze")
