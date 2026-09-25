@@ -26,6 +26,7 @@ public class SubscriptionFreezeService {
     private final SubscriptionFreezeRepository freezeRepository;
     private final SubscriptionFreezeEntitlementRepository entitlementRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final SubscriptionPackageRepository subscriptionPackageRepository;
     private final FreezeEntitlementService entitlementService;
     private final FreezePreviewService previewService;
     private final FreezeIdempotencyService idempotencyService;
@@ -383,8 +384,37 @@ public class SubscriptionFreezeService {
     @Transactional(readOnly = true)
     public List<FreezeRecordDto> listUserFreezes(Long userId) {
         // Cap history for mobile list latency (newest first)
-        return freezeRepository.findTop50ByUserIdOrderByCreatedAtDesc(userId).stream()
-                .map(this::mapToDto)
+        List<SubscriptionFreeze> freezes = freezeRepository.findTop50ByUserIdOrderByCreatedAtDesc(userId);
+
+        // Batch-resolve subscription → packageId, then packageId → name (2 queries total)
+        List<Long> subscriptionIds = freezes.stream()
+                .map(SubscriptionFreeze::getSubscriptionId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, Long> subscriptionToPackageId = subscriptionRepository.findAllById(subscriptionIds).stream()
+                .collect(Collectors.toMap(
+                        s -> s.getSubscriptionId(),
+                        s -> s.getPackageId(),
+                        (a, b) -> a));
+
+        List<Long> packageIds = subscriptionToPackageId.values().stream()
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, String> packageIdToName = subscriptionPackageRepository.findAllById(packageIds).stream()
+                .collect(Collectors.toMap(
+                        p -> p.getId(),
+                        p -> p.getName(),
+                        (a, b) -> a));
+
+        // subscriptionId → packageName lookup map
+        Map<Long, String> subscriptionToName = new HashMap<>();
+        subscriptionToPackageId.forEach((subId, pkgId) ->
+                subscriptionToName.put(subId, packageIdToName.get(pkgId)));
+
+        return freezes.stream()
+                .map(f -> mapToDto(f, subscriptionToName.get(f.getSubscriptionId())))
                 .collect(Collectors.toList());
     }
 
@@ -397,10 +427,16 @@ public class SubscriptionFreezeService {
             throw new az.fitnest.order.exception.ForbiddenException("error.freeze_ownership_mismatch");
         }
 
-        return mapToDto(freeze);
+        String subscriptionName = subscriptionRepository.findById(freeze.getSubscriptionId())
+                .map(s -> subscriptionPackageRepository.findById(s.getPackageId())
+                        .map(az.fitnest.order.model.entity.SubscriptionPackage::getName)
+                        .orElse(null))
+                .orElse(null);
+
+        return mapToDto(freeze, subscriptionName);
     }
 
-    private FreezeRecordDto mapToDto(SubscriptionFreeze f) {
+    private FreezeRecordDto mapToDto(SubscriptionFreeze f, String subscriptionName) {
         return new FreezeRecordDto(
                 f.getId(),
                 f.getSubscriptionId(),
@@ -415,6 +451,7 @@ public class SubscriptionFreezeService {
                 f.getExpiryAfter(),
                 f.getStatus(),
                 f.getEndedBy(),
-                f.getCreatedAt());
+                f.getCreatedAt(),
+                subscriptionName);
     }
 }
