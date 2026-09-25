@@ -1,5 +1,7 @@
 package az.fitnest.order.dto.freeze;
 
+import java.time.LocalDateTime;
+
 /**
  * Eligibility snapshot for the day-picker screen.
  * Field {@code currentlyFrozen} serializes as currentlyFrozen (not isCurrentlyFrozen).
@@ -12,21 +14,24 @@ public record FreezeEligibilityResponse(
         int reservedDays,
         int availableDays,
         boolean currentlyFrozen,
-        Long activeFreezeId
+        Long activeFreezeId,
+        LocalDateTime startAt,
+        LocalDateTime endAt
 ) {
-    public static FreezeEligibilityResponse denied(String reason, boolean currentlyFrozen, Long activeFreezeId) {
-        return new FreezeEligibilityResponse(false, reason, 0, 0, 0, 0, currentlyFrozen, activeFreezeId);
+    public static FreezeEligibilityResponse denied(
+            String reason, boolean currentlyFrozen, Long activeFreezeId, LocalDateTime startAt, LocalDateTime endAt) {
+        return new FreezeEligibilityResponse(false, reason, 0, 0, 0, 0, currentlyFrozen, activeFreezeId, startAt, endAt);
     }
 
     public static FreezeEligibilityResponse deniedWithBalance(
-            String reason, int totalDays, int consumedDays, int reservedDays, int availableDays) {
+            String reason, int totalDays, int consumedDays, int reservedDays, int availableDays, LocalDateTime startAt, LocalDateTime endAt) {
         return new FreezeEligibilityResponse(
-                false, reason, totalDays, consumedDays, reservedDays, availableDays, false, null);
+                false, reason, totalDays, consumedDays, reservedDays, availableDays, false, null, startAt, endAt);
     }
 
     public static FreezeEligibilityResponse ok(
-            int totalDays, int consumedDays, int reservedDays, int availableDays) {
+            int totalDays, int consumedDays, int reservedDays, int availableDays, LocalDateTime startAt, LocalDateTime endAt) {
         return new FreezeEligibilityResponse(
-                true, null, totalDays, consumedDays, reservedDays, availableDays, false, null);
+                true, null, totalDays, consumedDays, reservedDays, availableDays, false, null, startAt, endAt);
     }
 }

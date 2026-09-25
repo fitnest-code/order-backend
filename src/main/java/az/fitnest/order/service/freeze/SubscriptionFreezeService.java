@@ -46,15 +46,15 @@ public class SubscriptionFreezeService {
 
         Optional<SubscriptionFreeze> activeFreeze = freezeRepository.findBySubscriptionIdAndStatus(subscriptionId, FreezeStatus.ACTIVE);
         if (activeFreeze.isPresent()) {
-            return FreezeEligibilityResponse.denied("error.freeze.already_frozen", true, activeFreeze.get().getId());
+            return FreezeEligibilityResponse.denied("error.freeze.already_frozen", true, activeFreeze.get().getId(), sub.getStartAt(), sub.getEndAt());
         }
 
         if (!"ACTIVE".equalsIgnoreCase(sub.getStatus())) {
-            return FreezeEligibilityResponse.denied("error.subscription_not_active", false, null);
+            return FreezeEligibilityResponse.denied("error.subscription_not_active", false, null, sub.getStartAt(), sub.getEndAt());
         }
 
         if (sub.getEndAt() != null && !sub.getEndAt().isAfter(LocalDateTime.now())) {
-            return FreezeEligibilityResponse.denied("error.subscription_expired", false, null);
+            return FreezeEligibilityResponse.denied("error.subscription_expired", false, null, sub.getStartAt(), sub.getEndAt());
         }
 
         SubscriptionFreezeEntitlement entitlement = entitlementService.getBySubscriptionId(subscriptionId).orElse(null);
@@ -65,10 +65,10 @@ public class SubscriptionFreezeService {
 
         if (availableDays <= 0) {
             return FreezeEligibilityResponse.deniedWithBalance(
-                    "error.freeze_days_exhausted", totalDays, consumedDays, reservedDays, 0);
+                    "error.freeze_days_exhausted", totalDays, consumedDays, reservedDays, 0, sub.getStartAt(), sub.getEndAt());
         }
 
-        return FreezeEligibilityResponse.ok(totalDays, consumedDays, reservedDays, availableDays);
+        return FreezeEligibilityResponse.ok(totalDays, consumedDays, reservedDays, availableDays, sub.getStartAt(), sub.getEndAt());
     }
 
     @Transactional
