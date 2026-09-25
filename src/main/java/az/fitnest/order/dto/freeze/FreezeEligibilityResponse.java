@@ -19,14 +19,10 @@ public record FreezeEligibilityResponse(
         LocalDateTime endAt
 ) {
     public static FreezeEligibilityResponse denied(
-            String reason, boolean currentlyFrozen, Long activeFreezeId, LocalDateTime startAt, LocalDateTime endAt) {
-        return new FreezeEligibilityResponse(false, reason, 0, 0, 0, 0, currentlyFrozen, activeFreezeId, startAt, endAt);
-    }
-
-    public static FreezeEligibilityResponse deniedWithBalance(
-            String reason, int totalDays, int consumedDays, int reservedDays, int availableDays, LocalDateTime startAt, LocalDateTime endAt) {
+            String reason, int totalDays, int consumedDays, int reservedDays, int availableDays,
+            boolean currentlyFrozen, Long activeFreezeId, LocalDateTime startAt, LocalDateTime endAt) {
         return new FreezeEligibilityResponse(
-                false, reason, totalDays, consumedDays, reservedDays, availableDays, false, null, startAt, endAt);
+                false, reason, totalDays, consumedDays, reservedDays, availableDays, currentlyFrozen, activeFreezeId, startAt, endAt);
     }
 
     public static FreezeEligibilityResponse ok(
