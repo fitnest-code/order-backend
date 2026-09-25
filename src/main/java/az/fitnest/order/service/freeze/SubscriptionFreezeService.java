@@ -159,6 +159,7 @@ public class SubscriptionFreezeService {
                 .planEndAt(preview.getPlanEndAt())
                 .expiryBefore(sub.getEndAt())
                 .status(FreezeStatus.ACTIVE)
+                .version(0L)
                 .build();
 
         freeze = freezeRepository.save(freeze);
