@@ -27,7 +27,26 @@ public record ActiveSubscriptionResponseV3(
         @JsonProperty("next_payment_due_at")
         @JsonFormat(pattern = "yyyy-MM-dd")
         @Schema(description = "Növbəti ödəniş tarixi (abunəliyin bitmə/yenilənmə günü)", example = "2026-10-09")
-        LocalDate nextPaymentDueAt
+        LocalDate nextPaymentDueAt,
+
+        @JsonProperty("paid_duration_months")
+        Integer paidDurationMonths,
+
+        @JsonProperty("bonus_months")
+        Integer bonusMonths,
+
+        @JsonProperty("total_months")
+        Integer totalMonths,
+
+        @JsonProperty("campaign_label")
+        String campaignLabel,
+
+        @JsonProperty("service_end_at")
+        @JsonFormat(pattern = "yyyy-MM-dd")
+        LocalDate serviceEndAt,
+
+        @JsonProperty("campaign_confirmation_banner")
+        CampaignConfirmationBannerDto campaignConfirmationBanner
 ) {
     public static ActiveSubscriptionResponseV3 none() {
         return ActiveSubscriptionResponseV3.builder()

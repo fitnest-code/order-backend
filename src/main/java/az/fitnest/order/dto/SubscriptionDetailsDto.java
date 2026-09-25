@@ -93,4 +93,27 @@ public class SubscriptionDetailsDto {
 
     @JsonProperty("automatic_payment_enabled")
     private Boolean automaticPaymentEnabled;
+
+    @JsonProperty("paid_duration_months")
+    private Integer paidDurationMonths;
+
+    @JsonProperty("bonus_months")
+    private Integer bonusMonths;
+
+    @JsonProperty("total_months")
+    private Integer totalMonths;
+
+    @JsonProperty("campaign_label")
+    private String campaignLabel;
+
+    @JsonProperty("next_payment_due_at")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd/MM/yyyy")
+    private LocalDate nextPaymentDueAt;
+
+    @JsonProperty("service_end_at")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd/MM/yyyy")
+    private LocalDate serviceEndAt;
+
+    @JsonProperty("campaign_confirmation_banner")
+    private CampaignConfirmationBannerDto campaignConfirmationBanner;
 }

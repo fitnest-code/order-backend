@@ -14,6 +14,9 @@ public class TranslationEntityResolver {
         if (entityType == null) return null;
         switch (entityType.toUpperCase()) {
             case "SUBSCRIPTIONPACKAGE": return az.fitnest.order.model.entity.SubscriptionPackage.class;
+            case "CAMPAIGN": return az.fitnest.order.model.entity.Campaign.class;
+            case "CAMPAIGNOFFER": return az.fitnest.order.model.entity.CampaignOffer.class;
+            case "CAMPAIGNTERM": return az.fitnest.order.model.entity.CampaignTerm.class;
             default: return null;
         }
     }

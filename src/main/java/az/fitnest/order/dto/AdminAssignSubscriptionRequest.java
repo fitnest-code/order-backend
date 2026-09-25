@@ -19,5 +19,8 @@ public record AdminAssignSubscriptionRequest(
     Long optionId,
 
     @JsonProperty("auto_payment_enabled")
-    Boolean autoPaymentEnabled
+    Boolean autoPaymentEnabled,
+
+    @JsonProperty("apply_campaign")
+    Boolean applyCampaign
 ) {}

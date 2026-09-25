@@ -20,5 +20,19 @@ public record PackageOptionDto(
     Integer visitLimit,
     @JsonProperty("freeze_days")
     Integer freezeDays,
-    List<PackageBenefitDto> benefits
+    List<PackageBenefitDto> benefits,
+    @JsonProperty("bonus_months")
+    Integer bonusMonths,
+    @JsonProperty("total_months")
+    Integer totalMonths,
+    @JsonProperty("campaign_id")
+    Long campaignId,
+    @JsonProperty("campaign_label")
+    String campaignLabel,
+    @JsonProperty("strike_through_total")
+    java.math.BigDecimal strikeThroughTotal,
+    @JsonProperty("savings_amount")
+    java.math.BigDecimal savingsAmount,
+    @JsonProperty("monthly_equivalent")
+    java.math.BigDecimal monthlyEquivalent
 ) {}

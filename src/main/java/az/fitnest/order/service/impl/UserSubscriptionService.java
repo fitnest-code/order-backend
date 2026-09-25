@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import az.fitnest.order.util.UserContext;
@@ -43,6 +44,8 @@ public class UserSubscriptionService {
     private final az.fitnest.order.service.freeze.SubscriptionFreezeService subscriptionFreezeService;
     private final az.fitnest.order.repository.SubscriptionFreezeRepository subscriptionFreezeRepository;
     private final az.fitnest.order.service.freeze.FreezeFinalizeService freezeFinalizeService;
+    private final az.fitnest.order.service.CampaignEligibilityService campaignEligibilityService;
+    private final az.fitnest.order.repository.UserCampaignRedemptionRepository userCampaignRedemptionRepository;
 
     @Transactional
     public boolean checkIn(Long userId, Long gymId, boolean consumeFrozen) {
@@ -254,6 +257,13 @@ public class UserSubscriptionService {
             if (durationLabel == null || durationLabel.isEmpty())
                 durationLabel = duration + " ay";
 
+            Integer bonusMonths = subscription.getBonusMonths() != null ? subscription.getBonusMonths() : 0;
+            Integer paidDurationMonths = subscription.getPaidDurationMonths() != null ? subscription.getPaidDurationMonths() : duration;
+            Integer totalMonths = paidDurationMonths + bonusMonths;
+            LocalDate nextPaymentDueAt = subscription.getPaidUntil() != null ? subscription.getPaidUntil().toLocalDate() : (subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null);
+            LocalDate serviceEndAt = subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null;
+            az.fitnest.order.dto.CampaignConfirmationBannerDto confirmationBanner = buildConfirmationBanner(subscription, lang);
+
             SubscriptionDetailsDto details = SubscriptionDetailsDto.builder()
                     .subscriptionId(subscription.getSubscriptionId())
                     .packageId(pkg.getId().toString())
@@ -281,6 +291,12 @@ public class UserSubscriptionService {
                     .optionId(optionId)
                     .benefits(benefitDtos)
                     .automaticPaymentEnabled(Boolean.TRUE.equals(subscription.getAutoPaymentEnabled()))
+                    .paidDurationMonths(paidDurationMonths)
+                    .bonusMonths(bonusMonths)
+                    .totalMonths(totalMonths)
+                    .nextPaymentDueAt(nextPaymentDueAt)
+                    .serviceEndAt(serviceEndAt)
+                    .campaignConfirmationBanner(confirmationBanner)
                     .build();
             log.info("Returning latest subscription details for userId={}, subscriptionId={}", userId,
                     subscription.getSubscriptionId());
@@ -352,12 +368,43 @@ public class UserSubscriptionService {
                 ? "unknown"
                 : subscription.getStatus().toLowerCase();
 
+        Integer bonusMonths = subscription.getBonusMonths() != null ? subscription.getBonusMonths() : 0;
+        Integer paidDurationMonths = subscription.getPaidDurationMonths() != null ? subscription.getPaidDurationMonths() : durationMonths;
+        Integer totalMonths = (paidDurationMonths != null ? paidDurationMonths : 0) + bonusMonths;
+        LocalDate nextPaymentDueAt = subscription.getPaidUntil() != null ? subscription.getPaidUntil().toLocalDate() : (subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null);
+        LocalDate serviceEndAt = subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null;
+        az.fitnest.order.dto.CampaignConfirmationBannerDto confirmationBanner = buildConfirmationBanner(subscription, lang);
+
         return az.fitnest.order.dto.ActiveSubscriptionResponseV3.builder()
                 .subscriptionName(subscriptionName)
                 .planDurationMonths(durationMonths)
                 .status(status)
-                .nextPaymentDueAt(subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null)
+                .nextPaymentDueAt(nextPaymentDueAt)
+                .paidDurationMonths(paidDurationMonths)
+                .bonusMonths(bonusMonths)
+                .totalMonths(totalMonths)
+                .serviceEndAt(serviceEndAt)
+                .campaignConfirmationBanner(confirmationBanner)
                 .build();
+    }
+
+    private az.fitnest.order.dto.CampaignConfirmationBannerDto buildConfirmationBanner(Subscription subscription, String lang) {
+        if (subscription != null && subscription.getBonusMonths() != null && subscription.getBonusMonths() > 0
+                && subscription.getCampaignId() != null && subscription.getCampaignBannerDismissedAt() == null) {
+            String idStr = subscription.getCampaignId().toString();
+            String confirmTitle = translationService.getTranslatedValue("CAMPAIGN", idStr, "confirmTitle", lang);
+            if (confirmTitle == null || confirmTitle.isBlank()) confirmTitle = subscription.getBonusMonths() + " ay hədiyyə";
+            String confirmBody = translationService.getTranslatedValue("CAMPAIGN", idStr, "confirmBody", lang);
+            if (confirmBody == null || confirmBody.isBlank()) confirmBody = "Oktyabr kampaniyasından abunəliyiniz " + subscription.getBonusMonths() + " ay uzadılacaq";
+            confirmBody = confirmBody.replace("{bonusMonths}", subscription.getBonusMonths().toString());
+            return az.fitnest.order.dto.CampaignConfirmationBannerDto.builder()
+                    .campaignId(subscription.getCampaignId())
+                    .bonusMonths(subscription.getBonusMonths())
+                    .title(confirmTitle)
+                    .body(confirmBody)
+                    .build();
+        }
+        return null;
     }
 
     @Transactional
@@ -550,6 +597,15 @@ public class UserSubscriptionService {
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException(
                         "error.duration_config_not_found"));
 
+        LocalDateTime now = LocalDateTime.now(campaignEligibilityService.getBakuZone());
+
+        az.fitnest.order.dto.BonusDecision decision;
+        if (Boolean.TRUE.equals(request.applyCampaign())) {
+            decision = campaignEligibilityService.resolve(request.userId(), request.planId(), option.getDurationMonths(), az.fitnest.order.dto.PurchaseKind.NEW_PURCHASE, now);
+        } else {
+            decision = az.fitnest.order.dto.BonusDecision.notApplied(option.getDurationMonths());
+        }
+
         List<Subscription> toFinish = subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(),
                 "ACTIVE");
         toFinish.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(request.userId(), "FINISHED"));
@@ -570,8 +626,8 @@ public class UserSubscriptionService {
             }
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime endAt = now.plusMonths(option.getDurationMonths());
+        LocalDateTime paidUntil = now.plusMonths(option.getDurationMonths());
+        LocalDateTime endAt = now.plusMonths(option.getDurationMonths() + decision.getBonusMonths());
 
         Integer entryLimit = option.getEntryLimit() != null ? option.getEntryLimit() : pkg.getEntryLimit();
         Integer freezeDays = 0;
@@ -587,6 +643,12 @@ public class UserSubscriptionService {
         }
         subscription.setStartAt(now);
         subscription.setEndAt(endAt);
+        subscription.setPaidDurationMonths(option.getDurationMonths());
+        subscription.setBonusMonths(decision.getBonusMonths());
+        subscription.setPaidUntil(paidUntil);
+        if (decision.isApplied()) {
+            subscription.setCampaignId(decision.getCampaignId());
+        }
         subscription.setTotalLimit(entryLimit);
         subscription.setRemainingLimit(entryLimit);
         subscription.setFrozenDaysUsed(0);
@@ -601,8 +663,27 @@ public class UserSubscriptionService {
         }
 
         Subscription saved = subscriptionRepository.save(subscription);
-        log.info("Admin assigned plan {} option {} (duration={} months) to user {}, subscriptionId={}",
-                pkg.getName(), option.getId(), option.getDurationMonths(), request.userId(), saved.getSubscriptionId());
+
+        if (decision.isApplied()) {
+            try {
+                az.fitnest.order.model.entity.UserCampaignRedemption redemption = new az.fitnest.order.model.entity.UserCampaignRedemption();
+                redemption.setUserId(request.userId());
+                redemption.setCampaignId(decision.getCampaignId());
+                redemption.setSubscriptionId(saved.getSubscriptionId());
+                redemption.setRedeemedAt(now);
+                userCampaignRedemptionRepository.save(redemption);
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                log.warn("Redemption unique constraint race for user {} campaign {}. Fallback bonus=0", request.userId(), decision.getCampaignId());
+                saved.setBonusMonths(0);
+                saved.setCampaignId(null);
+                saved.setEndAt(paidUntil);
+                saved = subscriptionRepository.save(saved);
+                decision = az.fitnest.order.dto.BonusDecision.notApplied(option.getDurationMonths());
+            }
+        }
+
+        log.info("Assigned plan {} option {} (duration={} months, bonus={}) to user {}, subscriptionId={}",
+                pkg.getName(), option.getId(), option.getDurationMonths(), saved.getBonusMonths(), request.userId(), saved.getSubscriptionId());
         subscriptionEventPublisher.publishSubscriptionEvent(request.userId(), "ASSIGNED", saved.getSubscriptionId());
 
         freezeEntitlementService.createForSubscription(
@@ -611,7 +692,50 @@ public class UserSubscriptionService {
         return az.fitnest.order.dto.AdminAssignSubscriptionResponse.builder()
                 .subscriptionId(saved.getSubscriptionId())
                 .userId(saved.getUserId())
+                .planId(saved.getPackageId())
+                .planName(pkg.getName())
+                .optionId(option.getId())
+                .durationMonths(option.getDurationMonths())
+                .status(saved.getStatus())
+                .startAt(saved.getStartAt().toLocalDate())
+                .endAt(saved.getEndAt().toLocalDate())
+                .totalLimit(saved.getTotalLimit())
+                .remainingLimit(saved.getRemainingLimit())
+                .allowedFreezeDays(saved.getAllowedFreezeDays())
+                .bonusMonths(saved.getBonusMonths())
+                .campaignApplied(decision.isApplied())
+                .campaignId(saved.getCampaignId())
                 .build();
+    }
+
+    @Transactional
+    public void revokeCampaignBonusForRefund(Long subscriptionId, Long userId) {
+        if (subscriptionId != null && subscriptionId > 0) {
+            subscriptionRepository.findById(subscriptionId).ifPresent(sub -> {
+                userCampaignRedemptionRepository.deleteBySubscriptionId(sub.getSubscriptionId());
+                if (sub.getPaidUntil() != null) {
+                    sub.setEndAt(sub.getPaidUntil());
+                }
+                sub.setBonusMonths(0);
+                sub.setCampaignId(null);
+                subscriptionRepository.save(sub);
+                log.info("Revoked campaign bonus for subscriptionId={} due to refund", sub.getSubscriptionId());
+            });
+        } else if (userId != null && userId > 0) {
+            List<Subscription> subs = subscriptionRepository.findByUserIdAndStatusIn(userId, List.of("ACTIVE", "FROZEN", "FINISHED"));
+            for (Subscription sub : subs) {
+                if (sub.getCampaignId() != null) {
+                    userCampaignRedemptionRepository.deleteBySubscriptionId(sub.getSubscriptionId());
+                    if (sub.getPaidUntil() != null) {
+                        sub.setEndAt(sub.getPaidUntil());
+                    }
+                    sub.setBonusMonths(0);
+                    sub.setCampaignId(null);
+                    subscriptionRepository.save(sub);
+                    log.info("Revoked campaign bonus for user {} subscriptionId={} due to refund", userId, sub.getSubscriptionId());
+                }
+            }
+        }
     }
 
     @Transactional

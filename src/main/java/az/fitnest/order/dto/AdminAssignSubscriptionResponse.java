@@ -44,5 +44,14 @@ public record AdminAssignSubscriptionResponse(
     @JsonProperty("allowed_freeze_days")
     Integer allowedFreezeDays,
 
+    @JsonProperty("bonus_months")
+    Integer bonusMonths,
+
+    @JsonProperty("campaign_applied")
+    Boolean campaignApplied,
+
+    @JsonProperty("campaign_id")
+    Long campaignId,
+
     String message
 ) {}
