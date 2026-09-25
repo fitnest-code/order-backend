@@ -44,28 +44,31 @@ public class SubscriptionFreezeService {
             throw new az.fitnest.order.exception.ForbiddenException("error.subscription_ownership_mismatch");
         }
 
-        Optional<SubscriptionFreeze> activeFreeze = freezeRepository.findBySubscriptionIdAndStatus(subscriptionId, FreezeStatus.ACTIVE);
-        if (activeFreeze.isPresent()) {
-            return FreezeEligibilityResponse.denied("error.freeze.already_frozen", true, activeFreeze.get().getId(), sub.getStartAt(), sub.getEndAt());
-        }
-
-        if (!"ACTIVE".equalsIgnoreCase(sub.getStatus())) {
-            return FreezeEligibilityResponse.denied("error.subscription_not_active", false, null, sub.getStartAt(), sub.getEndAt());
-        }
-
-        if (sub.getEndAt() != null && !sub.getEndAt().isAfter(LocalDateTime.now())) {
-            return FreezeEligibilityResponse.denied("error.subscription_expired", false, null, sub.getStartAt(), sub.getEndAt());
-        }
-
         SubscriptionFreezeEntitlement entitlement = entitlementService.getBySubscriptionId(subscriptionId).orElse(null);
         int totalDays = entitlement != null ? entitlement.getTotalDays() : 0;
         int consumedDays = entitlement != null ? entitlement.getConsumedDays() : 0;
         int reservedDays = entitlement != null ? entitlement.getReservedDays() : 0;
         int availableDays = Math.max(0, totalDays - consumedDays - reservedDays);
 
+        Optional<SubscriptionFreeze> activeFreeze = freezeRepository.findBySubscriptionIdAndStatus(subscriptionId, FreezeStatus.ACTIVE);
+        if (activeFreeze.isPresent()) {
+            return FreezeEligibilityResponse.denied(
+                    "error.freeze.already_frozen", totalDays, consumedDays, reservedDays, availableDays, true, activeFreeze.get().getId(), sub.getStartAt(), sub.getEndAt());
+        }
+
+        if (!"ACTIVE".equalsIgnoreCase(sub.getStatus())) {
+            return FreezeEligibilityResponse.denied(
+                    "error.subscription_not_active", totalDays, consumedDays, reservedDays, availableDays, false, null, sub.getStartAt(), sub.getEndAt());
+        }
+
+        if (sub.getEndAt() != null && !sub.getEndAt().isAfter(LocalDateTime.now())) {
+            return FreezeEligibilityResponse.denied(
+                    "error.subscription_expired", totalDays, consumedDays, reservedDays, availableDays, false, null, sub.getStartAt(), sub.getEndAt());
+        }
+
         if (availableDays <= 0) {
-            return FreezeEligibilityResponse.deniedWithBalance(
-                    "error.freeze_days_exhausted", totalDays, consumedDays, reservedDays, 0, sub.getStartAt(), sub.getEndAt());
+            return FreezeEligibilityResponse.denied(
+                    "error.freeze_days_exhausted", totalDays, consumedDays, reservedDays, 0, false, null, sub.getStartAt(), sub.getEndAt());
         }
 
         return FreezeEligibilityResponse.ok(totalDays, consumedDays, reservedDays, availableDays, sub.getStartAt(), sub.getEndAt());
