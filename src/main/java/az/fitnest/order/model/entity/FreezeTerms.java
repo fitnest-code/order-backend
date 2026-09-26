@@ -19,15 +19,12 @@ public class FreezeTerms {
     private Long id;
 
     @Column(name = "html_content_az", nullable = false, columnDefinition = "TEXT")
-    @Builder.Default
     private String htmlContentAz = "";
 
     @Column(name = "html_content_en", nullable = false, columnDefinition = "TEXT")
-    @Builder.Default
     private String htmlContentEn = "";
 
     @Column(name = "html_content_ru", nullable = false, columnDefinition = "TEXT")
-    @Builder.Default
     private String htmlContentRu = "";
 
     @Column(name = "created_at", nullable = false, updatable = false)
