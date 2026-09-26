@@ -93,9 +93,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiResponse<Void>> handleRuntimeException(RuntimeException ex, WebRequest request) {
         log.error("Unhandled RuntimeException at {}: {}", request.getDescription(false), ex.getMessage(), ex);
+        String debugMessage = ex.getClass().getSimpleName() + ": " + ex.getMessage();
+        if (ex.getCause() != null) {
+            debugMessage += " | Caused by: " + ex.getCause().getClass().getSimpleName() + ": " + ex.getCause().getMessage();
+        }
         ApiError apiError = ApiError.builder()
                 .code("RUNTIME_EXCEPTION")
-                .message(getMessage("error.unexpected"))
+                .message(debugMessage)
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
                 .path(request.getDescription(false).replace("uri=", ""))
                 .timestamp(OffsetDateTime.now())
