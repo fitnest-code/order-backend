@@ -65,6 +65,7 @@ spring:
         jdbc:
           batch_size: 50
           batch_versioned_data: true
+          time_zone: Asia/Baku
         order_inserts: true
         order_updates: true
         generate_statistics: false
