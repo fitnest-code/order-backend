@@ -21,7 +21,7 @@ public record ActiveSubscriptionResponseV3(
         Integer planDurationMonths,
 
         @JsonProperty("status")
-        @Schema(description = "Abunəlik statusu", example = "active")
+        @Schema(description = "Abunəlik statusu", example = "ACTIVE")
         String status,
 
         @JsonProperty("next_payment_due_at")
@@ -31,7 +31,7 @@ public record ActiveSubscriptionResponseV3(
 ) {
     public static ActiveSubscriptionResponseV3 none() {
         return ActiveSubscriptionResponseV3.builder()
-                .status("none")
+                .status("NONE")
                 .build();
     }
 }

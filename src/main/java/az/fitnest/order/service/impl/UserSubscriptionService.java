@@ -349,8 +349,8 @@ public class UserSubscriptionService {
         }
 
         String status = subscription.getStatus() == null
-                ? "unknown"
-                : subscription.getStatus().toLowerCase();
+                ? "UNKNOWN"
+                : subscription.getStatus().toUpperCase();
 
         return az.fitnest.order.dto.ActiveSubscriptionResponseV3.builder()
                 .subscriptionName(subscriptionName)
