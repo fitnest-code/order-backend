@@ -28,8 +28,8 @@ public class FreezePreviewService {
         LocalDateTime newExpiryDate = currentExpiryDate != null
                 ? currentExpiryDate.plusSeconds((long) requestedDays * 86400L)
                 : freezePlanEndAt;
-        // FIX-16: Resume quote TTL = 5 minutes (adequate for commit window)
-        LocalDateTime expiresAt = now.plusMinutes(5);
+        // Freeze quote TTL = 15 minutes (adequate for commit window)
+        LocalDateTime expiresAt = now.plusMinutes(15);
 
         FreezePreview preview = FreezePreview.builder()
                 .subscriptionId(subscription.getSubscriptionId())
@@ -60,7 +60,7 @@ public class FreezePreviewService {
                 .orElseThrow(() -> new az.fitnest.order.exception.BadRequestException("error.freeze.preview_not_found"));
 
         if (preview.isExpired()) {
-            throw new az.fitnest.order.exception.ConflictException("error.freeze.preview_changed");
+            throw new az.fitnest.order.exception.ConflictException("error.freeze.preview_expired");
         }
 
         return preview;
