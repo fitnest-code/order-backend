@@ -169,9 +169,9 @@ public class CampaignEligibilityService {
         String lang = language != null ? language : "AZ";
         String idStr = campaign.getId().toString();
 
-        String title = getTranslatedValue("CAMPAIGN", idStr, "title", null, lang);
-        String description = getTranslatedValue("CAMPAIGN", idStr, "description", null, lang);
-        String ctaLabel = getTranslatedValue("CAMPAIGN", idStr, "ctaLabel", null, lang);
+        String title = getTranslatedValue("CAMPAIGN", idStr, "title", "Daha çox idman, daha çox imkan!", lang);
+        String description = getTranslatedValue("CAMPAIGN", idStr, "description", "3, 6 və 12 aylıq abunəliklərdə əlavə ayları bizdən hədiyyə al!", lang);
+        String ctaLabel = getTranslatedValue("CAMPAIGN", idStr, "ctaLabel", "Ətraflı Bax", lang);
 
         List<CampaignOffer> offers = campaignOfferRepository.findByCampaignId(campaign.getId());
         List<CampaignOfferDto> offerDtos = offers.stream().map(o -> {
