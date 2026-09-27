@@ -124,7 +124,7 @@ public class SubscriptionFreezeService {
         Subscription sub = subscriptionRepository.findByIdForUpdate(subscriptionId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.subscription_not_found"));
 
-        if (sub.getVersion() != preview.getExpectedVersion()) {
+        if (!sub.getVersion().equals(preview.getExpectedVersion())) {
             throw new az.fitnest.order.exception.ConflictException("error.freeze.preview_changed");
         }
 
