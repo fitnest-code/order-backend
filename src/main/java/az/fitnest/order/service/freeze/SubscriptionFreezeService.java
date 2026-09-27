@@ -328,6 +328,9 @@ public class SubscriptionFreezeService {
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.subscription_not_found"));
 
         sub.setStatus("ACTIVE");
+        if (sub.getPaidUntil() != null) {
+            sub.setPaidUntil(sub.getPaidUntil().plusSeconds(secondsElapsed));
+        }
         sub.setEndAt(expiryAfter);
         sub.setFrozenAt(null);
         sub.setUnfreezesAt(null);

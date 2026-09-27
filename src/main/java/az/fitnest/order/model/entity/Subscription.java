@@ -92,6 +92,21 @@ public class Subscription {
     @Column(name = "frozen_sessions")
     private Integer frozenSessions = 0;
 
+    @Column(name = "paid_duration_months")
+    private Integer paidDurationMonths;
+
+    @Column(name = "bonus_months", nullable = false)
+    private Integer bonusMonths = 0;
+
+    @Column(name = "campaign_id")
+    private Long campaignId;
+
+    @Column(name = "paid_until")
+    private LocalDateTime paidUntil;
+
+    @Column(name = "campaign_banner_dismissed_at")
+    private LocalDateTime campaignBannerDismissedAt;
+
     // Field access: Hibernate increments this directly — never mask null in a getter.
     @Version
     @Column(name = "version", nullable = false)
