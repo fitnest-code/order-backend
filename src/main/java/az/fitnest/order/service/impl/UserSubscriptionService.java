@@ -490,6 +490,65 @@ public class UserSubscriptionService {
         }
     }
 
+    @Scheduled(cron = "0 0 0 1 * ?")
+    @Transactional
+    public void monthlyFreezeRenewal() {
+        LocalDateTime now = LocalDateTime.now();
+        log.info("Starting monthly freeze renewal job at {}", now);
+
+        // Find all ACTIVE subscriptions that are multi-month (duration > 1 month)
+        List<Subscription> activeSubs = subscriptionRepository.findByStatus("ACTIVE");
+        int renewed = 0;
+
+        for (Subscription sub : activeSubs) {
+            if (sub.getOptionId() == null) {
+                continue;
+            }
+
+            // Get the option to check duration
+            var optionOpt = packageRepository.findById(sub.getPackageId())
+                    .flatMap(pkg -> pkg.getOptions().stream()
+                            .filter(o -> o.getId().equals(sub.getOptionId()))
+                            .findFirst());
+
+            if (optionOpt.isEmpty()) {
+                continue;
+            }
+
+            PackageOption option = optionOpt.get();
+            int durationMonths = option.getDurationMonths();
+
+            // Only renew for multi-month subscriptions (3, 6, 12 months)
+            if (durationMonths <= 1) {
+                continue;
+            }
+
+            // Check if subscription is still within its valid period
+            if (sub.getEndAt() != null && sub.getEndAt().isBefore(now)) {
+                continue;
+            }
+
+            // Renew freeze entitlement for this month
+            try {
+                String packageName = packageRepository.findById(sub.getPackageId())
+                        .map(SubscriptionPackage::getName)
+                        .orElse("Bronze");
+                int monthlyAllowance = freezeTierPolicyProvider.getAllowedDays(packageName);
+
+                if (monthlyAllowance > 0) {
+                    freezeEntitlementService.renewMonthly(sub.getSubscriptionId(), monthlyAllowance);
+                    renewed++;
+                    log.debug("Renewed freeze entitlement for subscriptionId={}: added {} days",
+                            sub.getSubscriptionId(), monthlyAllowance);
+                }
+            } catch (Exception e) {
+                log.error("Failed to renew freeze for subscription {}: {}", sub.getSubscriptionId(), e.getMessage());
+            }
+        }
+
+        log.info("Monthly freeze renewal completed. Renewed {} subscriptions.", renewed);
+    }
+
     @Scheduled(cron = "0 0 1 * * *")
     @Transactional
     public void autoRenewSubscriptions() {
