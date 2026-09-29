@@ -336,4 +336,17 @@ public class TranslationServiceImpl implements TranslationService {
         log.info("Deleting translations for entityType={}, entityId={}", normalizedEntityType, entityId);
         translationRepository.deleteByEntityTypeAndEntityId(normalizedEntityType, entityId);
     }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void saveTranslation(String entityType, String entityId, String languageCode, String fieldName, String fieldValue) {
+        if (entityType == null || entityId == null || languageCode == null || fieldName == null) {
+            return;
+        }
+        String normalizedEntityType = entityType.toUpperCase();
+        String normalizedLanguageCode = languageCode.toUpperCase();
+        log.info("Saving translation: entityType={}, entityId={}, languageCode={}, fieldName={}", 
+            normalizedEntityType, entityId, normalizedLanguageCode, fieldName);
+        saveOrUpdateTranslation(normalizedEntityType, entityId, normalizedLanguageCode, fieldName, fieldValue);
+    }
 }

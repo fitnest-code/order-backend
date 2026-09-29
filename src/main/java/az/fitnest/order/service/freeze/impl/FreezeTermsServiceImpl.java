@@ -43,13 +43,13 @@ public class FreezeTermsServiceImpl implements FreezeTermsService {
         FreezeTerms saved = freezeTermsRepository.save(terms);
         log.info("Saved freeze terms id={}", saved.getId());
 
-        // Save EN/RU to translations table via TranslationService
+        // Save EN/RU to translations table directly (admin provides them)
         String idStr = saved.getId().toString();
         if (request.getHtmlContentEn() != null && !request.getHtmlContentEn().isBlank()) {
-            translationService.autoTranslateAndSave("FREEZE_TERMS", idStr, "html_content", request.getHtmlContentEn());
+            translationService.saveTranslation("FREEZE_TERMS", idStr, "EN", "html_content", request.getHtmlContentEn());
         }
         if (request.getHtmlContentRu() != null && !request.getHtmlContentRu().isBlank()) {
-            translationService.autoTranslateAndSave("FREEZE_TERMS", idStr, "html_content", request.getHtmlContentRu());
+            translationService.saveTranslation("FREEZE_TERMS", idStr, "RU", "html_content", request.getHtmlContentRu());
         }
 
         return toAdminResponse(saved);
