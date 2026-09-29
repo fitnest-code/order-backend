@@ -210,6 +210,10 @@ public class TranslationServiceImpl implements TranslationService {
         log.info("Starting auto-translation process for entityType={}, entityId={}, fieldName={}, originalValueAz='{}'", 
             entityType, entityId, fieldName, originalValueAz);
 
+        // Persist the original AZ value so getTranslatedValue("AZ") returns it
+        // instead of falling back to hardcoded defaults.
+        saveOrUpdateTranslation(entityType, entityId, "AZ", fieldName, originalValueAz);
+
         // Translate to EN
         String enValue = translateText(originalValueAz, "en");
         if (enValue != null && !enValue.trim().isEmpty()) {
