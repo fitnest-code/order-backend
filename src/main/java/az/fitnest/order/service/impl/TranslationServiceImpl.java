@@ -34,7 +34,22 @@ public class TranslationServiceImpl implements TranslationService {
 
     @Override
     public String getTranslatedValue(String entityType, String entityId, String fieldName, String languageCode) {
-        if (languageCode == null || languageCode.equalsIgnoreCase("AZ")) {
+        if (languageCode == null) {
+            languageCode = "AZ";
+        }
+        
+        if (languageCode.equalsIgnoreCase("AZ")) {
+            // For AZ, try to load from translations table directly
+            String existingValue = translationRepository.findFirstByEntityTypeAndEntityIdAndLanguageCodeAndFieldName(
+                            entityType.toUpperCase(),
+                            entityId,
+                            "AZ",
+                            fieldName)
+                    .map(Translation::getFieldValue)
+                    .orElse(null);
+            if (existingValue != null && !existingValue.trim().isEmpty()) {
+                return existingValue;
+            }
             return null;
         }
 

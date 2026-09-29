@@ -2,9 +2,11 @@ package az.fitnest.order.service.impl;
 
 import az.fitnest.order.dto.ActiveSubscriptionResponse;
 import az.fitnest.order.dto.SubscriptionDetailsDto;
+import az.fitnest.order.model.entity.CampaignOffer;
 import az.fitnest.order.model.entity.PackageOption;
 import az.fitnest.order.model.entity.SubscriptionPackage;
 import az.fitnest.order.model.entity.Subscription;
+import az.fitnest.order.repository.CampaignOfferRepository;
 import az.fitnest.order.repository.SubscriptionPackageRepository;
 import az.fitnest.order.repository.SubscriptionRepository;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +48,7 @@ public class UserSubscriptionService {
     private final az.fitnest.order.service.freeze.FreezeFinalizeService freezeFinalizeService;
     private final az.fitnest.order.service.CampaignEligibilityService campaignEligibilityService;
     private final az.fitnest.order.repository.UserCampaignRedemptionRepository userCampaignRedemptionRepository;
+    private final az.fitnest.order.repository.CampaignOfferRepository campaignOfferRepository;
 
     @Transactional
     public boolean checkIn(Long userId, Long gymId, boolean consumeFrozen) {
@@ -260,6 +263,18 @@ public class UserSubscriptionService {
             Integer bonusMonths = subscription.getBonusMonths() != null ? subscription.getBonusMonths() : 0;
             Integer paidDurationMonths = subscription.getPaidDurationMonths() != null ? subscription.getPaidDurationMonths() : duration;
             Integer totalMonths = paidDurationMonths + bonusMonths;
+            
+            // Build campaign label if campaign_id is present and bonus_months > 0
+            String campaignLabel = null;
+            if (subscription.getCampaignId() != null && bonusMonths > 0) {
+                Long offerId = campaignOfferRepository.findByCampaignIdAndBaseDurationMonths(subscription.getCampaignId(), paidDurationMonths)
+                        .map(CampaignOffer::getId)
+                        .orElse(null);
+                if (offerId != null) {
+                    campaignLabel = translationService.getTranslatedValue("CAMPAIGNOFFER", offerId.toString(), "label", lang);
+                }
+            }
+            
             LocalDate nextPaymentDueAt = subscription.getPaidUntil() != null ? subscription.getPaidUntil().toLocalDate() : (subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null);
             LocalDate serviceEndAt = subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null;
             az.fitnest.order.dto.CampaignConfirmationBannerDto confirmationBanner = buildConfirmationBanner(subscription, lang);
@@ -294,6 +309,7 @@ public class UserSubscriptionService {
                     .paidDurationMonths(paidDurationMonths)
                     .bonusMonths(bonusMonths)
                     .totalMonths(totalMonths)
+                    .campaignLabel(campaignLabel)
                     .nextPaymentDueAt(nextPaymentDueAt)
                     .serviceEndAt(serviceEndAt)
                     .campaignConfirmationBanner(confirmationBanner)
@@ -371,6 +387,18 @@ public class UserSubscriptionService {
         Integer bonusMonths = subscription.getBonusMonths() != null ? subscription.getBonusMonths() : 0;
         Integer paidDurationMonths = subscription.getPaidDurationMonths() != null ? subscription.getPaidDurationMonths() : durationMonths;
         Integer totalMonths = (paidDurationMonths != null ? paidDurationMonths : 0) + bonusMonths;
+        
+        // Build campaign label if campaign_id is present and bonus_months > 0
+        String campaignLabel = null;
+        if (subscription.getCampaignId() != null && bonusMonths > 0) {
+            Long offerId = campaignOfferRepository.findByCampaignIdAndBaseDurationMonths(subscription.getCampaignId(), paidDurationMonths)
+                    .map(CampaignOffer::getId)
+                    .orElse(null);
+            if (offerId != null) {
+                campaignLabel = translationService.getTranslatedValue("CAMPAIGNOFFER", offerId.toString(), "label", lang);
+            }
+        }
+        
         LocalDate nextPaymentDueAt = subscription.getPaidUntil() != null ? subscription.getPaidUntil().toLocalDate() : (subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null);
         LocalDate serviceEndAt = subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null;
         az.fitnest.order.dto.CampaignConfirmationBannerDto confirmationBanner = buildConfirmationBanner(subscription, lang);
@@ -383,6 +411,7 @@ public class UserSubscriptionService {
                 .paidDurationMonths(paidDurationMonths)
                 .bonusMonths(bonusMonths)
                 .totalMonths(totalMonths)
+                .campaignLabel(campaignLabel)
                 .serviceEndAt(serviceEndAt)
                 .campaignConfirmationBanner(confirmationBanner)
                 .build();

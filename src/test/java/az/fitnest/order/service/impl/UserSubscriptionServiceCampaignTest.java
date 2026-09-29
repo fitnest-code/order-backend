@@ -141,7 +141,7 @@ class UserSubscriptionServiceCampaignTest {
                 subscriptionEventPublisher, translationService, paymentGrpcClient, notificationGrpcClient,
                 entityManager, freezeEntitlementService, freezeTierPolicyProvider, subscriptionFreezeService,
                 subscriptionFreezeRepository, freezeFinalizeService,
-                realCampaignService, userCampaignRedemptionRepository);
+                realCampaignService, userCampaignRedemptionRepository, campaignOfferRepository);
     }
 
     private Subscription campaignSubscription(long id, Long campaignId, LocalDateTime paidUntil,
