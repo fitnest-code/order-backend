@@ -25,11 +25,22 @@ public class TranslationEntityResolver {
     public String extractFieldValue(Object entity, String fieldName) {
         if (entity == null || fieldName == null) return null;
         try {
+            // Try exact field name first
             Field field = getCachedField(entity.getClass(), fieldName);
             if (field != null) {
                 return getFieldValue(entity, field);
             }
             
+            // Try camelCase conversion (e.g., "html_content" -> "htmlContent")
+            String camelCaseFieldName = toCamelCase(fieldName);
+            if (!camelCaseFieldName.equals(fieldName)) {
+                field = getCachedField(entity.getClass(), camelCaseFieldName);
+                if (field != null) {
+                    return getFieldValue(entity, field);
+                }
+            }
+            
+            // Try searching all declared fields
             for (Field f : entity.getClass().getDeclaredFields()) {
                 if (!f.getType().isPrimitive() && !f.getType().getName().startsWith("java.lang") && !f.getType().isEnum()) {
                     f.setAccessible(true);
@@ -39,6 +50,13 @@ public class TranslationEntityResolver {
                         if (childField != null) {
                             return getFieldValue(child, childField);
                         }
+                        // Also try camelCase on child
+                        if (!camelCaseFieldName.equals(fieldName)) {
+                            childField = getCachedField(child.getClass(), camelCaseFieldName);
+                            if (childField != null) {
+                                return getFieldValue(child, childField);
+                            }
+                        }
                     }
                 }
             }
@@ -46,6 +64,22 @@ public class TranslationEntityResolver {
             log.error("Failed to extract field value for fieldName: {}", fieldName, e);
         }
         return null;
+    }
+    
+    private String toCamelCase(String snakeCase) {
+        StringBuilder result = new StringBuilder();
+        boolean nextUpper = false;
+        for (char c : snakeCase.toCharArray()) {
+            if (c == '_') {
+                nextUpper = true;
+            } else if (nextUpper) {
+                result.append(Character.toUpperCase(c));
+                nextUpper = false;
+            } else {
+                result.append(c);
+            }
+        }
+        return result.toString();
     }
 
     private Field getCachedField(Class<?> clazz, String fieldName) {

@@ -50,6 +50,23 @@ public class TranslationServiceImpl implements TranslationService {
             if (existingValue != null && !existingValue.trim().isEmpty()) {
                 return existingValue;
             }
+            // Fallback: For FREEZE_TERMS, fetch base content from entity directly
+            if ("FREEZE_TERMS".equalsIgnoreCase(entityType)) {
+                try {
+                    Class<?> entityClass = translationEntityResolver.getEntityClass(entityType);
+                    if (entityClass != null) {
+                        Object entity = entityManager.find(entityClass, Long.parseLong(entityId));
+                        if (entity != null) {
+                            String baseContent = translationEntityResolver.extractFieldValue(entity, fieldName);
+                            if (baseContent != null && !baseContent.trim().isEmpty()) {
+                                return baseContent;
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to fetch AZ base content for FREEZE_TERMS: {}", e.getMessage());
+                }
+            }
             return null;
         }
 
