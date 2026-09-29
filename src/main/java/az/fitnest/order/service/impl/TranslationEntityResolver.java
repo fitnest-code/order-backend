@@ -17,6 +17,7 @@ public class TranslationEntityResolver {
             case "CAMPAIGN": return az.fitnest.order.model.entity.Campaign.class;
             case "CAMPAIGNOFFER": return az.fitnest.order.model.entity.CampaignOffer.class;
             case "CAMPAIGNTERM": return az.fitnest.order.model.entity.CampaignTerm.class;
+            case "FREEZE_TERMS": return az.fitnest.order.model.entity.FreezeTerms.class;
             default: return null;
         }
     }

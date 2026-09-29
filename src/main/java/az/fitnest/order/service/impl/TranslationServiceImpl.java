@@ -308,4 +308,15 @@ public class TranslationServiceImpl implements TranslationService {
             }
         }
     }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void deleteByEntityTypeAndEntityId(String entityType, String entityId) {
+        if (entityType == null || entityId == null) {
+            return;
+        }
+        String normalizedEntityType = entityType.toUpperCase();
+        log.info("Deleting translations for entityType={}, entityId={}", normalizedEntityType, entityId);
+        translationRepository.deleteByEntityTypeAndEntityId(normalizedEntityType, entityId);
+    }
 }

@@ -18,14 +18,8 @@ public class FreezeTerms {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "html_content_az", nullable = false, columnDefinition = "TEXT")
-    private String htmlContentAz = "";
-
-    @Column(name = "html_content_en", nullable = false, columnDefinition = "TEXT")
-    private String htmlContentEn = "";
-
-    @Column(name = "html_content_ru", nullable = false, columnDefinition = "TEXT")
-    private String htmlContentRu = "";
+    @Column(name = "html_content", nullable = false, columnDefinition = "TEXT")
+    private String htmlContent = "";
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
