@@ -255,13 +255,17 @@ public class UserSubscriptionService {
                         .toList();
             }
 
-            String durationLabel = translationService.getTranslatedValue("DURATION", duration.toString(), "label",
-                    lang);
-            if (durationLabel == null || durationLabel.isEmpty())
-                durationLabel = duration + " ay";
-
             Integer bonusMonths = subscription.getBonusMonths() != null ? subscription.getBonusMonths() : 0;
             Integer paidDurationMonths = subscription.getPaidDurationMonths() != null ? subscription.getPaidDurationMonths() : duration;
+            // durationMonths/durationLabel describe the PAID subscription (e.g. 3 months);
+            // the gift is exposed separately via bonusMonths/totalMonths ("+1m gift"),
+            // so the UI never merges them into a single total (e.g. "4 months").
+            Integer displayDuration = paidDurationMonths;
+            String durationLabel = translationService.getTranslatedValue("DURATION", displayDuration.toString(), "label",
+                    lang);
+            if (durationLabel == null || durationLabel.isEmpty())
+                durationLabel = displayDuration + " ay";
+
             Integer totalMonths = paidDurationMonths + bonusMonths;
             
             // Build campaign label if campaign_id is present and bonus_months > 0
@@ -283,7 +287,7 @@ public class UserSubscriptionService {
                     .subscriptionId(subscription.getSubscriptionId())
                     .packageId(pkg.getId().toString())
                     .packageName(localizedPackageName)
-                    .durationMonths(duration)
+                    .durationMonths(displayDuration)
                     .durationLabel(durationLabel)
                     .effectivePrice(effectivePrice)
                     .currency(pkg.getCurrency())
@@ -374,10 +378,17 @@ public class UserSubscriptionService {
             }
         }
 
+        // planDurationMonths is the PAID duration (gift reported via bonusMonths);
+        // never derive it from start/end (that range includes bonus months).
+        if (durationMonths == null && subscription.getPaidDurationMonths() != null) {
+            durationMonths = subscription.getPaidDurationMonths();
+        }
         if (durationMonths == null && subscription.getStartAt() != null && subscription.getEndAt() != null) {
             long months = java.time.temporal.ChronoUnit.MONTHS.between(
                     subscription.getStartAt(), subscription.getEndAt());
-            durationMonths = months <= 0 ? 1 : (int) months;
+            int total = months <= 0 ? 1 : (int) months;
+            int bonus = subscription.getBonusMonths() != null ? subscription.getBonusMonths() : 0;
+            durationMonths = Math.max(1, total - bonus);
         }
 
         String status = subscription.getStatus() == null
