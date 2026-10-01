@@ -34,7 +34,39 @@ public class TranslationServiceImpl implements TranslationService {
 
     @Override
     public String getTranslatedValue(String entityType, String entityId, String fieldName, String languageCode) {
-        if (languageCode == null || languageCode.equalsIgnoreCase("AZ")) {
+        if (languageCode == null) {
+            languageCode = "AZ";
+        }
+        
+        if (languageCode.equalsIgnoreCase("AZ")) {
+            // For AZ, try to load from translations table directly
+            String existingValue = translationRepository.findFirstByEntityTypeAndEntityIdAndLanguageCodeAndFieldName(
+                            entityType.toUpperCase(),
+                            entityId,
+                            "AZ",
+                            fieldName)
+                    .map(Translation::getFieldValue)
+                    .orElse(null);
+            if (existingValue != null && !existingValue.trim().isEmpty()) {
+                return existingValue;
+            }
+            // Fallback: For FREEZE_TERMS, fetch base content from entity directly
+            if ("FREEZE_TERMS".equalsIgnoreCase(entityType)) {
+                try {
+                    Class<?> entityClass = translationEntityResolver.getEntityClass(entityType);
+                    if (entityClass != null) {
+                        Object entity = entityManager.find(entityClass, Long.parseLong(entityId));
+                        if (entity != null) {
+                            String baseContent = translationEntityResolver.extractFieldValue(entity, fieldName);
+                            if (baseContent != null && !baseContent.trim().isEmpty()) {
+                                return baseContent;
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to fetch AZ base content for FREEZE_TERMS: {}", e.getMessage());
+                }
+            }
             return null;
         }
 
@@ -178,6 +210,10 @@ public class TranslationServiceImpl implements TranslationService {
         log.info("Starting auto-translation process for entityType={}, entityId={}, fieldName={}, originalValueAz='{}'", 
             entityType, entityId, fieldName, originalValueAz);
 
+        // Persist the original AZ value so getTranslatedValue("AZ") returns it
+        // instead of falling back to hardcoded defaults.
+        saveOrUpdateTranslation(entityType, entityId, "AZ", fieldName, originalValueAz);
+
         // Translate to EN
         String enValue = translateText(originalValueAz, "en");
         if (enValue != null && !enValue.trim().isEmpty()) {
@@ -292,5 +328,29 @@ public class TranslationServiceImpl implements TranslationService {
                 log.error("Retry update failed: {}", retryEx.getMessage());
             }
         }
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void deleteByEntityTypeAndEntityId(String entityType, String entityId) {
+        if (entityType == null || entityId == null) {
+            return;
+        }
+        String normalizedEntityType = entityType.toUpperCase();
+        log.info("Deleting translations for entityType={}, entityId={}", normalizedEntityType, entityId);
+        translationRepository.deleteByEntityTypeAndEntityId(normalizedEntityType, entityId);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void saveTranslation(String entityType, String entityId, String languageCode, String fieldName, String fieldValue) {
+        if (entityType == null || entityId == null || languageCode == null || fieldName == null) {
+            return;
+        }
+        String normalizedEntityType = entityType.toUpperCase();
+        String normalizedLanguageCode = languageCode.toUpperCase();
+        log.info("Saving translation: entityType={}, entityId={}, languageCode={}, fieldName={}", 
+            normalizedEntityType, entityId, normalizedLanguageCode, fieldName);
+        saveOrUpdateTranslation(normalizedEntityType, entityId, normalizedLanguageCode, fieldName, fieldValue);
     }
 }

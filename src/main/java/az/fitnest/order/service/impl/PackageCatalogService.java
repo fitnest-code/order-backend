@@ -16,13 +16,17 @@ import az.fitnest.order.model.entity.PackageOption;
 import az.fitnest.order.model.entity.PlanBenefit;
 import az.fitnest.order.model.entity.SubscriptionPackage;
 import az.fitnest.order.repository.SubscriptionPackageRepository;
+import az.fitnest.order.service.CampaignEligibilityService;
 import az.fitnest.order.service.TranslationService;
 import az.fitnest.order.util.UserContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -42,6 +46,7 @@ public class PackageCatalogService {
     private final SubscriptionPackageRepository packageRepository;
     private final TranslationService translationService;
     private final CatalogServiceGrpcClient catalogServiceGrpcClient;
+    private final az.fitnest.order.service.CampaignEligibilityService campaignEligibilityService;
 
     @Transactional(readOnly = true)
     public PackageListResponse getAllPackages(boolean activeOnly) {
@@ -66,9 +71,10 @@ public class PackageCatalogService {
     }
 
     @Transactional(readOnly = true)
-    @org.springframework.cache.annotation.Cacheable(
+    @Cacheable(
             value = "subscription-packages-public",
-            key = "{#order, T(az.fitnest.order.util.UserContext).getCurrentLanguage()}"
+            key = "{#order, T(az.fitnest.order.util.UserContext).getCurrentLanguage(), T(java.time.LocalDate).now(T(java.time.ZoneId).of('Asia/Baku'))}",
+            unless = "T(az.fitnest.order.util.UserContext).getCurrentUserId() != null"
     )
     public PackagePlanListResponse getUniquePlans(String order) {
         List<SubscriptionPackage> packages = packageRepository.findAllOrdered();
@@ -211,15 +217,36 @@ public class PackageCatalogService {
                         .collect(Collectors.toList()) :
                 List.of();
 
+        Long userId = null;
+        try {
+            userId = UserContext.getCurrentUserId();
+        } catch (Exception ignored) {}
+
+        az.fitnest.order.dto.BonusDecision decision = campaignEligibilityService.resolve(
+                userId, pkg.getId(), option.getDurationMonths(), az.fitnest.order.dto.PurchaseKind.NEW_PURCHASE, null);
+
+        BigDecimal strikeThroughTotal = (discount != null && base != null && discount.compareTo(base) < 0) ? base : null;
+        BigDecimal savingsAmount = (discount != null && base != null && base.subtract(discount).compareTo(BigDecimal.ZERO) > 0) ? base.subtract(discount) : null;
+        BigDecimal monthlyEquivalent = (effective != null && option.getDurationMonths() != null && option.getDurationMonths() > 0)
+                ? effective.divide(BigDecimal.valueOf(option.getDurationMonths()), 2, java.math.RoundingMode.HALF_UP)
+                : null;
+
         return PackageOptionDto.builder()
                 .optionId(option.getId())
                 .durationMonths(option.getDurationMonths())
                 .durationLabel(getDurationLabel(option.getDurationMonths(), lang))
                 .price(priceDto)
-                .badge(badge)
+                .badge(decision.isApplied() ? "campaign" : badge)
                 .visitLimit(option.getEntryLimit() != null ? option.getEntryLimit() : (pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0))
                 .freezeDays(0)
                 .benefits(benefits)
+                .bonusMonths(decision.getBonusMonths())
+                .totalMonths(decision.getTotalMonths())
+                .campaignId(decision.getCampaignId())
+                .campaignLabel(decision.getCampaignLabel())
+                .strikeThroughTotal(strikeThroughTotal)
+                .savingsAmount(savingsAmount)
+                .monthlyEquivalent(monthlyEquivalent)
                 .build();
     }
 

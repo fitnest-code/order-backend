@@ -74,6 +74,10 @@ public class FreezeFinalizeService {
         if (subOpt.isPresent()) {
             Subscription sub = subOpt.get();
             sub.setStatus("ACTIVE");
+            if (sub.getEndAt() != null && sub.getPaidUntil() != null) {
+                long deltaSeconds = (long) requestedDays * 86400L;
+                sub.setPaidUntil(sub.getPaidUntil().plusSeconds(deltaSeconds));
+            }
             sub.setEndAt(newEndAt);
             sub.setFrozenAt(null);
             sub.setUnfreezesAt(null);

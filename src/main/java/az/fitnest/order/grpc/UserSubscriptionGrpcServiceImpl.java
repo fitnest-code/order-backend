@@ -144,11 +144,15 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
                 .planId(request.getPlanId())
                 .optionId(request.getOptionId())
                 .autoPaymentEnabled(request.getAutoPaymentEnabled())
+                .applyCampaign(true)
                 .build();
             var result = subscriptionService.assignSubscriptionToUser(assignRequest);
             az.fitnest.order.grpc.AssignSubscriptionToUserResponse response = az.fitnest.order.grpc.AssignSubscriptionToUserResponse.newBuilder()
                 .setSubscriptionId(result.subscriptionId())
                 .setUserId(result.userId())
+                .setBonusMonths(result.bonusMonths() != null ? result.bonusMonths() : 0)
+                .setCampaignApplied(Boolean.TRUE.equals(result.campaignApplied()))
+                .setCampaignId(result.campaignId() != null ? result.campaignId() : 0L)
                 .build();
             log.info("[gRPC] Successfully assigned subscription: subscriptionId={}, userId={}, planId={}, optionId={}", result.subscriptionId(), result.userId(), request.getPlanId(), request.getOptionId());
             responseObserver.onNext(response);
@@ -245,6 +249,9 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
                     : "SYSTEM";
             if (request.getSubscriptionId() > 0) {
                 freezeFinalizeService.terminateActive(request.getSubscriptionId(), reason);
+                if ("PAYMENT_REFUND_CANCEL".equalsIgnoreCase(reason)) {
+                    subscriptionService.revokeCampaignBonusForRefund(request.getSubscriptionId(), null);
+                }
             } else if (request.getUserId() > 0) {
                 Long userId = request.getUserId();
                 // Indexed (user_id, status) lookup — avoid loading full history
@@ -255,6 +262,9 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
                         .forEach(subId -> freezeFinalizeService.terminateActive(subId, reason));
                 subscriptionRepository.findByUserIdAndStatus(userId, "FROZEN")
                         .forEach(sub -> freezeFinalizeService.terminateActive(sub.getSubscriptionId(), reason));
+                if ("PAYMENT_REFUND_CANCEL".equalsIgnoreCase(reason)) {
+                    subscriptionService.revokeCampaignBonusForRefund(null, userId);
+                }
             } else {
                 responseObserver.onError(io.grpc.Status.INVALID_ARGUMENT
                         .withDescription("subscription_id or user_id required")

@@ -18,5 +18,6 @@ public record FreezeRecordDto(
         LocalDateTime expiryAfter,
         FreezeStatus status,
         String endedBy,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String subscriptionName
 ) {}
