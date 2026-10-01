@@ -49,6 +49,7 @@ public class UserSubscriptionService {
     private final az.fitnest.order.service.CampaignEligibilityService campaignEligibilityService;
     private final az.fitnest.order.repository.UserCampaignRedemptionRepository userCampaignRedemptionRepository;
     private final az.fitnest.order.repository.CampaignOfferRepository campaignOfferRepository;
+    private final az.fitnest.order.repository.CampaignRepository campaignRepository;
 
     @Transactional
     public boolean checkIn(Long userId, Long gymId, boolean consumeFrozen) {
@@ -223,8 +224,8 @@ public class UserSubscriptionService {
                         ? matchedOption.getPriceDiscounted()
                         : matchedOption.getPriceStandard();
             }
-            az.fitnest.order.model.entity.SubscriptionFreezeEntitlement entitlement = freezeEntitlementService
-                    .getBySubscriptionId(subscription.getSubscriptionId()).orElse(null);
+            var entitlementOpt = freezeEntitlementService != null ? freezeEntitlementService.getBySubscriptionId(subscription.getSubscriptionId()) : null;
+            az.fitnest.order.model.entity.SubscriptionFreezeEntitlement entitlement = entitlementOpt != null ? entitlementOpt.orElse(null) : null;
             int totalFreezeDays     = entitlement != null ? entitlement.getTotalDays()    : 0;
             int consumedFreezeDays  = entitlement != null ? entitlement.getConsumedDays() : 0;
             int reservedFreezeDays  = entitlement != null ? entitlement.getReservedDays() : 0;
@@ -436,12 +437,25 @@ public class UserSubscriptionService {
             if (confirmTitle == null || confirmTitle.isBlank()) confirmTitle = subscription.getBonusMonths() + " ay hədiyyə";
             String confirmBody = translationService.getTranslatedValue("CAMPAIGN", idStr, "confirmBody", lang);
             if (confirmBody == null || confirmBody.isBlank()) confirmBody = "Oktyabr kampaniyasından abunəliyiniz " + subscription.getBonusMonths() + " ay uzadılacaq";
-            confirmBody = confirmBody.replace("{bonusMonths}", subscription.getBonusMonths().toString());
+            String campaignStatus = "EXPIRED";
+            if (subscription.getCampaignId() != null && campaignRepository != null) {
+                Optional<az.fitnest.order.model.entity.Campaign> campaignOpt = campaignRepository.findById(subscription.getCampaignId());
+                if (campaignOpt.isPresent()) {
+                    az.fitnest.order.model.entity.Campaign campaign = campaignOpt.get();
+                    LocalDateTime bakuNow = campaignEligibilityService != null ? campaignEligibilityService.getBakuNow() : LocalDateTime.now();
+                    boolean isActive = campaign.getStatus() == az.fitnest.order.model.entity.CampaignStatus.ACTIVE
+                            && (campaign.getStartAt() == null || !bakuNow.isBefore(campaign.getStartAt()))
+                            && (campaign.getEndAt() == null || !bakuNow.isAfter(campaign.getEndAt()));
+                    campaignStatus = isActive ? "ACTIVE" : "EXPIRED";
+                }
+            }
+
             return az.fitnest.order.dto.CampaignConfirmationBannerDto.builder()
                     .campaignId(subscription.getCampaignId())
                     .bonusMonths(subscription.getBonusMonths())
                     .title(confirmTitle)
                     .body(confirmBody)
+                    .campaignStatus(campaignStatus)
                     .build();
         }
         return null;
@@ -1191,20 +1205,22 @@ public class UserSubscriptionService {
     }
 
     private void checkLazyFinalize(Subscription subscription) {
-        if (subscription != null && "FROZEN".equalsIgnoreCase(subscription.getStatus())) {
-            subscriptionFreezeRepository.findBySubscriptionIdAndStatus(subscription.getSubscriptionId(), az.fitnest.order.model.enums.FreezeStatus.ACTIVE)
-                    .ifPresent(activeFreeze -> {
-                        if (activeFreeze.getPlanEndAt() != null && !activeFreeze.getPlanEndAt().isAfter(LocalDateTime.now())) {
-                            log.info("Lazy-completing expired freeze id={} for subscriptionId={}", activeFreeze.getId(), subscription.getSubscriptionId());
-                            freezeFinalizeService.complete(activeFreeze);
-                            subscriptionRepository.findById(subscription.getSubscriptionId()).ifPresent(updated -> {
-                                subscription.setStatus(updated.getStatus());
-                                subscription.setEndAt(updated.getEndAt());
-                                subscription.setFrozenAt(updated.getFrozenAt());
-                                subscription.setUnfreezesAt(updated.getUnfreezesAt());
-                            });
-                        }
-                    });
+        if (subscription != null && "FROZEN".equalsIgnoreCase(subscription.getStatus()) && subscriptionFreezeRepository != null) {
+            var activeFreezeOpt = subscriptionFreezeRepository.findBySubscriptionIdAndStatus(subscription.getSubscriptionId(), az.fitnest.order.model.enums.FreezeStatus.ACTIVE);
+            if (activeFreezeOpt != null) {
+                activeFreezeOpt.ifPresent(activeFreeze -> {
+                    if (activeFreeze.getPlanEndAt() != null && !activeFreeze.getPlanEndAt().isAfter(LocalDateTime.now())) {
+                        log.info("Lazy-completing expired freeze id={} for subscriptionId={}", activeFreeze.getId(), subscription.getSubscriptionId());
+                        freezeFinalizeService.complete(activeFreeze);
+                        subscriptionRepository.findById(subscription.getSubscriptionId()).ifPresent(updated -> {
+                            subscription.setStatus(updated.getStatus());
+                            subscription.setEndAt(updated.getEndAt());
+                            subscription.setFrozenAt(updated.getFrozenAt());
+                            subscription.setUnfreezesAt(updated.getUnfreezesAt());
+                        });
+                    }
+                });
+            }
         }
     }
 }

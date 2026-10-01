@@ -84,6 +84,7 @@ class UserSubscriptionServiceCampaignTest {
 
     private SubscriptionPackage pkgWithOption(long optionId, int durationMonths) {
         SubscriptionPackage p = new SubscriptionPackage();
+        p.setId(5L);
         p.setName("Premium");
         p.setIsActive(true);
         p.setEntryLimit(20);
@@ -141,7 +142,7 @@ class UserSubscriptionServiceCampaignTest {
                 subscriptionEventPublisher, translationService, paymentGrpcClient, notificationGrpcClient,
                 entityManager, freezeEntitlementService, freezeTierPolicyProvider, subscriptionFreezeService,
                 subscriptionFreezeRepository, freezeFinalizeService,
-                realCampaignService, userCampaignRedemptionRepository, campaignOfferRepository);
+                realCampaignService, userCampaignRedemptionRepository, campaignOfferRepository, campaignRepository);
     }
 
     private Subscription campaignSubscription(long id, Long campaignId, LocalDateTime paidUntil,
@@ -473,6 +474,32 @@ class UserSubscriptionServiceCampaignTest {
     }
 
     // ------------------------------------------------------------------
+
+    @Test
+    void getActiveSubscription_includesCampaignStatusInBanner() {
+        Subscription sub = campaignSubscription(10L, 1L, LocalDateTime.of(2026, 11, 1, 0, 0),
+                LocalDateTime.of(2026, 12, 1, 0, 0), 1);
+        when(subscriptionRepository.findAllByUserIdOrderByStartAtDesc(100L))
+                .thenReturn(List.of(sub));
+        when(packageRepository.findFullById(5L)).thenReturn(Optional.of(pkg));
+        when(campaignEligibilityService.getBakuNow()).thenReturn(LocalDateTime.of(2026, 10, 15, 12, 0));
+
+        when(freezeEntitlementService.getBySubscriptionId(anyLong())).thenReturn(Optional.empty());
+        Campaign activeCampaign = campaign();
+        when(campaignRepository.findById(1L)).thenReturn(Optional.of(activeCampaign));
+
+        az.fitnest.order.dto.ActiveSubscriptionResponse resp = service.getActiveSubscription(100L);
+
+        assertNotNull(resp);
+        assertNotNull(resp.subscription());
+        assertNotNull(resp.subscription().getCampaignConfirmationBanner());
+        assertEquals("ACTIVE", resp.subscription().getCampaignConfirmationBanner().getCampaignStatus());
+
+        // Now test expired campaign
+        activeCampaign.setStatus(CampaignStatus.EXPIRED);
+        az.fitnest.order.dto.ActiveSubscriptionResponse respExpired = service.getActiveSubscription(100L);
+        assertEquals("EXPIRED", respExpired.subscription().getCampaignConfirmationBanner().getCampaignStatus());
+    }
 
     private Campaign campaign() {
         Campaign c = new Campaign();
