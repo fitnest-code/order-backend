@@ -436,7 +436,7 @@ public class UserSubscriptionService {
             String confirmTitle = translationService.getTranslatedValue("CAMPAIGN", idStr, "confirmTitle", lang);
             if (confirmTitle == null || confirmTitle.isBlank()) confirmTitle = subscription.getBonusMonths() + " ay hədiyyə";
             String confirmBody = translationService.getTranslatedValue("CAMPAIGN", idStr, "confirmBody", lang);
-            if (confirmBody == null || confirmBody.isBlank()) confirmBody = "Oktyabr kampaniyasından abunəliyiniz " + subscription.getBonusMonths() + " ay uzadılacaq";
+            if (confirmBody == null || confirmBody.isBlank()) confirmBody = "Kampaniya üzrə abunəlik müddətinə " + subscription.getBonusMonths() + " ay əlavə edildi";
             String campaignStatus = "EXPIRED";
             if (subscription.getCampaignId() != null && campaignRepository != null) {
                 Optional<az.fitnest.order.model.entity.Campaign> campaignOpt = campaignRepository.findById(subscription.getCampaignId());
