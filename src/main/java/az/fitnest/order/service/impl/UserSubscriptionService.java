@@ -742,7 +742,15 @@ public class UserSubscriptionService {
         LocalDateTime paidUntil = now.plusMonths(option.getDurationMonths());
         LocalDateTime endAt = now.plusMonths(option.getDurationMonths() + decision.getBonusMonths());
 
-        Integer entryLimit = option.getEntryLimit() != null ? option.getEntryLimit() : pkg.getEntryLimit();
+        Integer baseLimit = option.getEntryLimit() != null ? option.getEntryLimit() : pkg.getEntryLimit();
+        // October campaign: bonus months add visits at the same monthly rate
+        // (e.g. 3-month plan with 36 visits + 1 bonus month = 48 total).
+        Integer entryLimit = baseLimit;
+        if (baseLimit != null && option.getDurationMonths() != null && option.getDurationMonths() > 0
+                && decision.getBonusMonths() > 0) {
+            int monthlyRate = baseLimit / option.getDurationMonths();
+            entryLimit = baseLimit + monthlyRate * decision.getBonusMonths();
+        }
         Integer freezeDays = 0;
 
         Subscription subscription = new Subscription();
