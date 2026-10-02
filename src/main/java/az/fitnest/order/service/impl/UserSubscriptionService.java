@@ -437,6 +437,11 @@ public class UserSubscriptionService {
             if (confirmTitle == null || confirmTitle.isBlank()) confirmTitle = subscription.getBonusMonths() + " ay hədiyyə";
             String confirmBody = translationService.getTranslatedValue("CAMPAIGN", idStr, "confirmBody", lang);
             if (confirmBody == null || confirmBody.isBlank()) confirmBody = "Kampaniya üzrə abunəlik müddətinə " + subscription.getBonusMonths() + " ay əlavə edildi";
+            // Templates carry a {bonusMonths} placeholder (AZ/EN/RU) — always resolve it
+            // so mobile receives ready text (e.g. "1 ay hədiyyə"), never raw braces.
+            String bonusStr = subscription.getBonusMonths().toString();
+            confirmTitle = confirmTitle.replace("{bonusMonths}", bonusStr);
+            confirmBody = confirmBody.replace("{bonusMonths}", bonusStr);
             String campaignStatus = "EXPIRED";
             if (subscription.getCampaignId() != null && campaignRepository != null) {
                 Optional<az.fitnest.order.model.entity.Campaign> campaignOpt = campaignRepository.findById(subscription.getCampaignId());
