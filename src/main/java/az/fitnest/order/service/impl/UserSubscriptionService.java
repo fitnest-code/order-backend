@@ -270,15 +270,7 @@ public class UserSubscriptionService {
             Integer totalMonths = paidDurationMonths + bonusMonths;
             
             // Build campaign label if campaign_id is present and bonus_months > 0
-            String campaignLabel = null;
-            if (subscription.getCampaignId() != null && bonusMonths > 0) {
-                Long offerId = campaignOfferRepository.findByCampaignIdAndBaseDurationMonths(subscription.getCampaignId(), paidDurationMonths)
-                        .map(CampaignOffer::getId)
-                        .orElse(null);
-                if (offerId != null) {
-                    campaignLabel = translationService.getTranslatedValue("CAMPAIGNOFFER", offerId.toString(), "label", lang);
-                }
-            }
+            String campaignLabel = resolveCampaignLabel(subscription.getCampaignId(), paidDurationMonths, bonusMonths, lang);
             
             LocalDate nextPaymentDueAt = subscription.getPaidUntil() != null ? subscription.getPaidUntil().toLocalDate() : (subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null);
             LocalDate serviceEndAt = subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null;
@@ -400,16 +392,7 @@ public class UserSubscriptionService {
         Integer paidDurationMonths = subscription.getPaidDurationMonths() != null ? subscription.getPaidDurationMonths() : durationMonths;
         Integer totalMonths = (paidDurationMonths != null ? paidDurationMonths : 0) + bonusMonths;
         
-        // Build campaign label if campaign_id is present and bonus_months > 0
-        String campaignLabel = null;
-        if (subscription.getCampaignId() != null && bonusMonths > 0) {
-            Long offerId = campaignOfferRepository.findByCampaignIdAndBaseDurationMonths(subscription.getCampaignId(), paidDurationMonths)
-                    .map(CampaignOffer::getId)
-                    .orElse(null);
-            if (offerId != null) {
-                campaignLabel = translationService.getTranslatedValue("CAMPAIGNOFFER", offerId.toString(), "label", lang);
-            }
-        }
+        String campaignLabel = resolveCampaignLabel(subscription.getCampaignId(), paidDurationMonths, bonusMonths, lang);
         
         LocalDate nextPaymentDueAt = subscription.getPaidUntil() != null ? subscription.getPaidUntil().toLocalDate() : (subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null);
         LocalDate serviceEndAt = subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null;
@@ -427,6 +410,16 @@ public class UserSubscriptionService {
                 .serviceEndAt(serviceEndAt)
                 .campaignConfirmationBanner(confirmationBanner)
                 .build();
+    }
+
+    private String resolveCampaignLabel(Long campaignId, Integer paidDurationMonths, Integer bonusMonths, String lang) {
+        if (campaignId == null || bonusMonths == null || bonusMonths <= 0 || paidDurationMonths == null) {
+            return null;
+        }
+        return campaignOfferRepository.findByCampaignIdAndBaseDurationMonths(campaignId, paidDurationMonths)
+                .map(CampaignOffer::getId)
+                .map(offerId -> translationService.getTranslatedValue("CAMPAIGNOFFER", offerId.toString(), "label", lang))
+                .orElse(null);
     }
 
     private az.fitnest.order.dto.CampaignConfirmationBannerDto buildConfirmationBanner(Subscription subscription, String lang) {

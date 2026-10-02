@@ -21,6 +21,15 @@ public class TranslationServiceImpl implements TranslationService {
 
     private final TranslationRepository translationRepository;
     private static final Logger log = LoggerFactory.getLogger(TranslationServiceImpl.class);
+    // Reused across translate calls: avoids per-call socket churn and mapper setup cost.
+    private static final RestTemplate GOOGLE_REST_TEMPLATE = buildGoogleRestTemplate();
+    private static final ObjectMapper GOOGLE_RESPONSE_MAPPER = new ObjectMapper();
+
+    private static RestTemplate buildGoogleRestTemplate() {
+        RestTemplate restTemplate = new RestTemplate();
+        restTemplate.getMessageConverters().add(0, new org.springframework.http.converter.StringHttpMessageConverter(java.nio.charset.StandardCharsets.UTF_8));
+        return restTemplate;
+    }
 
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager entityManager;
@@ -34,6 +43,9 @@ public class TranslationServiceImpl implements TranslationService {
 
     @Override
     public String getTranslatedValue(String entityType, String entityId, String fieldName, String languageCode) {
+        if (entityType == null || entityId == null || fieldName == null) {
+            return null;
+        }
         if (languageCode == null) {
             languageCode = "AZ";
         }
@@ -251,8 +263,6 @@ public class TranslationServiceImpl implements TranslationService {
 
     private String translateWithGoogle(String text, String targetLanguage) {
         try {
-            RestTemplate restTemplate = new RestTemplate();
-            restTemplate.getMessageConverters().add(0, new org.springframework.http.converter.StringHttpMessageConverter(java.nio.charset.StandardCharsets.UTF_8));
             URI uri = UriComponentsBuilder
                 .fromUriString("https://translate.googleapis.com/translate_a/single")
                 .queryParam("client", "gtx")
@@ -264,10 +274,9 @@ public class TranslationServiceImpl implements TranslationService {
                 .toUri();
 
             log.info("Google Translate Request [AZ -> {}]: '{}'", targetLanguage.toUpperCase(), text);
-            String response = restTemplate.getForObject(uri, String.class);
+            String response = GOOGLE_REST_TEMPLATE.getForObject(uri, String.class);
             if (response != null) {
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode rootNode = mapper.readTree(response);
+                JsonNode rootNode = GOOGLE_RESPONSE_MAPPER.readTree(response);
                 if (rootNode.isArray() && rootNode.size() > 0) {
                     JsonNode firstArray = rootNode.get(0);
                     if (firstArray.isArray() && firstArray.size() > 0) {

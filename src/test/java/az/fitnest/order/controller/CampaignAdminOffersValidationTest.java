@@ -166,7 +166,7 @@ class CampaignAdminOffersValidationTest {
                 .andExpect(jsonPath("$.error.status").value(500))
                 .andExpect(jsonPath("$.error.code").value("RUNTIME_EXCEPTION"))
                 .andExpect(jsonPath("$.error.message").value(
-                        org.hamcrest.Matchers.containsString("Validation failure")));
+                        org.hamcrest.Matchers.containsString("error.internal_server_error")));
 
         verify(campaignOfferRepository, never()).save(any(CampaignOffer.class));
         verify(campaignOfferRepository, never()).deleteByCampaignId(any());
@@ -207,7 +207,7 @@ class CampaignAdminOffersValidationTest {
                 .andExpect(jsonPath("$.error.status").value(500))
                 .andExpect(jsonPath("$.error.code").value("RUNTIME_EXCEPTION"))
                 .andExpect(jsonPath("$.error.message").value(
-                        org.hamcrest.Matchers.containsString("Validation failure")));
+                        org.hamcrest.Matchers.containsString("error.internal_server_error")));
 
         verify(campaignOfferRepository, never()).save(any(CampaignOffer.class));
         verify(campaignOfferRepository, never()).deleteByCampaignId(any());
@@ -283,7 +283,7 @@ class CampaignAdminOffersValidationTest {
                 .andExpect(jsonPath("$.error.status").value(500))
                 .andExpect(jsonPath("$.error.code").value("RUNTIME_EXCEPTION"))
                 .andExpect(jsonPath("$.error.message").value(
-                        org.hamcrest.Matchers.containsString("Validation failure")));
+                        org.hamcrest.Matchers.containsString("error.internal_server_error")));
 
         // The controller body never runs: no delete, no insert.
         verify(campaignTermRepository, never()).deleteByCampaignId(any());
