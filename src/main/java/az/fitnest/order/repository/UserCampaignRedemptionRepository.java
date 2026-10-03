@@ -9,6 +9,7 @@ import java.util.Optional;
 @Repository
 public interface UserCampaignRedemptionRepository extends JpaRepository<UserCampaignRedemption, Long> {
     boolean existsByUserIdAndCampaignId(Long userId, Long campaignId);
+    void deleteByUserId(Long userId);
     Optional<UserCampaignRedemption> findByUserIdAndCampaignId(Long userId, Long campaignId);
     Optional<UserCampaignRedemption> findBySubscriptionId(Long subscriptionId);
     void deleteBySubscriptionId(Long subscriptionId);

@@ -1,8 +1,10 @@
 package az.fitnest.order.event;
 
+import az.fitnest.order.repository.CampaignImpressionRepository;
 import az.fitnest.order.repository.GymVisitRepository;
 import az.fitnest.order.repository.OrderRepository;
 import az.fitnest.order.repository.SubscriptionRepository;
+import az.fitnest.order.repository.UserCampaignRedemptionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +22,8 @@ public class OrderEventListener {
     private final SubscriptionRepository subscriptionRepository;
     private final OrderRepository orderRepository;
     private final GymVisitRepository gymVisitRepository;
+    private final UserCampaignRedemptionRepository userCampaignRedemptionRepository;
+    private final CampaignImpressionRepository campaignImpressionRepository;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "user-events", groupId = "order-user-events-group")
@@ -32,7 +36,9 @@ public class OrderEventListener {
             if ("USER_HARD_DELETED".equals(eventType) && userIdObj != null) {
                 Long userId = parseUserId(userIdObj);
                 if (userId != null) {
-                    log.warn("Received USER_HARD_DELETED event for userId: {}. Deleting subscriptions, orders, and gym visits.", userId);
+                    log.warn("Received USER_HARD_DELETED event for userId: {}. Deleting subscriptions, orders, gym visits, campaign redemptions and impressions.", userId);
+                    userCampaignRedemptionRepository.deleteByUserId(userId);
+                    campaignImpressionRepository.deleteByUserId(userId);
                     subscriptionRepository.deleteByUserId(userId);
                     orderRepository.deleteByUserId(userId);
                     gymVisitRepository.deleteByUserId(userId);

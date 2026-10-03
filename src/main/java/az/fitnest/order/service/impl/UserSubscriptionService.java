@@ -2,9 +2,11 @@ package az.fitnest.order.service.impl;
 
 import az.fitnest.order.dto.ActiveSubscriptionResponse;
 import az.fitnest.order.dto.SubscriptionDetailsDto;
+import az.fitnest.order.model.entity.CampaignOffer;
 import az.fitnest.order.model.entity.PackageOption;
 import az.fitnest.order.model.entity.SubscriptionPackage;
 import az.fitnest.order.model.entity.Subscription;
+import az.fitnest.order.repository.CampaignOfferRepository;
 import az.fitnest.order.repository.SubscriptionPackageRepository;
 import az.fitnest.order.repository.SubscriptionRepository;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +48,8 @@ public class UserSubscriptionService {
     private final az.fitnest.order.service.freeze.FreezeFinalizeService freezeFinalizeService;
     private final az.fitnest.order.service.CampaignEligibilityService campaignEligibilityService;
     private final az.fitnest.order.repository.UserCampaignRedemptionRepository userCampaignRedemptionRepository;
+    private final az.fitnest.order.repository.CampaignOfferRepository campaignOfferRepository;
+    private final az.fitnest.order.repository.CampaignRepository campaignRepository;
 
     @Transactional
     public boolean checkIn(Long userId, Long gymId, boolean consumeFrozen) {
@@ -220,8 +224,8 @@ public class UserSubscriptionService {
                         ? matchedOption.getPriceDiscounted()
                         : matchedOption.getPriceStandard();
             }
-            az.fitnest.order.model.entity.SubscriptionFreezeEntitlement entitlement = freezeEntitlementService
-                    .getBySubscriptionId(subscription.getSubscriptionId()).orElse(null);
+            var entitlementOpt = freezeEntitlementService != null ? freezeEntitlementService.getBySubscriptionId(subscription.getSubscriptionId()) : null;
+            az.fitnest.order.model.entity.SubscriptionFreezeEntitlement entitlement = entitlementOpt != null ? entitlementOpt.orElse(null) : null;
             int totalFreezeDays     = entitlement != null ? entitlement.getTotalDays()    : 0;
             int consumedFreezeDays  = entitlement != null ? entitlement.getConsumedDays() : 0;
             int reservedFreezeDays  = entitlement != null ? entitlement.getReservedDays() : 0;
@@ -264,6 +268,10 @@ public class UserSubscriptionService {
                 durationLabel = displayDuration + " ay";
 
             Integer totalMonths = paidDurationMonths + bonusMonths;
+            
+            // Build campaign label if campaign_id is present and bonus_months > 0
+            String campaignLabel = resolveCampaignLabel(subscription.getCampaignId(), paidDurationMonths, bonusMonths, lang);
+            
             LocalDate nextPaymentDueAt = subscription.getPaidUntil() != null ? subscription.getPaidUntil().toLocalDate() : (subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null);
             LocalDate serviceEndAt = subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null;
             az.fitnest.order.dto.CampaignConfirmationBannerDto confirmationBanner = buildConfirmationBanner(subscription, lang);
@@ -298,6 +306,7 @@ public class UserSubscriptionService {
                     .paidDurationMonths(paidDurationMonths)
                     .bonusMonths(bonusMonths)
                     .totalMonths(totalMonths)
+                    .campaignLabel(campaignLabel)
                     .nextPaymentDueAt(nextPaymentDueAt)
                     .serviceEndAt(serviceEndAt)
                     .campaignConfirmationBanner(confirmationBanner)
@@ -382,6 +391,9 @@ public class UserSubscriptionService {
         Integer bonusMonths = subscription.getBonusMonths() != null ? subscription.getBonusMonths() : 0;
         Integer paidDurationMonths = subscription.getPaidDurationMonths() != null ? subscription.getPaidDurationMonths() : durationMonths;
         Integer totalMonths = (paidDurationMonths != null ? paidDurationMonths : 0) + bonusMonths;
+        
+        String campaignLabel = resolveCampaignLabel(subscription.getCampaignId(), paidDurationMonths, bonusMonths, lang);
+        
         LocalDate nextPaymentDueAt = subscription.getPaidUntil() != null ? subscription.getPaidUntil().toLocalDate() : (subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null);
         LocalDate serviceEndAt = subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null;
         az.fitnest.order.dto.CampaignConfirmationBannerDto confirmationBanner = buildConfirmationBanner(subscription, lang);
@@ -394,9 +406,20 @@ public class UserSubscriptionService {
                 .paidDurationMonths(paidDurationMonths)
                 .bonusMonths(bonusMonths)
                 .totalMonths(totalMonths)
+                .campaignLabel(campaignLabel)
                 .serviceEndAt(serviceEndAt)
                 .campaignConfirmationBanner(confirmationBanner)
                 .build();
+    }
+
+    private String resolveCampaignLabel(Long campaignId, Integer paidDurationMonths, Integer bonusMonths, String lang) {
+        if (campaignId == null || bonusMonths == null || bonusMonths <= 0 || paidDurationMonths == null) {
+            return null;
+        }
+        return campaignOfferRepository.findByCampaignIdAndBaseDurationMonths(campaignId, paidDurationMonths)
+                .map(CampaignOffer::getId)
+                .map(offerId -> translationService.getTranslatedValue("CAMPAIGNOFFER", offerId.toString(), "label", lang))
+                .orElse(null);
     }
 
     private az.fitnest.order.dto.CampaignConfirmationBannerDto buildConfirmationBanner(Subscription subscription, String lang) {
@@ -406,13 +429,31 @@ public class UserSubscriptionService {
             String confirmTitle = translationService.getTranslatedValue("CAMPAIGN", idStr, "confirmTitle", lang);
             if (confirmTitle == null || confirmTitle.isBlank()) confirmTitle = subscription.getBonusMonths() + " ay hədiyyə";
             String confirmBody = translationService.getTranslatedValue("CAMPAIGN", idStr, "confirmBody", lang);
-            if (confirmBody == null || confirmBody.isBlank()) confirmBody = "Oktyabr kampaniyasından abunəliyiniz " + subscription.getBonusMonths() + " ay uzadılacaq";
-            confirmBody = confirmBody.replace("{bonusMonths}", subscription.getBonusMonths().toString());
+            if (confirmBody == null || confirmBody.isBlank()) confirmBody = "Kampaniya üzrə abunəlik müddətinə " + subscription.getBonusMonths() + " ay əlavə edildi";
+            // Templates carry a {bonusMonths} placeholder (AZ/EN/RU) — always resolve it
+            // so mobile receives ready text (e.g. "1 ay hədiyyə"), never raw braces.
+            String bonusStr = subscription.getBonusMonths().toString();
+            confirmTitle = confirmTitle.replace("{bonusMonths}", bonusStr);
+            confirmBody = confirmBody.replace("{bonusMonths}", bonusStr);
+            String campaignStatus = "EXPIRED";
+            if (subscription.getCampaignId() != null && campaignRepository != null) {
+                Optional<az.fitnest.order.model.entity.Campaign> campaignOpt = campaignRepository.findById(subscription.getCampaignId());
+                if (campaignOpt.isPresent()) {
+                    az.fitnest.order.model.entity.Campaign campaign = campaignOpt.get();
+                    LocalDateTime bakuNow = campaignEligibilityService != null ? campaignEligibilityService.getBakuNow() : LocalDateTime.now();
+                    boolean isActive = campaign.getStatus() == az.fitnest.order.model.entity.CampaignStatus.ACTIVE
+                            && (campaign.getStartAt() == null || !bakuNow.isBefore(campaign.getStartAt()))
+                            && (campaign.getEndAt() == null || !bakuNow.isAfter(campaign.getEndAt()));
+                    campaignStatus = isActive ? "ACTIVE" : "EXPIRED";
+                }
+            }
+
             return az.fitnest.order.dto.CampaignConfirmationBannerDto.builder()
                     .campaignId(subscription.getCampaignId())
                     .bonusMonths(subscription.getBonusMonths())
                     .title(confirmTitle)
                     .body(confirmBody)
+                    .campaignStatus(campaignStatus)
                     .build();
         }
         return null;
@@ -470,6 +511,65 @@ public class UserSubscriptionService {
         if (!expiredSubs.isEmpty()) {
             log.info("Auto-expired {} subscriptions.", expiredSubs.size());
         }
+    }
+
+    @Scheduled(cron = "0 0 0 1 * ?")
+    @Transactional
+    public void monthlyFreezeRenewal() {
+        LocalDateTime now = LocalDateTime.now();
+        log.info("Starting monthly freeze renewal job at {}", now);
+
+        // Find all ACTIVE subscriptions that are multi-month (duration > 1 month)
+        List<Subscription> activeSubs = subscriptionRepository.findByStatus("ACTIVE");
+        int renewed = 0;
+
+        for (Subscription sub : activeSubs) {
+            if (sub.getOptionId() == null) {
+                continue;
+            }
+
+            // Get the option to check duration
+            var optionOpt = packageRepository.findById(sub.getPackageId())
+                    .flatMap(pkg -> pkg.getOptions().stream()
+                            .filter(o -> o.getId().equals(sub.getOptionId()))
+                            .findFirst());
+
+            if (optionOpt.isEmpty()) {
+                continue;
+            }
+
+            PackageOption option = optionOpt.get();
+            int durationMonths = option.getDurationMonths();
+
+            // Only renew for multi-month subscriptions (3, 6, 12 months)
+            if (durationMonths <= 1) {
+                continue;
+            }
+
+            // Check if subscription is still within its valid period
+            if (sub.getEndAt() != null && sub.getEndAt().isBefore(now)) {
+                continue;
+            }
+
+            // Renew freeze entitlement for this month
+            try {
+                String packageName = packageRepository.findById(sub.getPackageId())
+                        .map(SubscriptionPackage::getName)
+                        .orElse("Bronze");
+                int monthlyAllowance = freezeTierPolicyProvider.getAllowedDays(packageName);
+
+                if (monthlyAllowance > 0) {
+                    freezeEntitlementService.renewMonthly(sub.getSubscriptionId(), monthlyAllowance);
+                    renewed++;
+                    log.debug("Renewed freeze entitlement for subscriptionId={}: added {} days",
+                            sub.getSubscriptionId(), monthlyAllowance);
+                }
+            } catch (Exception e) {
+                log.error("Failed to renew freeze for subscription {}: {}", sub.getSubscriptionId(), e.getMessage());
+            }
+        }
+
+        log.info("Monthly freeze renewal completed. Renewed {} subscriptions.", renewed);
     }
 
     @Scheduled(cron = "0 0 1 * * *")
@@ -640,7 +740,15 @@ public class UserSubscriptionService {
         LocalDateTime paidUntil = now.plusMonths(option.getDurationMonths());
         LocalDateTime endAt = now.plusMonths(option.getDurationMonths() + decision.getBonusMonths());
 
-        Integer entryLimit = option.getEntryLimit() != null ? option.getEntryLimit() : pkg.getEntryLimit();
+        Integer baseLimit = option.getEntryLimit() != null ? option.getEntryLimit() : pkg.getEntryLimit();
+        // October campaign: bonus months add visits at the same monthly rate
+        // (e.g. 3-month plan with 36 visits + 1 bonus month = 48 total).
+        Integer entryLimit = baseLimit;
+        if (baseLimit != null && option.getDurationMonths() != null && option.getDurationMonths() > 0
+                && decision.getBonusMonths() > 0) {
+            int monthlyRate = baseLimit / option.getDurationMonths();
+            entryLimit = baseLimit + monthlyRate * decision.getBonusMonths();
+        }
         Integer freezeDays = 0;
 
         Subscription subscription = new Subscription();
@@ -1103,20 +1211,22 @@ public class UserSubscriptionService {
     }
 
     private void checkLazyFinalize(Subscription subscription) {
-        if (subscription != null && "FROZEN".equalsIgnoreCase(subscription.getStatus())) {
-            subscriptionFreezeRepository.findBySubscriptionIdAndStatus(subscription.getSubscriptionId(), az.fitnest.order.model.enums.FreezeStatus.ACTIVE)
-                    .ifPresent(activeFreeze -> {
-                        if (activeFreeze.getPlanEndAt() != null && !activeFreeze.getPlanEndAt().isAfter(LocalDateTime.now())) {
-                            log.info("Lazy-completing expired freeze id={} for subscriptionId={}", activeFreeze.getId(), subscription.getSubscriptionId());
-                            freezeFinalizeService.complete(activeFreeze);
-                            subscriptionRepository.findById(subscription.getSubscriptionId()).ifPresent(updated -> {
-                                subscription.setStatus(updated.getStatus());
-                                subscription.setEndAt(updated.getEndAt());
-                                subscription.setFrozenAt(updated.getFrozenAt());
-                                subscription.setUnfreezesAt(updated.getUnfreezesAt());
-                            });
-                        }
-                    });
+        if (subscription != null && "FROZEN".equalsIgnoreCase(subscription.getStatus()) && subscriptionFreezeRepository != null) {
+            var activeFreezeOpt = subscriptionFreezeRepository.findBySubscriptionIdAndStatus(subscription.getSubscriptionId(), az.fitnest.order.model.enums.FreezeStatus.ACTIVE);
+            if (activeFreezeOpt != null) {
+                activeFreezeOpt.ifPresent(activeFreeze -> {
+                    if (activeFreeze.getPlanEndAt() != null && !activeFreeze.getPlanEndAt().isAfter(LocalDateTime.now())) {
+                        log.info("Lazy-completing expired freeze id={} for subscriptionId={}", activeFreeze.getId(), subscription.getSubscriptionId());
+                        freezeFinalizeService.complete(activeFreeze);
+                        subscriptionRepository.findById(subscription.getSubscriptionId()).ifPresent(updated -> {
+                            subscription.setStatus(updated.getStatus());
+                            subscription.setEndAt(updated.getEndAt());
+                            subscription.setFrozenAt(updated.getFrozenAt());
+                            subscription.setUnfreezesAt(updated.getUnfreezesAt());
+                        });
+                    }
+                });
+            }
         }
     }
 }

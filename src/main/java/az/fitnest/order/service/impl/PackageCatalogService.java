@@ -16,13 +16,17 @@ import az.fitnest.order.model.entity.PackageOption;
 import az.fitnest.order.model.entity.PlanBenefit;
 import az.fitnest.order.model.entity.SubscriptionPackage;
 import az.fitnest.order.repository.SubscriptionPackageRepository;
+import az.fitnest.order.service.CampaignEligibilityService;
 import az.fitnest.order.service.TranslationService;
 import az.fitnest.order.util.UserContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -67,9 +71,10 @@ public class PackageCatalogService {
     }
 
     @Transactional(readOnly = true)
-    @org.springframework.cache.annotation.Cacheable(
+    @Cacheable(
             value = "subscription-packages-public",
-            key = "{#order, T(az.fitnest.order.util.UserContext).getCurrentLanguage()}"
+            key = "{#order, T(az.fitnest.order.util.UserContext).getCurrentLanguage(), T(java.time.LocalDate).now(T(java.time.ZoneId).of('Asia/Baku'))}",
+            unless = "T(az.fitnest.order.util.UserContext).getCurrentUserId() != null"
     )
     public PackagePlanListResponse getUniquePlans(String order) {
         List<SubscriptionPackage> packages = packageRepository.findAllOrdered();

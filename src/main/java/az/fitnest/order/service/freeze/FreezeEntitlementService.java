@@ -193,4 +193,27 @@ public class FreezeEntitlementService {
         entitlementRepository.save(entitlement);
         log.info("Upgraded entitlement for subscriptionId={}: newTotalDays={}", subId, newTotal);
     }
+
+    /**
+     * Monthly freeze renewal for multi-month subscriptions.
+     * Adds the monthly tier allowance to the entitlement's totalDays.
+     *
+     * @param subscriptionId the subscription to renew
+     * @param monthlyAllowance the monthly freeze days from tier policy
+     */
+    @Transactional
+    public void renewMonthly(Long subscriptionId, int monthlyAllowance) {
+        if (monthlyAllowance <= 0) {
+            return;
+        }
+        SubscriptionFreezeEntitlement entitlement = entitlementRepository
+                .findBySubscriptionIdForUpdate(subscriptionId)
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException(
+                        "error.freeze.no_entitlement"));
+
+        entitlement.setTotalDays(entitlement.getTotalDays() + monthlyAllowance);
+        entitlementRepository.save(entitlement);
+        log.info("Monthly freeze renewal: subscriptionId={}, added {} days, new total={}",
+                subscriptionId, monthlyAllowance, entitlement.getTotalDays());
+    }
 }

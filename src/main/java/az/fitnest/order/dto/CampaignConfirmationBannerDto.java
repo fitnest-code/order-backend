@@ -17,4 +17,6 @@ public class CampaignConfirmationBannerDto {
     private Integer bonusMonths;
     private String title;
     private String body;
+    @JsonProperty("campaign_status")
+    private String campaignStatus;
 }

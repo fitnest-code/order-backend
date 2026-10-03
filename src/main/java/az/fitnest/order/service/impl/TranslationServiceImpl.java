@@ -6,14 +6,7 @@ import az.fitnest.order.service.TranslationService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
-
-import java.net.URI;
 
 @Service
 @RequiredArgsConstructor
@@ -26,15 +19,46 @@ public class TranslationServiceImpl implements TranslationService {
     private jakarta.persistence.EntityManager entityManager;
 
     @org.springframework.beans.factory.annotation.Autowired
-    @org.springframework.context.annotation.Lazy
-    private TranslationServiceImpl self;
-
-    @org.springframework.beans.factory.annotation.Autowired
     private TranslationEntityResolver translationEntityResolver;
 
     @Override
     public String getTranslatedValue(String entityType, String entityId, String fieldName, String languageCode) {
-        if (languageCode == null || languageCode.equalsIgnoreCase("AZ")) {
+        if (entityType == null || entityId == null || fieldName == null) {
+            return null;
+        }
+        if (languageCode == null) {
+            languageCode = "AZ";
+        }
+        
+        if (languageCode.equalsIgnoreCase("AZ")) {
+            // For AZ, try to load from translations table directly
+            String existingValue = translationRepository.findFirstByEntityTypeAndEntityIdAndLanguageCodeAndFieldName(
+                            entityType.toUpperCase(),
+                            entityId,
+                            "AZ",
+                            fieldName)
+                    .map(Translation::getFieldValue)
+                    .orElse(null);
+            if (existingValue != null && !existingValue.trim().isEmpty()) {
+                return existingValue;
+            }
+            // Fallback: For FREEZE_TERMS, fetch base content from entity directly
+            if ("FREEZE_TERMS".equalsIgnoreCase(entityType)) {
+                try {
+                    Class<?> entityClass = translationEntityResolver.getEntityClass(entityType);
+                    if (entityClass != null) {
+                        Object entity = entityManager.find(entityClass, Long.parseLong(entityId));
+                        if (entity != null) {
+                            String baseContent = translationEntityResolver.extractFieldValue(entity, fieldName);
+                            if (baseContent != null && !baseContent.trim().isEmpty()) {
+                                return baseContent;
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to fetch AZ base content for FREEZE_TERMS: {}", e.getMessage());
+                }
+            }
             return null;
         }
 
@@ -119,132 +143,8 @@ public class TranslationServiceImpl implements TranslationService {
             }
         }
 
-        try {
-            String originalValueAz = null;
-            if (entityType != null) {
-                String normType = entityType.toUpperCase();
-                if (normType.equals("PLANBENEFIT")) {
-                    int idx = entityId.indexOf("_");
-                    if (idx != -1) {
-                        originalValueAz = entityId.substring(idx + 1);
-                    }
-                } else {
-                    Class<?> entityClass = translationEntityResolver.getEntityClass(entityType);
-                    if (entityClass != null) {
-                        Object entity = null;
-                        try {
-                            Long longId = Long.parseLong(entityId);
-                            entity = entityManager.find(entityClass, longId);
-                        } catch (NumberFormatException e) {
-                            entity = entityManager.find(entityClass, entityId);
-                        }
-                        if (entity != null) {
-                            originalValueAz = translationEntityResolver.extractFieldValue(entity, fieldName);
-                        }
-                    }
-                }
-            }
-
-            if (originalValueAz != null && !originalValueAz.trim().isEmpty()) {
-                String translatedValue = translateText(originalValueAz, languageCode.toLowerCase());
-                if (translatedValue != null && !translatedValue.trim().isEmpty()) {
-                    self.saveOrUpdateTranslation(entityType, entityId, languageCode, fieldName, translatedValue);
-                    return translatedValue;
-                }
-            }
-        } catch (Exception e) {
-            log.error("Soft fallback translation failed for entityType={}, entityId={}, fieldName={}, lang={}",
-                    entityType, entityId, fieldName, languageCode, e);
-        }
-
-        return null;
-    }
-
-    @Override
-    @Async
-    public void autoTranslateAndSave(String entityType, String entityId, String fieldName, String originalValueAz) {
-        if (entityType != null) {
-            String norm = entityType.toUpperCase();
-            if (norm.equals("PLANBENEFIT") || norm.equals("SUBSCRIPTIONPACKAGE")) {
-                return;
-            }
-        }
-        if (originalValueAz == null || originalValueAz.trim().isEmpty()) {
-            log.warn("Auto-translation skipped: originalValueAz is null or empty for entityType={}, entityId={}, fieldName={}", 
-                entityType, entityId, fieldName);
-            return;
-        }
-
-        log.info("Starting auto-translation process for entityType={}, entityId={}, fieldName={}, originalValueAz='{}'", 
-            entityType, entityId, fieldName, originalValueAz);
-
-        // Translate to EN
-        String enValue = translateText(originalValueAz, "en");
-        if (enValue != null && !enValue.trim().isEmpty()) {
-            log.info("Auto-translated [AZ -> EN] success. Value: '{}'", enValue);
-            saveOrUpdateTranslation(entityType, entityId, "EN", fieldName, enValue);
-        } else {
-            log.warn("Auto-translation [AZ -> EN] returned empty or null value. Using fallback: '{}'", originalValueAz);
-            saveOrUpdateTranslation(entityType, entityId, "EN", fieldName, originalValueAz);
-        }
-
-        // Translate to RU
-        String ruValue = translateText(originalValueAz, "ru");
-        if (ruValue != null && !ruValue.trim().isEmpty()) {
-            log.info("Auto-translated [AZ -> RU] success. Value: '{}'", ruValue);
-            saveOrUpdateTranslation(entityType, entityId, "RU", fieldName, ruValue);
-        } else {
-            log.warn("Auto-translation [AZ -> RU] returned empty or null value. Using fallback: '{}'", originalValueAz);
-            saveOrUpdateTranslation(entityType, entityId, "RU", fieldName, originalValueAz);
-        }
-    }
-
-    private String translateText(String text, String targetLanguage) {
-        try {
-            String googleTranslated = translateWithGoogle(text, targetLanguage);
-            if (googleTranslated != null && !googleTranslated.trim().isEmpty()) {
-                log.info("Translation successful using Google Translate [AZ -> {}]: '{}' -> '{}'", 
-                    targetLanguage.toUpperCase(), text, googleTranslated);
-                return googleTranslated;
-            }
-        } catch (Exception e) {
-            log.error("Google Translate failed. Error: {}", e.getMessage());
-        }
-        return null;
-    }
-
-    private String translateWithGoogle(String text, String targetLanguage) {
-        try {
-            RestTemplate restTemplate = new RestTemplate();
-            restTemplate.getMessageConverters().add(0, new org.springframework.http.converter.StringHttpMessageConverter(java.nio.charset.StandardCharsets.UTF_8));
-            URI uri = UriComponentsBuilder
-                .fromUriString("https://translate.googleapis.com/translate_a/single")
-                .queryParam("client", "gtx")
-                .queryParam("sl", "az")
-                .queryParam("tl", targetLanguage.toLowerCase())
-                .queryParam("dt", "t")
-                .queryParam("q", text)
-                .build()
-                .toUri();
-
-            log.info("Google Translate Request [AZ -> {}]: '{}'", targetLanguage.toUpperCase(), text);
-            String response = restTemplate.getForObject(uri, String.class);
-            if (response != null) {
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode rootNode = mapper.readTree(response);
-                if (rootNode.isArray() && rootNode.size() > 0) {
-                    JsonNode firstArray = rootNode.get(0);
-                    if (firstArray.isArray() && firstArray.size() > 0) {
-                        JsonNode translationPair = firstArray.get(0);
-                        if (translationPair.isArray() && translationPair.size() > 0) {
-                            return translationPair.get(0).asText();
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.error("Google Translation API failed for text '{}' to '{}': {}", text, targetLanguage, e.getMessage());
-        }
+        // Manual translations only: AZ lives on its own entity table, EN/RU live in
+        // the translations table (admin-provided). No machine translation.
         return null;
     }
 
@@ -292,5 +192,29 @@ public class TranslationServiceImpl implements TranslationService {
                 log.error("Retry update failed: {}", retryEx.getMessage());
             }
         }
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void deleteByEntityTypeAndEntityId(String entityType, String entityId) {
+        if (entityType == null || entityId == null) {
+            return;
+        }
+        String normalizedEntityType = entityType.toUpperCase();
+        log.info("Deleting translations for entityType={}, entityId={}", normalizedEntityType, entityId);
+        translationRepository.deleteByEntityTypeAndEntityId(normalizedEntityType, entityId);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void saveTranslation(String entityType, String entityId, String languageCode, String fieldName, String fieldValue) {
+        if (entityType == null || entityId == null || languageCode == null || fieldName == null) {
+            return;
+        }
+        String normalizedEntityType = entityType.toUpperCase();
+        String normalizedLanguageCode = languageCode.toUpperCase();
+        log.info("Saving translation: entityType={}, entityId={}, languageCode={}, fieldName={}", 
+            normalizedEntityType, entityId, normalizedLanguageCode, fieldName);
+        saveOrUpdateTranslation(normalizedEntityType, entityId, normalizedLanguageCode, fieldName, fieldValue);
     }
 }

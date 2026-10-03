@@ -9,4 +9,5 @@ import java.util.Optional;
 @Repository
 public interface CampaignImpressionRepository extends JpaRepository<CampaignImpression, Long> {
     Optional<CampaignImpression> findByUserIdAndCampaignIdAndContext(Long userId, Long campaignId, String context);
+    void deleteByUserId(Long userId);
 }

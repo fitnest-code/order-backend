@@ -238,6 +238,12 @@ public class UpgradeService {
             currentSub.setTotalLimit(targetTotal);
             currentSub.setRemainingLimit(newRemaining);
             currentSub.setEndAt(currentSub.getStartAt().plusMonths(targetOption.getDurationMonths()));
+            // Clear campaign fields on upgrade (per guide D3: bonus only on new assign, not on upgrade)
+            currentSub.setBonusMonths(0);
+            currentSub.setCampaignId(null);
+            currentSub.setPaidUntil(null);
+            currentSub.setPaidDurationMonths(targetOption.getDurationMonths());
+            currentSub.setCampaignBannerDismissedAt(null);
             currentSub.setIsUpgraded(true);
             subscriptionRepository.save(currentSub);
 
