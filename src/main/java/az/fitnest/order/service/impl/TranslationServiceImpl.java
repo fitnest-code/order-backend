@@ -121,6 +121,26 @@ public class TranslationServiceImpl implements TranslationService {
                     }
                 }
                 return entityId;
+            } else if (normType.equals("FREEZE_STATUS") || normType.equals("FREEZESTATUS")) {
+                String status = entityId.toUpperCase();
+                if (languageCode.equalsIgnoreCase("EN")) {
+                    switch (status) {
+                        case "ACTIVE": return "Frozen";
+                        case "COMPLETED": return "Activated";
+                        case "ENDED_EARLY": return "Activated early";
+                        case "TERMINATED": return "Terminated";
+                        default: return entityId;
+                    }
+                } else if (languageCode.equalsIgnoreCase("RU")) {
+                    switch (status) {
+                        case "ACTIVE": return "Заморожен";
+                        case "COMPLETED": return "Активировано";
+                        case "ENDED_EARLY": return "Активировано досрочно";
+                        case "TERMINATED": return "Прекращён";
+                        default: return entityId;
+                    }
+                }
+                return entityId;
             }
         }
 
