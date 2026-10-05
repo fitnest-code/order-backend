@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import az.fitnest.order.util.UserContext;
 import az.fitnest.order.event.SubscriptionEventPublisher;
@@ -892,19 +893,29 @@ public class UserSubscriptionService {
 
     @Transactional
     public void removeAllSubscriptionsOfUser(Long userId) {
-        List<Subscription> allSubs = subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "ACTIVE");
-        allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "FINISHED"));
-        allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "FROZEN"));
-        allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "PENDING"));
-        for (Subscription sub : allSubs) {
-            if (!"CANCELLED".equals(sub.getStatus()) && !"EXPIRED".equals(sub.getStatus())) {
-                freezeFinalizeService.terminateActive(sub.getSubscriptionId(), "REVOKE");
-                sub.setStatus("CANCELLED");
-                sub.setFrozenAt(null);
-                sub.setUnfreezesAt(null);
-                subscriptionRepository.save(sub);
-                subscriptionEventPublisher.publishSubscriptionEvent(userId, "CANCELLED", sub.getSubscriptionId());
+        // Collect candidate IDs with cheap reads first, then lock + mutate each row.
+        // Row-level locking serializes concurrent writers (the auto-finish cron runs every
+        // second, admins may double-submit), so the version check at flush cannot go stale.
+        List<Long> ids = new ArrayList<>();
+        for (String status : List.of("ACTIVE", "FINISHED", "FROZEN", "PENDING")) {
+            subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, status)
+                    .stream().map(Subscription::getSubscriptionId).forEach(ids::add);
+        }
+        for (Long id : ids) {
+            Optional<Subscription> locked = subscriptionRepository.findByIdForUpdate(id);
+            if (locked.isEmpty()) {
+                continue;
             }
+            Subscription sub = locked.get();
+            if ("CANCELLED".equals(sub.getStatus()) || "EXPIRED".equals(sub.getStatus())) {
+                continue;
+            }
+            freezeFinalizeService.terminateActive(sub.getSubscriptionId(), "REVOKE");
+            sub.setStatus("CANCELLED");
+            sub.setFrozenAt(null);
+            sub.setUnfreezesAt(null);
+            subscriptionRepository.save(sub);
+            subscriptionEventPublisher.publishSubscriptionEvent(userId, "CANCELLED", sub.getSubscriptionId());
         }
     }
 
