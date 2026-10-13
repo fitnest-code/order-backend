@@ -31,10 +31,9 @@ public class PromoMobileController {
     public ResponseEntity<Map<String, Object>> popup(
             @RequestHeader(name = "Accept-Language", defaultValue = "az") String lang) {
         MobilePromoPopupResponse popup = eligibilityService.pendingPopup(lang);
-        if (popup == null) {
-            return ResponseEntity.ok(Map.of("popup", null));
-        }
-        return ResponseEntity.ok(Map.of("popup", popup));
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("popup", popup);
+        return ResponseEntity.ok(body);
     }
 
     @PostMapping("/popups/{grantId}/seen")
