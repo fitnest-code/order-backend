@@ -18,4 +18,5 @@ public class AdminPromoCampaignStatsResponse {
     private BigDecimal discountGiven;
     private BigDecimal avgDiscountPerOrder;
     private OffsetDateTime updatedAt;
+    private AdminPromoCampaignFunnelResponse funnel;
 }

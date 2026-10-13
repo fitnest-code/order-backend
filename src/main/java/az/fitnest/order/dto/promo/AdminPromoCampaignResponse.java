@@ -21,7 +21,7 @@ public class AdminPromoCampaignResponse {
     private BigDecimal maxDiscountAmount;
     private String audienceType;
     private List<String> allowedPrefixes;
-    private List<UUID> planIds;
+    private List<String> planIds;
     private List<String> tierCodes;
     private OffsetDateTime startsAt;
     private OffsetDateTime endsAt;

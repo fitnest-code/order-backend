@@ -28,6 +28,8 @@ public class PromoCampaignAdminController {
 
     private final PromoCampaignService campaignService;
     private final PromoPartnerService partnerService;
+    private final az.fitnest.order.service.promo.PromoNumbersQueryService numbersQueryService;
+    private final az.fitnest.order.service.promo.PromoAuditLogService auditLogService;
 
     @GetMapping("/summary")
     @Operation(summary = "KPI summary for A1 campaign list")
@@ -138,18 +140,30 @@ public class PromoCampaignAdminController {
     }
 
     @GetMapping("/{id}/numbers")
-    @Operation(summary = "Paginated numbers")
+    @Operation(summary = "Paginated numbers (masked; reveal needs PROMO_PII_VIEW)")
     public ResponseEntity<AdminPromoCampaignNumbersResponse> numbers(@PathVariable UUID id,
                                                                      @RequestParam(required = false) String phone,
                                                                      @RequestParam(required = false) String status,
                                                                      @RequestParam(defaultValue = "0") int page,
-                                                                     @RequestParam(defaultValue = "50") int size) {
-        return ResponseEntity.ok(campaignService.numbers(id, phone, status, page, size));
+                                                                     @RequestParam(defaultValue = "50") int size,
+                                                                     @RequestParam(defaultValue = "false") boolean reveal) {
+        return ResponseEntity.ok(numbersQueryService.numbers(id, phone, status, page, size, reveal));
+    }
+
+    @GetMapping("/{id}/numbers/{phoneHash}/reveal")
+    @Operation(summary = "Reveal full phone (PROMO_PII_VIEW, logged)")
+    public ResponseEntity<Map<String, String>> revealNumber(@PathVariable UUID id,
+                                                            @PathVariable String phoneHash) {
+        return ResponseEntity.ok(Map.of("phone", numbersQueryService.revealPhone(id, phoneHash)));
     }
 
     @GetMapping("/{id}/export")
     @Operation(summary = "Export campaign CSV (masked phones unless PROMO_PII_VIEW)")
-    public ResponseEntity<String> exportCsv(@PathVariable UUID id) {
+    public ResponseEntity<String> exportCsv(@PathVariable UUID id,
+                                            @RequestParam(defaultValue = "false") boolean reveal) {
+        if (reveal && !az.fitnest.order.util.UserContext.hasAuthority("PROMO_PII_VIEW")) {
+            throw new az.fitnest.order.exception.ForbiddenException("error.forbidden");
+        }
         List<az.fitnest.order.model.entity.promo.PromoGrant> grants = campaignService.exportGrants(id);
         StringBuilder sb = new StringBuilder("status,phone_hash,registered,saw_popup,redeemed_at\n");
         for (var g : grants) {
@@ -160,6 +174,8 @@ public class PromoCampaignAdminController {
                     .append(g.getRedeemedAt() != null ? g.getRedeemedAt().toString() : "")
                     .append('\n');
         }
+        auditLogService.log(az.fitnest.order.util.UserContext.getCurrentUserId(), "EXPORT", "PROMO_CAMPAIGN", id,
+                null, "{\"rows\":" + grants.size() + ",\"reveal\":" + reveal + "}", null, null);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=promo_campaign_export_" + id + ".csv")
                 .contentType(MediaType.parseMediaType("text/csv"))

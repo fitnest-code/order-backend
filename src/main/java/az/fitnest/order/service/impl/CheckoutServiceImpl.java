@@ -52,13 +52,8 @@ public class CheckoutServiceImpl implements CheckoutService {
         BigDecimal payable = baseAmount;
 
         if (request.promoCode() != null && !request.promoCode().isBlank()) {
-            UUID planUuid = null;
-            try {
-                planUuid = UUID.nameUUIDFromBytes(("plan-" + packageId).getBytes());
-            } catch (Exception ignored) {
-            }
             promoCampaignId = promoOrderService.resolveAndReserve(
-                    userId, request.promoCode(), planUuid, payable, orderId);
+                    userId, request.promoCode(), request.package_id(), payable, orderId);
 
             // discount amount from the order's stored campaign (per user, per plan)
             discount = promoOrderService.discountFor(userId, request.promoCode(), baseAmount, option.getId());

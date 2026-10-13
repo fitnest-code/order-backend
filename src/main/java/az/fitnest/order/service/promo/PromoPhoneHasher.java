@@ -17,7 +17,7 @@ import java.util.Base64;
 @Slf4j
 public class PromoPhoneHasher {
 
-    @Value("${promo.hmac.key:changeme-in-production}")
+    @Value("${promo.hmac.key}")
     private String hmacKey;
 
     private static final String HMAC_ALGORITHM = "HmacSHA256";

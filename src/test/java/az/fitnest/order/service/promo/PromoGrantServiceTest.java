@@ -144,8 +144,7 @@ class PromoGrantServiceTest {
         assertEquals(0, grant.getDiscountAmount().compareTo(new BigDecimal("10.00")));
         assertEquals(0, grant.getFinalAmount().compareTo(new BigDecimal("40.00")));
         assertNotNull(grant.getRedeemedAt());
-        assertEquals(5, campaign.getRedeemedCount());
-        verify(campaignRepository).save(campaign);
+        verify(campaignRepository).incrementRedeemedCount(campaignId);
     }
 
     /** Idempotency: redeeming twice does not double count */

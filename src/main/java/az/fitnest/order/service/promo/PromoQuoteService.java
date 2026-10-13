@@ -29,7 +29,7 @@ public class PromoQuoteService {
     private final PromoRateLimitService rateLimitService;
 
     @Transactional
-    public PromoQuoteResponse quote(UUID planId, String promoCode, boolean useFitCoin, String paymentType, BigDecimal planBasePrice) {
+    public PromoQuoteResponse quote(String planId, String promoCode, boolean useFitCoin, String paymentType, BigDecimal planBasePrice) {
         Long userId = UserContext.getCurrentUserId();
         if (userId == null) throw new BadRequestException("error.unauthorized");
 
@@ -90,7 +90,7 @@ public class PromoQuoteService {
                 .build();
     }
 
-    private void validateCampaignUsable(PromoCampaign c, Long userId, UUID planId, String paymentType, boolean useFitCoin) {
+    private void validateCampaignUsable(PromoCampaign c, Long userId, String planId, String paymentType, boolean useFitCoin) {
         if (c.getStatus() != PromoCampaignStatus.ACTIVE) {
             throw new BadRequestException("error.promo_not_active");
         }

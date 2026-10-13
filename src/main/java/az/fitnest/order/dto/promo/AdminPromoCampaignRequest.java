@@ -46,7 +46,7 @@ public class AdminPromoCampaignRequest {
 
     @NotNull(message = "At least one plan is required")
     @Size(min = 1, message = "At least one plan is required")
-    private List<UUID> planIds;
+    private List<String> planIds;
 
     private List<String> tierCodes;
 

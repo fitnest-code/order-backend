@@ -133,10 +133,12 @@ public class PromoGrantService {
         grant.setReservedUntil(null);
         grantRepository.save(grant);
 
+        // Atomic increment (no lost updates under concurrent redemptions, 13.3).
+        // The total-limit gate is enforced at reserve/quote time; the scheduler
+        // ends campaigns that reach the limit within the minute.
+        campaignRepository.incrementRedeemedCount(grant.getCampaignId());
         PromoCampaign campaign = campaignRepository.findById(grant.getCampaignId()).orElse(null);
         if (campaign != null) {
-            campaign.setRedeemedCount(campaign.getRedeemedCount() + 1);
-            campaignRepository.save(campaign);
             eventPublisher.grantRedeemed(grant.getCampaignId(), campaign.getCode(), campaign.getPartnerId(),
                     grant.getUserId(), grant.getPhoneHash(), orderId, discountAmount);
         }

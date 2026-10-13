@@ -127,7 +127,30 @@ public class PromoCampaignService {
             campaigns = campaignRepository.searchCampaigns(like, st, null, from, to, pageable);
             total = campaignRepository.countSearchCampaigns(like, st, null, from, to);
         }
-        List<AdminPromoCampaignListItemResponse> items = campaigns.stream().map(this::mapToListItem).collect(Collectors.toList());
+        List<AdminPromoCampaignListItemResponse> items;
+        if (campaigns.isEmpty()) {
+            items = List.of();
+        } else {
+            // Batch preloads: 1 partner query + 1 grouped count query for the whole
+            // page instead of 2 queries per row (N+1, 13.2).
+            List<UUID> ids = campaigns.stream().map(PromoCampaign::getId).collect(Collectors.toList());
+            Map<UUID, String> partnerNames = new HashMap<>();
+            List<UUID> partnerIds = campaigns.stream().map(PromoCampaign::getPartnerId)
+                    .filter(Objects::nonNull).distinct().collect(Collectors.toList());
+            if (!partnerIds.isEmpty()) {
+                for (PromoPartner p : partnerRepository.findAllById(partnerIds)) {
+                    partnerNames.put(p.getId(), p.getName());
+                }
+            }
+            Map<UUID, Long> eligibleCounts = new HashMap<>();
+            for (Object[] row : audienceNumberRepository.countByCampaignIds(ids)) {
+                eligibleCounts.put((UUID) row[0], (Long) row[1]);
+            }
+            items = campaigns.stream()
+                    .map(c -> mapToListItem(c, partnerNames.get(c.getPartnerId()),
+                            eligibleCounts.getOrDefault(c.getId(), 0L)))
+                    .collect(Collectors.toList());
+        }
         return new org.springframework.data.domain.PageImpl<>(items, pageable, total);
     }
 
@@ -267,6 +290,8 @@ public class PromoCampaignService {
         }
         campaign.setStatus(PromoCampaignStatus.DRAFT);
         campaignRepository.save(campaign);
+        auditLogService.log(adminId, "UNSCHEDULE", "PROMO_CAMPAIGN", id,
+                "{\"status\":\"SCHEDULED\"}", "{\"status\":\"DRAFT\"}", null, null);
         return getDetail(id);
     }
 
@@ -279,6 +304,8 @@ public class PromoCampaignService {
         }
         campaign.setStatus(PromoCampaignStatus.PAUSED);
         campaignRepository.save(campaign);
+        auditLogService.log(adminId, "PAUSE", "PROMO_CAMPAIGN", id,
+                "{\"status\":\"ACTIVE\"}", "{\"status\":\"PAUSED\"}", null, null);
         return getDetail(id);
     }
 
@@ -294,6 +321,8 @@ public class PromoCampaignService {
         }
         campaign.setStatus(PromoCampaignStatus.ACTIVE);
         campaignRepository.save(campaign);
+        auditLogService.log(adminId, "RESUME", "PROMO_CAMPAIGN", id,
+                "{\"status\":\"PAUSED\"}", "{\"status\":\"ACTIVE\"}", null, null);
         return getDetail(id);
     }
 
@@ -414,6 +443,7 @@ public class PromoCampaignService {
         long redeemed = grantRepository.countByCampaignIdAndStatus(id, PromoGrantStatus.REDEEMED);
         long popupSeen = grantRepository.countPopupSeenByCampaignId(id, PromoPopupStatus.SEEN);
         long registered = grantRepository.findByCampaignId(id, Pageable.unpaged()).getTotalElements();
+        long reserved = grantRepository.countByCampaignIdAndStatus(id, PromoGrantStatus.RESERVED);
         BigDecimal discountGiven = grantRepository.sumDiscountAmountByCampaignIdAndStatus(id, PromoGrantStatus.REDEEMED);
         if (discountGiven == null) discountGiven = BigDecimal.ZERO;
         BigDecimal avg = redeemed > 0 ? discountGiven.divide(BigDecimal.valueOf(redeemed), 2, java.math.RoundingMode.HALF_UP) : BigDecimal.ZERO;
@@ -425,28 +455,13 @@ public class PromoCampaignService {
                 .discountGiven(discountGiven)
                 .avgDiscountPerOrder(avg)
                 .updatedAt(OffsetDateTime.now())
-                .build();
-    }
-
-    @Transactional(readOnly = true)
-    public AdminPromoCampaignNumbersResponse numbers(UUID id, String phone, String status, int page, int size) {
-        campaignRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("error.promo_campaign_not_found"));
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        Page<PromoGrant> grants = grantRepository.findByCampaignId(id, pageable);
-        return AdminPromoCampaignNumbersResponse.builder()
-                .items(grants.getContent().stream().map(g -> AdminPromoCampaignNumberItemResponse.builder()
-                        .phoneHash(g.getPhoneHash())
-                        .status(g.getStatus().name())
-                        .registered(true)
-                        .sawPopup(g.getPopupStatus() == PromoPopupStatus.SEEN)
-                        .redeemedAt(g.getRedeemedAt())
-                        .userId(g.getUserId())
-                        .build()).collect(Collectors.toList()))
-                .page(grants.getNumber())
-                .size(grants.getSize())
-                .totalElements(grants.getTotalElements())
-                .totalPages(grants.getTotalPages())
+                .funnel(AdminPromoCampaignFunnelResponse.builder()
+                        .eligible(eligible)
+                        .registered(registered)
+                        .sawPopup(popupSeen)
+                        .selectedCode(reserved + redeemed)
+                        .paid(redeemed)
+                        .build())
                 .build();
     }
 
@@ -499,7 +514,7 @@ public class PromoCampaignService {
         campaign.setMaxDiscountAmount(request.getMaxDiscountAmount());
         campaign.setAudienceType(PromoAudienceType.valueOf(request.getAudienceType().toUpperCase()));
         campaign.setAllowedPrefixes(request.getAllowedPrefixes() != null ? request.getAllowedPrefixes().toArray(new String[0]) : new String[0]);
-        campaign.setPlanIds(request.getPlanIds() != null ? request.getPlanIds().toArray(new UUID[0]) : new UUID[0]);
+        campaign.setPlanIds(request.getPlanIds() != null ? request.getPlanIds().toArray(new String[0]) : new String[0]);
         campaign.setTierCodes(request.getTierCodes() != null ? request.getTierCodes().toArray(new String[0]) : new String[0]);
         campaign.setStartsAt(request.getStartsAt());
         campaign.setEndsAt(request.getEndsAt());
@@ -607,13 +622,8 @@ public class PromoCampaignService {
                 .build();
     }
 
-    private AdminPromoCampaignListItemResponse mapToListItem(PromoCampaign c) {
-        String partnerName = null;
-        if (c.getPartnerId() != null) {
-            partnerName = partnerRepository.findById(c.getPartnerId()).map(PromoPartner::getName).orElse(null);
-        }
-        Long eligible = c.getAudienceType() == PromoAudienceType.UPLOADED_LIST
-                ? audienceNumberRepository.countByCampaignId(c.getId()) : null;
+    private AdminPromoCampaignListItemResponse mapToListItem(PromoCampaign c, String partnerName, Long eligibleCount) {
+        Long eligible = c.getAudienceType() == PromoAudienceType.UPLOADED_LIST ? eligibleCount : null;
         return AdminPromoCampaignListItemResponse.builder()
                 .id(c.getId())
                 .name(c.getName())

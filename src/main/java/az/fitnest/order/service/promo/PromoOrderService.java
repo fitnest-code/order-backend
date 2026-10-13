@@ -42,7 +42,7 @@ public class PromoOrderService {
      *         PROMO_ALREADY_USED, PROMO_EXPIRED, PROMO_LIMIT_REACHED
      */
     @Transactional
-    public UUID resolveAndReserve(Long userId, String promoCode, UUID planId,
+    public UUID resolveAndReserve(Long userId, String promoCode, String planId,
                                   BigDecimal payableAmount, String orderId) {
         if (promoCode == null || promoCode.isBlank()) return null;
 

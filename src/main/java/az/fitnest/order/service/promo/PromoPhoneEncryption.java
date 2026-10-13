@@ -18,7 +18,7 @@ import java.util.Base64;
 @Slf4j
 public class PromoPhoneEncryption {
 
-    @Value("${promo.encryption.key:changeme-in-production-32chars!!}")
+    @Value("${promo.encryption.key}")
     private String encryptionKey;
 
     private static final String ALGORITHM = "AES/GCM/NoPadding";

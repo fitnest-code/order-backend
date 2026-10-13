@@ -35,9 +35,27 @@ public class PromoEligibilityService {
     public MobilePromoPopupResponse pendingPopup(String language) {
         Long userId = UserContext.getCurrentUserId();
         if (userId == null) return null;
-        Optional<PromoGrant> grantOpt = grantRepository.findFirstByUserIdAndPopupStatusOrderByCreatedAtDesc(userId, PromoPopupStatus.PENDING);
-        if (grantOpt.isEmpty()) return null;
-        return buildPopup(grantOpt.get(), language);
+        OffsetDateTime now = OffsetDateTime.now();
+        // At most one popup per app open; queue by priority, then grant date (BR-22).
+        // Only ACTIVE campaigns inside their date window are eligible.
+        return grantRepository.findByUserIdAndPopupStatusOrderByCreatedAtDesc(userId, PromoPopupStatus.PENDING)
+                .stream()
+                .sorted(Comparator.comparing(PromoGrant::getCreatedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(g -> Map.entry(g, campaignRepository.findById(g.getCampaignId()).orElse(null)))
+                .filter(e -> e.getValue() != null
+                        && e.getValue().getStatus() == PromoCampaignStatus.ACTIVE
+                        && !e.getValue().getStartsAt().isAfter(now)
+                        && !e.getValue().getEndsAt().isBefore(now)
+                        && (e.getValue().getTotalLimit() == null
+                                || e.getValue().getRedeemedCount() < e.getValue().getTotalLimit()))
+                .sorted((a, b) -> Integer.compare(
+                        b.getValue().getPriority() != null ? b.getValue().getPriority() : 0,
+                        a.getValue().getPriority() != null ? a.getValue().getPriority() : 0))
+                .map(e -> buildPopup(e.getKey(), language))
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
     }
 
     private MobilePromoPopupResponse buildPopup(PromoGrant grant, String language) {
@@ -74,7 +92,7 @@ public class PromoEligibilityService {
     }
 
     @Transactional(readOnly = true)
-    public List<MobilePromoActiveItemResponse> activeCodes(UUID planId, String language) {
+    public List<MobilePromoActiveItemResponse> activeCodes(String planId, String language) {
         Long userId = UserContext.getCurrentUserId();
         if (userId == null) return List.of();
         OffsetDateTime now = OffsetDateTime.now();
@@ -91,7 +109,7 @@ public class PromoEligibilityService {
             if (seen.add(g.getId())) unique.add(g);
         }
 
-        List<MobilePromoActiveItemResponse> items = new ArrayList<>();
+        List<Map.Entry<PromoCampaign, MobilePromoActiveItemResponse>> items = new ArrayList<>();
         for (PromoGrant g : unique) {
             PromoCampaign c = campaignRepository.findById(g.getCampaignId()).orElse(null);
             if (c == null) continue;
@@ -113,7 +131,7 @@ public class PromoEligibilityService {
                     ? tr.getCouponLabel()
                     : (tr != null && tr.getCardLabel() != null ? tr.getCardLabel() : buildDiscountLabel(c));
 
-            items.add(MobilePromoActiveItemResponse.builder()
+            items.add(Map.entry(c, MobilePromoActiveItemResponse.builder()
                     .code(c.getCode())
                     .label(label)
                     .discountType(c.getDiscountType().name())
@@ -124,14 +142,18 @@ public class PromoEligibilityService {
                             .imageUrl(resolveImages(c).bannerUrl)
                             .build())
                     .partner(buildPartner(c))
-                    .build());
+                    .build()));
         }
 
-        // BR-20: sort by largest discount -> priority -> earliest end date
+        // BR-20: largest discount -> priority -> earliest end date
         items.sort(Comparator
-                .comparing((MobilePromoActiveItemResponse i) -> discountRank(i.getDiscountType(), i.getDiscountValue())).reversed()
-                .thenComparing(MobilePromoActiveItemResponse::getEndsAt));
-        return items;
+                .comparing((Map.Entry<PromoCampaign, MobilePromoActiveItemResponse> e) ->
+                        discountRank(e.getValue().getDiscountType(), e.getValue().getDiscountValue())).reversed()
+                .thenComparing(e -> e.getKey().getPriority() != null ? e.getKey().getPriority() : 0,
+                        Comparator.reverseOrder())
+                .thenComparing(e -> e.getValue().getEndsAt(),
+                        Comparator.nullsLast(Comparator.naturalOrder())));
+        return items.stream().map(Map.Entry::getValue).collect(Collectors.toList());
     }
 
     private double discountRank(String type, BigDecimal value) {
@@ -211,9 +233,6 @@ public class PromoEligibilityService {
     private PopupImages resolveImages(PromoCampaign c) {
         String imageUrl = null;
         String bannerUrl = null;
-        popupRepository.findByCampaignId(c.getId()).ifPresent(p -> {
-            // handled below
-        });
         PromoCampaignPopup popup = popupRepository.findByCampaignId(c.getId()).orElse(null);
         if (popup != null) imageUrl = popup.getImageUrl();
         if (imageUrl == null) {

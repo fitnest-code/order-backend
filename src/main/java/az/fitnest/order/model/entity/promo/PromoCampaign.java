@@ -57,7 +57,7 @@ public class PromoCampaign {
     private String[] allowedPrefixes;
 
     @Column(name = "plan_ids")
-    private UUID[] planIds;
+    private String[] planIds;
 
     @Column(name = "tier_codes")
     private String[] tierCodes;

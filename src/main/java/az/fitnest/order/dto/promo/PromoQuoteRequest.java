@@ -4,14 +4,14 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.Data;
 
-import java.util.UUID;
+import java.math.BigDecimal;
 
 @Data
 @Builder
 public class PromoQuoteRequest {
 
     @NotNull(message = "Plan ID is required")
-    private UUID planId;
+    private String planId;
 
     private String promoCode;
 
@@ -20,4 +20,6 @@ public class PromoQuoteRequest {
 
     @NotNull(message = "Payment type is required")
     private String paymentType; // CARD, APPLE_PAY, GOOGLE_PAY, INSTALLMENT
+
+    private BigDecimal basePrice;
 }

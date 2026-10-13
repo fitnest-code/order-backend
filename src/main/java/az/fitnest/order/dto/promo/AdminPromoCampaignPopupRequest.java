@@ -14,7 +14,7 @@ public class AdminPromoCampaignPopupRequest {
     @NotNull(message = "CTA target is required")
     private String ctaTarget; // PLANS, PLAN_DETAIL, URL
 
-    private UUID planId;
+    private String planId;
 
     private String url;
 

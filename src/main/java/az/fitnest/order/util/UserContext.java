@@ -5,6 +5,18 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 @UtilityClass
 public class UserContext {
+    /**
+     * Checks a permission authority. The security filter prefixes bare names
+     * with ROLE_, so both "PROMO_PII_VIEW" and "ROLE_PROMO_PII_VIEW" match.
+     */
+    public static boolean hasAuthority(String authority) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) return false;
+        return authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals(authority)
+                        || a.getAuthority().equals("ROLE_" + authority));
+    }
+
     public static Long getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication.getPrincipal().equals("anonymousUser")) {
@@ -24,8 +36,7 @@ public class UserContext {
         return null;
     }
 
-    public static String getCurrentLanguage() {
-        org.springframework.web.context.request.ServletRequestAttributes attributes =
+    public static String getCurrentLanguage() {        org.springframework.web.context.request.ServletRequestAttributes attributes =
                 (org.springframework.web.context.request.ServletRequestAttributes)
                         org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
         if (attributes != null) {

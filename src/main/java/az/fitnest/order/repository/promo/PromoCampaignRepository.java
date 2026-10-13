@@ -46,6 +46,14 @@ public interface PromoCampaignRepository extends JpaRepository<PromoCampaign, UU
     @Query("SELECT c FROM PromoCampaign c WHERE c.id = :id")
     Optional<PromoCampaign> findByIdWithLock(@Param("id") UUID id);
 
+    /**
+     * Atomic counter increment (13.3 total-limit race). Single UPDATE statement,
+     * no read-modify-write lost updates under concurrent redemptions.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE PromoCampaign c SET c.redeemedCount = c.redeemedCount + 1, c.updatedAt = CURRENT_TIMESTAMP WHERE c.id = :id")
+    void incrementRedeemedCount(@Param("id") UUID id);
+
     @Query("SELECT c FROM PromoCampaign c WHERE " +
             "(:search IS NULL OR LOWER(c.name) LIKE :search OR LOWER(c.code) LIKE :search) " +
             "AND (:partnerId IS NULL OR c.partnerId = :partnerId) " +

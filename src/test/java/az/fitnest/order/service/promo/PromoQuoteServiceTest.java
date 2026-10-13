@@ -54,7 +54,7 @@ class PromoQuoteServiceTest {
     private MockedStatic<UserContext> userContextMock;
 
     private static final Long USER_ID = 100L;
-    private static final UUID PLAN_ID = UUID.randomUUID();
+    private static final String PLAN_ID = "3m-bronze";
 
     @BeforeEach
     void setUp() {
@@ -71,7 +71,7 @@ class PromoQuoteServiceTest {
         percentCampaign.setStatus(PromoCampaignStatus.ACTIVE);
         percentCampaign.setStartsAt(OffsetDateTime.now().minusDays(10));
         percentCampaign.setEndsAt(OffsetDateTime.now().plusDays(30));
-        percentCampaign.setPlanIds(new UUID[]{PLAN_ID});
+        percentCampaign.setPlanIds(new String[]{PLAN_ID});
         percentCampaign.setAllowFitcoin(true);
         percentCampaign.setAllowInstallments(true);
         percentCampaign.setUsesPerUser(1);
@@ -201,7 +201,7 @@ class PromoQuoteServiceTest {
     /** BR: codes never apply to plans outside plan_ids. */
     @Test
     void quote_PlanNotAllowed_ThrowsPlanNotAllowed() {
-        UUID otherPlan = UUID.randomUUID();
+        String otherPlan = "12m-gold";
         when(campaignRepository.findByCodeNormalized("BAKCELL20")).thenReturn(Optional.of(percentCampaign));
 
         BadRequestException ex = assertThrows(BadRequestException.class,

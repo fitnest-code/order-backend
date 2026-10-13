@@ -11,6 +11,6 @@ public class MobilePromoCtaResponse {
 
     private String label;
     private String target; // PLANS, PLAN_DETAIL, URL
-    private UUID planId;
+    private String planId;
     private String url;
 }

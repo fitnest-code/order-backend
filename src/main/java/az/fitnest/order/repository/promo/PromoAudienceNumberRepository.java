@@ -26,9 +26,17 @@ public interface PromoAudienceNumberRepository extends JpaRepository<PromoAudien
     @Query("SELECT n.phoneHash FROM PromoAudienceNumber n WHERE n.campaignId = :campaignId")
     List<String> findPhoneHashesByCampaignId(@Param("campaignId") UUID campaignId);
 
+    @Query("SELECT n.campaignId AS campaignId, COUNT(n) AS cnt FROM PromoAudienceNumber n " +
+            "WHERE n.campaignId IN :ids GROUP BY n.campaignId")
+    List<Object[]> countByCampaignIds(@Param("ids") List<UUID> ids);
+
     void deleteByCampaignId(UUID campaignId);
 
     void deleteByUploadId(UUID uploadId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("DELETE FROM PromoAudienceNumber n WHERE n.campaignId = :campaignId AND n.uploadId <> :uploadId")
+    void deleteByCampaignIdExcludingUpload(@Param("campaignId") UUID campaignId, @Param("uploadId") UUID uploadId);
 
     boolean existsByCampaignIdAndPhoneHash(UUID campaignId, String phoneHash);
 }
