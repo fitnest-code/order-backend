@@ -10,8 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
-
 @RestController
 @RequiredArgsConstructor
 @Slf4j
@@ -22,21 +20,44 @@ public class PromoQuoteController {
     private final PromoQuoteService quoteService;
 
     @PostMapping("/quote")
-    @Operation(summary = "Quote for checkout, with optional promo code. Accepts JSON body (spec 9.3) or query params.")
+    @Operation(summary = "Quote for checkout. Price resolved server-side from packageId+optionId (B12). "
+            + "Accepts JSON body (spec 9.3) or query params. planId is a deprecated alias of packageId.")
     public ResponseEntity<PromoQuoteResponse> quote(
             @RequestBody(required = false) PromoQuoteRequest body,
+            @RequestParam(name = "packageId", required = false) String packageIdParam,
             @RequestParam(name = "planId", required = false) String planIdParam,
+            @RequestParam(name = "optionId", required = false) Long optionIdParam,
             @RequestParam(name = "promoCode", required = false) String promoCodeParam,
             @RequestParam(name = "useFitCoin", required = false, defaultValue = "false") boolean useFitCoinParam,
             @RequestParam(name = "paymentType", required = false) String paymentTypeParam,
-            @RequestParam(name = "basePrice", required = false) BigDecimal basePriceParam) {
-        // Note: basePrice should be resolved server-side in production; caller may pass the plan's price.
-        String planId = (body != null && body.getPlanId() != null) ? body.getPlanId() : planIdParam;
-        String promoCode = (body != null && body.getPromoCode() != null) ? body.getPromoCode() : promoCodeParam;
-        boolean useFitCoin = (body != null && Boolean.TRUE.equals(body.getUseFitCoin())) || useFitCoinParam;
-        String paymentType = (body != null && body.getPaymentType() != null) ? body.getPaymentType() : paymentTypeParam;
-        BigDecimal basePrice = (body != null && body.getBasePrice() != null) ? body.getBasePrice() : basePriceParam;
-        PromoQuoteResponse response = quoteService.quote(planId, promoCode, useFitCoin, paymentType, basePrice);
+            @RequestParam(name = "installmentProvider", required = false) String installmentProviderParam,
+            @RequestParam(name = "installmentMonths", required = false) Integer installmentMonthsParam) {
+        String packageId;
+        Long optionId;
+        String promoCode;
+        boolean useFitCoin;
+        String paymentType;
+        String installmentProvider;
+        Integer installmentMonths;
+        if (body != null && (body.getPackageId() != null || body.getPlanId() != null)) {
+            packageId = body.getPackageId() != null ? body.getPackageId() : body.getPlanId();
+            optionId = body.getOptionId();
+            promoCode = body.getPromoCode();
+            useFitCoin = Boolean.TRUE.equals(body.getUseFitCoin());
+            paymentType = body.getPaymentType();
+            installmentProvider = body.getInstallmentProvider();
+            installmentMonths = body.getInstallmentMonths();
+        } else {
+            packageId = packageIdParam != null ? packageIdParam : planIdParam;
+            optionId = optionIdParam;
+            promoCode = promoCodeParam;
+            useFitCoin = useFitCoinParam;
+            paymentType = paymentTypeParam;
+            installmentProvider = installmentProviderParam;
+            installmentMonths = installmentMonthsParam;
+        }
+        PromoQuoteResponse response = quoteService.quote(packageId, optionId, promoCode,
+                useFitCoin, paymentType, installmentProvider, installmentMonths);
         return ResponseEntity.ok(response);
     }
 }

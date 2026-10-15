@@ -5,7 +5,6 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.util.UUID;
 
 @Data
 @Builder
@@ -17,6 +16,9 @@ public class MobilePromoActiveItemResponse {
     private BigDecimal discountValue;
     private BigDecimal discountAmount;
     private OffsetDateTime endsAt;
+    private Integer priority;
     private MobilePromoBannerResponse banner;
     private MobilePromoPartnerResponse partner;
+    private MobilePromoCtaResponse cta;
+    private MobilePromoDetailResponse detail;
 }

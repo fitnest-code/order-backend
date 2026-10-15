@@ -4,7 +4,6 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.math.BigDecimal;
-import java.util.UUID;
 
 @Data
 @Builder
@@ -12,9 +11,12 @@ public class PromoQuoteResponse {
 
     @Builder.Default
     private String currency = "AZN";
+    private String packageId;
+    private Long optionId;
     private BigDecimal baseAmount;
     private PromoQuotePromoResponse promo;
     private BigDecimal fitCoinAmount;
+    private PromoQuoteFitCoinResponse fitCoin;
     private BigDecimal finalAmount;
     private PromoInstallmentsResponse installments;
 }

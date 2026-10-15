@@ -2,7 +2,11 @@ package az.fitnest.order.service.promo;
 
 import az.fitnest.order.dto.promo.PromoQuoteResponse;
 import az.fitnest.order.exception.BadRequestException;
+import az.fitnest.order.grpc.PaymentGrpcClient;
+import az.fitnest.order.model.entity.PackageOption;
+import az.fitnest.order.model.entity.SubscriptionPackage;
 import az.fitnest.order.model.entity.promo.*;
+import az.fitnest.order.repository.SubscriptionPackageRepository;
 import az.fitnest.order.repository.promo.*;
 import az.fitnest.order.util.UserContext;
 import org.junit.jupiter.api.AfterEach;
@@ -20,6 +24,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -27,9 +32,9 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for PromoQuoteService.
+ * Unit tests for PromoQuoteService (B12 server-side pricing, B13 identifiers).
  * Covers AC-4 (20% discount -> 40.00), AC-6 (not eligible -> PROMO_NOT_ELIGIBLE),
- * BR-2 (percent / fixed), BR-13 (one code per order), max discount cap.
+ * BR-2 (percent / fixed), max discount cap, FitCoin (B10), installments (B9).
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -45,6 +50,10 @@ class PromoQuoteServiceTest {
     private PromoEligibilityService eligibilityService;
     @Mock
     private PromoRateLimitService rateLimitService;
+    @Mock
+    private SubscriptionPackageRepository packageRepository;
+    @Mock
+    private PaymentGrpcClient paymentGrpcClient;
 
     @InjectMocks
     private PromoQuoteService quoteService;
@@ -54,13 +63,26 @@ class PromoQuoteServiceTest {
     private MockedStatic<UserContext> userContextMock;
 
     private static final Long USER_ID = 100L;
-    private static final String PLAN_ID = "3m-bronze";
+    private static final String PACKAGE_ID = "12";
+    private static final Long OPTION_ID = 34L;
 
     @BeforeEach
     void setUp() {
         userContextMock = mockStatic(UserContext.class);
         userContextMock.when(UserContext::getCurrentUserId).thenReturn(USER_ID);
         when(rateLimitService.tryConsumeQuote(anyLong())).thenReturn(true);
+        when(paymentGrpcClient.getCoinWallet(anyLong()))
+                .thenReturn(new PaymentGrpcClient.CoinWalletSnapshot(BigDecimal.ZERO, BigDecimal.ZERO, null));
+
+        SubscriptionPackage pkg = mock(SubscriptionPackage.class);
+        PackageOption option = mock(PackageOption.class);
+        when(option.getId()).thenReturn(OPTION_ID);
+        when(option.getPriceDiscounted()).thenReturn(null);
+        when(option.getPriceStandard()).thenReturn(BigDecimal.valueOf(50));
+        when(pkg.getIsActive()).thenReturn(true);
+        when(pkg.getCurrency()).thenReturn("AZN");
+        when(pkg.getOptions()).thenReturn(Set.of(option));
+        when(packageRepository.findById(12L)).thenReturn(Optional.of(pkg));
 
         percentCampaign = new PromoCampaign();
         percentCampaign.setId(UUID.randomUUID());
@@ -71,7 +93,7 @@ class PromoQuoteServiceTest {
         percentCampaign.setStatus(PromoCampaignStatus.ACTIVE);
         percentCampaign.setStartsAt(OffsetDateTime.now().minusDays(10));
         percentCampaign.setEndsAt(OffsetDateTime.now().plusDays(30));
-        percentCampaign.setPlanIds(new String[]{PLAN_ID});
+        percentCampaign.setPlanIds(new String[]{PACKAGE_ID});
         percentCampaign.setAllowFitcoin(true);
         percentCampaign.setAllowInstallments(true);
         percentCampaign.setUsesPerUser(1);
@@ -89,6 +111,10 @@ class PromoQuoteServiceTest {
         userContextMock.close();
     }
 
+    private PromoQuoteResponse quote(String promoCode) {
+        return quoteService.quote(PACKAGE_ID, OPTION_ID, promoCode, false, "CARD", null, null);
+    }
+
     /** AC-4: 3-month Bronze 50 AZN with Bakcell20 -> discount 10.00, final 40.00 */
     @Test
     void quote_PercentDiscount_Applies20Percent() {
@@ -96,12 +122,14 @@ class PromoQuoteServiceTest {
         when(grantRepository.findByCampaignIdAndUserId(percentCampaign.getId(), USER_ID)).thenReturn(Optional.of(granted));
         when(translationRepository.findByCampaignId(any())).thenReturn(List.of());
 
-        PromoQuoteResponse r = quoteService.quote(PLAN_ID, "Bakcell20", false, "CARD", BigDecimal.valueOf(50));
+        PromoQuoteResponse r = quote("Bakcell20");
 
         assertEquals(0, r.getPromo().getDiscountAmount().compareTo(new BigDecimal("10.00")));
         assertEquals(0, r.getFinalAmount().compareTo(new BigDecimal("40.00")));
         assertEquals(0, r.getBaseAmount().compareTo(new BigDecimal("50.00")));
         assertEquals("Bakcell20", r.getPromo().getCode());
+        assertEquals(PACKAGE_ID, r.getPackageId());
+        assertEquals(OPTION_ID, r.getOptionId());
     }
 
     @Test
@@ -111,7 +139,7 @@ class PromoQuoteServiceTest {
         when(grantRepository.findByCampaignIdAndUserId(percentCampaign.getId(), USER_ID)).thenReturn(Optional.of(granted));
         when(translationRepository.findByCampaignId(any())).thenReturn(List.of());
 
-        PromoQuoteResponse r = quoteService.quote(PLAN_ID, "Bakcell20", false, "CARD", BigDecimal.valueOf(50));
+        PromoQuoteResponse r = quote("Bakcell20");
 
         assertEquals(0, r.getPromo().getDiscountAmount().compareTo(new BigDecimal("5.00")));
         assertEquals(0, r.getFinalAmount().compareTo(new BigDecimal("45.00")));
@@ -126,10 +154,56 @@ class PromoQuoteServiceTest {
         when(grantRepository.findByCampaignIdAndUserId(percentCampaign.getId(), USER_ID)).thenReturn(Optional.of(granted));
         when(translationRepository.findByCampaignId(any())).thenReturn(List.of());
 
-        PromoQuoteResponse r = quoteService.quote(PLAN_ID, "Bakcell20", false, "CARD", BigDecimal.valueOf(50));
+        PromoQuoteResponse r = quote("Bakcell20");
 
         assertEquals(0, r.getPromo().getDiscountAmount().compareTo(new BigDecimal("7.00")));
         assertEquals(0, r.getFinalAmount().compareTo(new BigDecimal("43.00")));
+    }
+
+    /** B8: lookup is case-insensitive, display form preserved. */
+    @Test
+    void quote_LowercaseCode_Works() {
+        when(campaignRepository.findByCodeNormalized("BAKCELL20")).thenReturn(Optional.of(percentCampaign));
+        when(grantRepository.findByCampaignIdAndUserId(percentCampaign.getId(), USER_ID)).thenReturn(Optional.of(granted));
+        when(translationRepository.findByCampaignId(any())).thenReturn(List.of());
+
+        PromoQuoteResponse r = quote("bakcell20");
+
+        assertEquals("Bakcell20", r.getPromo().getCode());
+        assertEquals(0, r.getFinalAmount().compareTo(new BigDecimal("40.00")));
+    }
+
+    /** B10/MO-8: FitCoin applies after promo (40 - 16 = 24). */
+    @Test
+    void quote_FitCoin_AppliesAfterPromo() {
+        when(paymentGrpcClient.getCoinWallet(anyLong())).thenReturn(
+                new PaymentGrpcClient.CoinWalletSnapshot(new BigDecimal("320"), new BigDecimal("16.00"), null));
+        when(campaignRepository.findByCodeNormalized("BAKCELL20")).thenReturn(Optional.of(percentCampaign));
+        when(grantRepository.findByCampaignIdAndUserId(percentCampaign.getId(), USER_ID)).thenReturn(Optional.of(granted));
+        when(translationRepository.findByCampaignId(any())).thenReturn(List.of());
+
+        PromoQuoteResponse r = quoteService.quote(PACKAGE_ID, OPTION_ID, "Bakcell20", true, "CARD", null, null);
+
+        assertEquals(0, r.getFinalAmount().compareTo(new BigDecimal("24.00")));
+        assertEquals(0, r.getFitCoin().getUsedAmount().compareTo(new BigDecimal("16.00")));
+        assertEquals(0, r.getFitCoin().getBalanceAmount().compareTo(new BigDecimal("16.00")));
+        assertEquals(0, r.getFitCoin().getBalanceCoins().compareTo(new BigDecimal("320")));
+    }
+
+    /** B9: installments echo provider/months with server-side monthly math. */
+    @Test
+    void quote_Installment_ReturnsSchedule() {
+        when(campaignRepository.findByCodeNormalized("BAKCELL20")).thenReturn(Optional.of(percentCampaign));
+        when(grantRepository.findByCampaignIdAndUserId(percentCampaign.getId(), USER_ID)).thenReturn(Optional.of(granted));
+        when(translationRepository.findByCampaignId(any())).thenReturn(List.of());
+
+        PromoQuoteResponse r = quoteService.quote(PACKAGE_ID, OPTION_ID, "Bakcell20", false,
+                "INSTALLMENT", "TAMKART", 6);
+
+        assertNotNull(r.getInstallments());
+        assertEquals("TAMKART", r.getInstallments().getProvider());
+        assertEquals(6, r.getInstallments().getMonths());
+        assertEquals(0, r.getInstallments().getMonthlyAmount().compareTo(new BigDecimal("6.67")));
     }
 
     /** NFR-1: knowing the code text gives no discount - must have a grant. */
@@ -138,8 +212,7 @@ class PromoQuoteServiceTest {
         when(campaignRepository.findByCodeNormalized("BAKCELL20")).thenReturn(Optional.of(percentCampaign));
         when(grantRepository.findByCampaignIdAndUserId(percentCampaign.getId(), USER_ID)).thenReturn(Optional.empty());
 
-        BadRequestException ex = assertThrows(BadRequestException.class,
-                () -> quoteService.quote(PLAN_ID, "Bakcell20", false, "CARD", BigDecimal.valueOf(50)));
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> quote("Bakcell20"));
         assertEquals("error.promo_not_eligible", ex.getMessage());
     }
 
@@ -148,8 +221,7 @@ class PromoQuoteServiceTest {
     void quote_UnknownCode_ThrowsNotEligible() {
         when(campaignRepository.findByCodeNormalized("UNKNOWN")).thenReturn(Optional.empty());
 
-        BadRequestException ex = assertThrows(BadRequestException.class,
-                () -> quoteService.quote(PLAN_ID, "UNKNOWN", false, "CARD", BigDecimal.valueOf(50)));
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> quote("UNKNOWN"));
         assertEquals("error.promo_not_eligible", ex.getMessage());
     }
 
@@ -160,8 +232,7 @@ class PromoQuoteServiceTest {
         when(campaignRepository.findByCodeNormalized("BAKCELL20")).thenReturn(Optional.of(percentCampaign));
         when(grantRepository.findByCampaignIdAndUserId(percentCampaign.getId(), USER_ID)).thenReturn(Optional.of(granted));
 
-        BadRequestException ex = assertThrows(BadRequestException.class,
-                () -> quoteService.quote(PLAN_ID, "Bakcell20", false, "CARD", BigDecimal.valueOf(50)));
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> quote("Bakcell20"));
         assertEquals("error.promo_already_used", ex.getMessage());
     }
 
@@ -171,8 +242,7 @@ class PromoQuoteServiceTest {
         percentCampaign.setStatus(PromoCampaignStatus.PAUSED);
         when(campaignRepository.findByCodeNormalized("BAKCELL20")).thenReturn(Optional.of(percentCampaign));
 
-        BadRequestException ex = assertThrows(BadRequestException.class,
-                () -> quoteService.quote(PLAN_ID, "Bakcell20", false, "CARD", BigDecimal.valueOf(50)));
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> quote("Bakcell20"));
         assertEquals("error.promo_not_active", ex.getMessage());
     }
 
@@ -182,8 +252,7 @@ class PromoQuoteServiceTest {
         percentCampaign.setEndsAt(OffsetDateTime.now().minusDays(1));
         when(campaignRepository.findByCodeNormalized("BAKCELL20")).thenReturn(Optional.of(percentCampaign));
 
-        BadRequestException ex = assertThrows(BadRequestException.class,
-                () -> quoteService.quote(PLAN_ID, "Bakcell20", false, "CARD", BigDecimal.valueOf(50)));
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> quote("Bakcell20"));
         assertEquals("error.promo_expired", ex.getMessage());
     }
 
@@ -193,19 +262,17 @@ class PromoQuoteServiceTest {
         percentCampaign.setRedeemedCount(10);
         when(campaignRepository.findByCodeNormalized("BAKCELL20")).thenReturn(Optional.of(percentCampaign));
 
-        BadRequestException ex = assertThrows(BadRequestException.class,
-                () -> quoteService.quote(PLAN_ID, "Bakcell20", false, "CARD", BigDecimal.valueOf(50)));
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> quote("Bakcell20"));
         assertEquals("error.promo_limit_reached", ex.getMessage());
     }
 
     /** BR: codes never apply to plans outside plan_ids. */
     @Test
     void quote_PlanNotAllowed_ThrowsPlanNotAllowed() {
-        String otherPlan = "12m-gold";
         when(campaignRepository.findByCodeNormalized("BAKCELL20")).thenReturn(Optional.of(percentCampaign));
 
         BadRequestException ex = assertThrows(BadRequestException.class,
-                () -> quoteService.quote(otherPlan, "Bakcell20", false, "CARD", BigDecimal.valueOf(50)));
+                () -> quoteService.quote("99", OPTION_ID, "Bakcell20", false, "CARD", null, null));
         assertEquals("error.promo_plan_not_allowed", ex.getMessage());
     }
 
@@ -216,13 +283,13 @@ class PromoQuoteServiceTest {
         when(grantRepository.findByCampaignIdAndUserId(percentCampaign.getId(), USER_ID)).thenReturn(Optional.of(granted));
 
         BadRequestException ex = assertThrows(BadRequestException.class,
-                () -> quoteService.quote(PLAN_ID, "Bakcell20", false, "INSTALLMENT", BigDecimal.valueOf(50)));
+                () -> quoteService.quote(PACKAGE_ID, OPTION_ID, "Bakcell20", false, "INSTALLMENT", "TAMKART", 6));
         assertEquals("error.promo_payment_type_not_allowed", ex.getMessage());
     }
 
     @Test
     void quote_NoPromoCode_ReturnsBaseAmount() {
-        PromoQuoteResponse r = quoteService.quote(PLAN_ID, null, false, "CARD", BigDecimal.valueOf(50));
+        PromoQuoteResponse r = quote(null);
         assertEquals(0, r.getFinalAmount().compareTo(new BigDecimal("50.00")));
         assertNull(r.getPromo());
     }
@@ -232,8 +299,7 @@ class PromoQuoteServiceTest {
     void quote_RateLimited_Throws() {
         when(rateLimitService.tryConsumeQuote(anyLong())).thenReturn(false);
 
-        BadRequestException ex = assertThrows(BadRequestException.class,
-                () -> quoteService.quote(PLAN_ID, null, false, "CARD", BigDecimal.valueOf(50)));
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> quote(null));
         assertEquals("error.promo_rate_limited", ex.getMessage());
     }
 }

@@ -10,7 +10,9 @@ import java.util.List;
 @Builder
 public class PromoInstallmentsResponse {
 
+    private String provider;
     private List<PromoInstallmentOptionResponse> options;
     private BigDecimal monthlyAmount;
     private Integer months;
+    private BigDecimal totalAmount;
 }

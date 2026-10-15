@@ -34,5 +34,20 @@ public record CheckoutRequest(
 
     @Schema(description = "İstifadəçinin gördüyü yekun məbləğ (qiymət dəyişibsə 409)", example = "40.00")
     @JsonProperty("expectedFinalAmount")
-    BigDecimal expectedFinalAmount
+    BigDecimal expectedFinalAmount,
+
+    @Schema(description = "Taksit provayderi (TAMKART | BOLKART)")
+    @JsonProperty("installmentProvider")
+    String installmentProvider,
+
+    @Schema(description = "Taksit ay sayı")
+    @JsonProperty("installmentMonths")
+    Integer installmentMonths,
+
+    // B13 camelCase aliases of package_id / option_id (either form accepted)
+    @JsonProperty("packageId")
+    String packageId,
+
+    @JsonProperty("optionId")
+    Long optionId
 ) {}

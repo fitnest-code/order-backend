@@ -33,6 +33,9 @@ public class PromoCampaignPopup {
     @Column(name = "image_url", nullable = false)
     private String imageUrl;
 
+    @Column(name = "duration_sec", nullable = false)
+    private Integer durationSec = 7;
+
     @OneToOne(fetch = FetchType.LAZY)
     @MapsId
     @JoinColumn(name = "campaign_id")

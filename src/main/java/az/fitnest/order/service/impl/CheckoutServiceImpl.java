@@ -32,12 +32,15 @@ public class CheckoutServiceImpl implements CheckoutService {
     @Transactional
     @Override
     public CheckoutResponse processCheckout(Long userId, CheckoutRequest request) {
-        Long packageId = Long.parseLong(request.package_id());
+        // B13: camelCase aliases accepted; snake_case kept for old clients.
+        String packageIdStr = request.packageId() != null ? request.packageId() : request.package_id();
+        Long optionId = request.optionId() != null ? request.optionId() : request.option_id();
+        Long packageId = Long.parseLong(packageIdStr);
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .filter(SubscriptionPackage::getIsActive)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
         PackageOption option = pkg.getOptions().stream()
-                .filter(o -> o.getId().equals(request.option_id()))
+                .filter(o -> o.getId().equals(optionId))
                 .findFirst()
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.duration_config_not_found"));
         BigDecimal baseAmount = option.getPriceDiscounted() != null ? option.getPriceDiscounted() : option.getPriceStandard();
@@ -53,7 +56,7 @@ public class CheckoutServiceImpl implements CheckoutService {
 
         if (request.promoCode() != null && !request.promoCode().isBlank()) {
             promoCampaignId = promoOrderService.resolveAndReserve(
-                    userId, request.promoCode(), request.package_id(), payable, orderId);
+                    userId, request.promoCode(), packageIdStr, payable, orderId);
 
             // discount amount from the order's stored campaign (per user, per plan)
             discount = promoOrderService.discountFor(userId, request.promoCode(), baseAmount, option.getId());

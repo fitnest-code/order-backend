@@ -22,6 +22,8 @@ public class AdminPromoPartnerRequest {
 
     private String logoUrl;
 
+    private String logoOnDarkUrl;
+
     @Pattern(regexp = "^#[0-9A-Fa-f]{6}$", message = "Brand color must be a valid hex color")
     private String brandColor;
 

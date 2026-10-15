@@ -43,6 +43,7 @@ public class PromoPartnerService {
         PromoPartner partner = new PromoPartner();
         partner.setName(request.getName());
         partner.setLogoUrl(request.getLogoUrl());
+        partner.setLogoOnDarkUrl(request.getLogoOnDarkUrl());
         partner.setBrandColor(request.getBrandColor());
         partner.setContactName(request.getContactName());
         partner.setContactEmail(request.getContactEmail());
@@ -68,6 +69,7 @@ public class PromoPartnerService {
 
         partner.setName(request.getName());
         partner.setLogoUrl(request.getLogoUrl());
+        partner.setLogoOnDarkUrl(request.getLogoOnDarkUrl());
         partner.setBrandColor(request.getBrandColor());
         partner.setContactName(request.getContactName());
         partner.setContactEmail(request.getContactEmail());
@@ -125,6 +127,7 @@ public class PromoPartnerService {
                 .id(partner.getId())
                 .name(partner.getName())
                 .logoUrl(partner.getLogoUrl())
+                .logoOnDarkUrl(partner.getLogoOnDarkUrl())
                 .brandColor(partner.getBrandColor())
                 .contactName(partner.getContactName())
                 .contactEmail(partner.getContactEmail())

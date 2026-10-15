@@ -28,6 +28,9 @@ public class PromoPartner {
     @Column(name = "logo_url")
     private String logoUrl;
 
+    @Column(name = "logo_on_dark_url")
+    private String logoOnDarkUrl;
+
     @Column(name = "brand_color", length = 7)
     private String brandColor;
 

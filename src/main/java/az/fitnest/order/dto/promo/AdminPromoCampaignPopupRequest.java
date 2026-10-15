@@ -12,7 +12,7 @@ import java.util.UUID;
 public class AdminPromoCampaignPopupRequest {
 
     @NotNull(message = "CTA target is required")
-    private String ctaTarget; // PLANS, PLAN_DETAIL, URL
+    private String ctaTarget; // PLANS, PLAN_DETAIL, URL, PROMO_DETAIL (M3)
 
     private String planId;
 
@@ -24,4 +24,9 @@ public class AdminPromoCampaignPopupRequest {
     private String brandColorOverride;
 
     private String logoUrlOverride;
+
+    private String logoOnDarkUrlOverride;
+
+    @Builder.Default
+    private Integer durationSec = 7;
 }

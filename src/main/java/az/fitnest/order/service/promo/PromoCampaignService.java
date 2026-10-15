@@ -30,6 +30,7 @@ public class PromoCampaignService {
     private final PromoPartnerRepository partnerRepository;
     private final PromoCampaignTranslationRepository translationRepository;
     private final PromoCampaignPopupRepository popupRepository;
+    private final PromoCampaignMediaRepository mediaRepository;
     private final PromoAudienceNumberRepository audienceNumberRepository;
     private final PromoGrantRepository grantRepository;
     private final PromoAudienceUploadRepository uploadRepository;
@@ -62,6 +63,7 @@ public class PromoCampaignService {
 
         saveTranslations(saved.getId(), request.getTranslations());
         savePopup(saved.getId(), request.getPopup());
+        saveMedia(saved.getId(), request.getMedia());
         log.info("Created promo campaign {} by admin {}", saved.getId(), adminId);
         return getDetail(saved.getId());
     }
@@ -95,6 +97,10 @@ public class PromoCampaignService {
         if (request.getPopup() != null) {
             popupRepository.deleteByCampaignId(id);
             savePopup(id, request.getPopup());
+        }
+        if (request.getMedia() != null) {
+            mediaRepository.deleteByCampaignId(id);
+            saveMedia(id, request.getMedia());
         }
         log.info("Updated promo campaign {} by admin {}", id, adminId);
         return getDetail(id);
@@ -206,7 +212,16 @@ public class PromoCampaignService {
                 .imageUrl(p.getImageUrl())
                 .brandColorOverride(source.getBrandColorOverride())
                 .logoUrlOverride(source.getLogoUrlOverride())
+                .logoOnDarkUrlOverride(source.getLogoOnDarkUrlOverride())
+                .durationSec(p.getDurationSec())
                 .build()));
+        req.setMedia(mediaRepository.findByCampaignId(id).stream()
+                .map(m -> AdminPromoCampaignMediaRequest.builder()
+                        .locale(m.getLocale().name())
+                        .bannerImageUrl(m.getBannerImageUrl())
+                        .heroImageUrl(m.getHeroImageUrl())
+                        .build())
+                .collect(Collectors.toList()));
         req.setPartnerId(source.getPartnerId());
         return create(req, adminId);
     }
@@ -239,6 +254,7 @@ public class PromoCampaignService {
         if (updates.containsKey("allowInstallments")) campaign.setAllowInstallments((Boolean) updates.get("allowInstallments"));
         if (updates.containsKey("brandColorOverride")) campaign.setBrandColorOverride((String) updates.get("brandColorOverride"));
         if (updates.containsKey("logoUrlOverride")) campaign.setLogoUrlOverride((String) updates.get("logoUrlOverride"));
+        if (updates.containsKey("logoOnDarkUrlOverride")) campaign.setLogoOnDarkUrlOverride((String) updates.get("logoOnDarkUrlOverride"));
         if (updates.containsKey("maxDiscountAmount")) {
             Object v = updates.get("maxDiscountAmount");
             campaign.setMaxDiscountAmount(v != null ? new BigDecimal(v.toString()) : null);
@@ -527,6 +543,7 @@ public class PromoCampaignService {
         campaign.setIncludeExistingUsers(request.getIncludeExistingUsers() != null ? request.getIncludeExistingUsers() : true);
         campaign.setBrandColorOverride(request.getPopup() != null ? request.getPopup().getBrandColorOverride() : null);
         campaign.setLogoUrlOverride(request.getPopup() != null ? request.getPopup().getLogoUrlOverride() : null);
+        campaign.setLogoOnDarkUrlOverride(request.getPopup() != null ? request.getPopup().getLogoOnDarkUrlOverride() : null);
     }
 
     private void saveTranslations(UUID campaignId, List<AdminPromoCampaignTranslationRequest> translations) {
@@ -555,7 +572,20 @@ public class PromoCampaignService {
         entity.setPlanId(popup.getPlanId());
         entity.setUrl(popup.getUrl());
         entity.setImageUrl(popup.getImageUrl());
+        entity.setDurationSec(popup.getDurationSec() != null ? popup.getDurationSec() : 7);
         popupRepository.save(entity);
+    }
+
+    private void saveMedia(UUID campaignId, List<AdminPromoCampaignMediaRequest> media) {
+        if (media == null || media.isEmpty()) return;
+        for (AdminPromoCampaignMediaRequest m : media) {
+            PromoCampaignMedia entity = new PromoCampaignMedia();
+            entity.setCampaignId(campaignId);
+            entity.setLocale(PromoLocale.valueOf(m.getLocale()));
+            entity.setBannerImageUrl(m.getBannerImageUrl());
+            entity.setHeroImageUrl(m.getHeroImageUrl());
+            mediaRepository.save(entity);
+        }
     }
 
     private AdminPromoCampaignResponse mapToResponse(PromoCampaign c) {
@@ -579,6 +609,8 @@ public class PromoCampaignService {
                         .imageUrl(p.getImageUrl())
                         .brandColorOverride(c.getBrandColorOverride())
                         .logoUrlOverride(c.getLogoUrlOverride())
+                        .logoOnDarkUrlOverride(c.getLogoOnDarkUrlOverride())
+                        .durationSec(p.getDurationSec())
                         .build())
                 .orElse(null);
 
@@ -612,6 +644,7 @@ public class PromoCampaignService {
                 .includeExistingUsers(c.getIncludeExistingUsers())
                 .brandColorOverride(c.getBrandColorOverride())
                 .logoUrlOverride(c.getLogoUrlOverride())
+                .logoOnDarkUrlOverride(c.getLogoOnDarkUrlOverride())
                 .status(c.getStatus().name())
                 .createdBy(c.getCreatedBy())
                 .createdAt(c.getCreatedAt())
@@ -619,6 +652,13 @@ public class PromoCampaignService {
                 .version(c.getVersion())
                 .translations(translations)
                 .popup(popupResp)
+                .media(mediaRepository.findByCampaignId(c.getId()).stream()
+                        .map(m -> AdminPromoCampaignMediaResponse.builder()
+                                .locale(m.getLocale().name())
+                                .bannerImageUrl(m.getBannerImageUrl())
+                                .heroImageUrl(m.getHeroImageUrl())
+                                .build())
+                        .collect(Collectors.toList()))
                 .build();
     }
 

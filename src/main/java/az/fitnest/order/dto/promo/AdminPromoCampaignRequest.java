@@ -84,4 +84,7 @@ public class AdminPromoCampaignRequest {
 
     // Popup
     private AdminPromoCampaignPopupRequest popup;
+
+    // Per-locale media (M2 banner 987x432, M3 hero 402x950)
+    private java.util.List<AdminPromoCampaignMediaRequest> media;
 }

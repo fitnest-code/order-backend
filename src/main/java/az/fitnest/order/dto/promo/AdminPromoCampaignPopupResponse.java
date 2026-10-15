@@ -15,4 +15,6 @@ public class AdminPromoCampaignPopupResponse {
     private String imageUrl;
     private String brandColorOverride;
     private String logoUrlOverride;
+    private String logoOnDarkUrlOverride;
+    private Integer durationSec;
 }

@@ -1,6 +1,5 @@
 package az.fitnest.order.dto.promo;
 
-import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.Data;
 
@@ -10,16 +9,30 @@ import java.math.BigDecimal;
 @Builder
 public class PromoQuoteRequest {
 
-    @NotNull(message = "Plan ID is required")
+    /**
+     * Catalog package id (string form, e.g. "12"). Preferred identifier (B13).
+     * Legacy alias {@code planId} still accepted and means the same thing.
+     */
+    private String packageId;
+
+    /** @deprecated use packageId */
+    @Deprecated
     private String planId;
+
+    /** Catalog option id within the package (duration/price variant). */
+    private Long optionId;
 
     private String promoCode;
 
-    @Builder.Default
     private Boolean useFitCoin = false;
 
-    @NotNull(message = "Payment type is required")
-    private String paymentType; // CARD, APPLE_PAY, GOOGLE_PAY, INSTALLMENT
+    /** CARD, APPLE_PAY, GOOGLE_PAY, INSTALLMENT */
+    private String paymentType;
+
+    /** TAMKART | BOLKART - required when paymentType=INSTALLMENT and bank matters */
+    private String installmentProvider;
+
+    private Integer installmentMonths;
 
     private BigDecimal basePrice;
 }

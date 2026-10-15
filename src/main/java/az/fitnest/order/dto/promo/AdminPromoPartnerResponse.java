@@ -14,6 +14,7 @@ public class AdminPromoPartnerResponse {
     private UUID id;
     private String name;
     private String logoUrl;
+    private String logoOnDarkUrl;
     private String brandColor;
     private String contactName;
     private String contactEmail;

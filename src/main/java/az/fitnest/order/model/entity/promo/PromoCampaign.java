@@ -98,6 +98,9 @@ public class PromoCampaign {
     @Column(name = "logo_url_override")
     private String logoUrlOverride;
 
+    @Column(name = "logo_on_dark_url_override")
+    private String logoOnDarkUrlOverride;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 16)
     private PromoCampaignStatus status = PromoCampaignStatus.DRAFT;

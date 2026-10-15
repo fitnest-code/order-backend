@@ -35,6 +35,7 @@ public class AdminPromoCampaignResponse {
     private Boolean includeExistingUsers;
     private String brandColorOverride;
     private String logoUrlOverride;
+    private String logoOnDarkUrlOverride;
     private String status;
     private Long createdBy;
     private OffsetDateTime createdAt;
@@ -42,4 +43,5 @@ public class AdminPromoCampaignResponse {
     private Integer version;
     private List<AdminPromoCampaignTranslationResponse> translations;
     private AdminPromoCampaignPopupResponse popup;
+    private java.util.List<AdminPromoCampaignMediaResponse> media;
 }

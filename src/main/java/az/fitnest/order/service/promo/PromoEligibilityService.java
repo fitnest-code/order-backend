@@ -28,13 +28,19 @@ public class PromoEligibilityService {
     private final PromoCampaignPopupRepository popupRepository;
     private final PromoPartnerRepository partnerRepository;
     private final PromoPhoneHasher phoneHasher;
+    private final PromoCampaignMediaRepository mediaRepository;
+    private final az.fitnest.order.repository.SubscriptionRepository subscriptionRepository;
 
     private static final Set<PromoGrantStatus> USABLE = EnumSet.of(PromoGrantStatus.GRANTED, PromoGrantStatus.RESERVED);
+    private static final java.time.ZoneId BAKU_ZONE = java.time.ZoneId.of("Asia/Baku");
 
     @Transactional(readOnly = true)
     public MobilePromoPopupResponse pendingPopup(String language) {
         Long userId = UserContext.getCurrentUserId();
         if (userId == null) return null;
+        // B17: users with an active subscription see no popup (grant is NOT
+        // marked seen, so it appears once the subscription lapses).
+        if (hasActiveSubscription(userId)) return null;
         OffsetDateTime now = OffsetDateTime.now();
         // At most one popup per app open; queue by priority, then grant date (BR-22).
         // Only ACTIVE campaigns inside their date window are eligible.
@@ -56,6 +62,20 @@ public class PromoEligibilityService {
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
+    }
+
+    /**
+     * B16/B17 shared definition: subscription counts as active while its
+     * duration has not ended and its entry limit is not exhausted.
+     */
+    @Transactional(readOnly = true)
+    public boolean hasActiveSubscription(Long userId) {
+        if (userId == null) return false;
+        java.time.LocalDateTime now = java.time.LocalDateTime.now(BAKU_ZONE);
+        return subscriptionRepository.findByUserIdAndStatusIn(userId, List.of("ACTIVE", "FROZEN"))
+                .stream()
+                .anyMatch(s -> (s.getEndAt() == null || s.getEndAt().isAfter(now))
+                        && (s.getRemainingLimit() == null || s.getRemainingLimit() > 0));
     }
 
     private MobilePromoPopupResponse buildPopup(PromoGrant grant, String language) {
@@ -86,6 +106,8 @@ public class PromoEligibilityService {
                         .target(popup.getCtaTarget().name())
                         .planId(popup.getPlanId())
                         .url(popup.getUrl())
+                        .campaignId(campaign.getId())
+                        .code(campaign.getCode())
                         .build() : null)
                 .partner(buildPartner(campaign))
                 .build();
@@ -95,6 +117,12 @@ public class PromoEligibilityService {
     public List<MobilePromoActiveItemResponse> activeCodes(String planId, String language) {
         Long userId = UserContext.getCurrentUserId();
         if (userId == null) return List.of();
+        // B16: banner list (no planId) is hidden while the user holds an active
+        // subscription - even one bought with a promo code. It reappears once the
+        // subscription expires or its entry limit is exhausted.
+        if ((planId == null || planId.isBlank()) && hasActiveSubscription(userId)) {
+            return List.of();
+        }
         OffsetDateTime now = OffsetDateTime.now();
 
         List<PromoGrant> grants = grantRepository.findByUserIdAndPopupStatusOrderByCreatedAtDesc(userId, PromoPopupStatus.PENDING)
@@ -131,6 +159,7 @@ public class PromoEligibilityService {
                     ? tr.getCouponLabel()
                     : (tr != null && tr.getCardLabel() != null ? tr.getCardLabel() : buildDiscountLabel(c));
 
+            PromoCampaignPopup popupCfg = popupRepository.findByCampaignId(c.getId()).orElse(null);
             items.add(Map.entry(c, MobilePromoActiveItemResponse.builder()
                     .code(c.getCode())
                     .label(label)
@@ -138,10 +167,24 @@ public class PromoEligibilityService {
                     .discountValue(c.getDiscountValue())
                     .discountAmount(null)
                     .endsAt(c.getEndsAt())
+                    .priority(c.getPriority() != null ? c.getPriority() : 0)
                     .banner(MobilePromoBannerResponse.builder()
-                            .imageUrl(resolveImages(c).bannerUrl)
+                            .imageUrl(resolveBannerUrl(c, normalized))
                             .build())
                     .partner(buildPartner(c))
+                    .cta(popupCfg != null ? MobilePromoCtaResponse.builder()
+                            .label(tr != null && tr.getCtaLabel() != null ? tr.getCtaLabel() : null)
+                            .target(popupCfg.getCtaTarget().name())
+                            .planId(popupCfg.getPlanId())
+                            .url(popupCfg.getUrl())
+                            .campaignId(c.getId())
+                            .code(c.getCode())
+                            .build() : null)
+                    .detail(MobilePromoDetailResponse.builder()
+                            .heroImageUrl(resolveHeroUrl(c, normalized))
+                            .durationSec(popupCfg != null && popupCfg.getDurationSec() != null
+                                    ? popupCfg.getDurationSec() : 7)
+                            .build())
                     .build()));
         }
 
@@ -172,12 +215,14 @@ public class PromoEligibilityService {
 
     private String fillPlaceholders(String body, PromoCampaign c) {
         if (body == null) return null;
+        // B2: code and discount are wrapped in **bold** spans; the deadline is
+        // NOT part of the body - the app formats endsAt itself on a separate line.
         String discount = c.getDiscountType() == PromoDiscountType.PERCENT
                 ? c.getDiscountValue().stripTrailingZeros().toPlainString() + "%"
                 : c.getDiscountValue().toPlainString() + " AZN";
         return body
-                .replace("{code}", c.getCode())
-                .replace("{discount}", discount)
+                .replace("{code}", "**" + c.getCode() + "**")
+                .replace("{discount}", "**" + discount + " endirim**")
                 .replace("{endDate}", formatDate(c.getEndsAt()))
                 .replace("{partner}", partnerName(c));
     }
@@ -204,10 +249,12 @@ public class PromoEligibilityService {
         if (p == null) return null;
         String brandColor = c.getBrandColorOverride() != null ? c.getBrandColorOverride() : p.getBrandColor();
         String logo = c.getLogoUrlOverride() != null ? c.getLogoUrlOverride() : p.getLogoUrl();
+        String logoOnDark = c.getLogoOnDarkUrlOverride() != null ? c.getLogoOnDarkUrlOverride() : p.getLogoOnDarkUrl();
         return MobilePromoPartnerResponse.builder()
                 .id(p.getId())
                 .name(p.getName())
                 .logoUrl(logo)
+                .logoOnDarkUrl(logoOnDark)
                 .brandColor(brandColor)
                 .textColor(pickTextColor(brandColor))
                 .build();
@@ -228,6 +275,43 @@ public class PromoEligibilityService {
         if (l.startsWith("ru")) return "ru";
         if (l.startsWith("en")) return "en";
         return "az";
+    }
+
+    /**
+     * B3: banner image is localized (az/en/ru versions, 987x432 @3x).
+     * Falls back to az, then to partner logo.
+     */
+    private String resolveBannerUrl(PromoCampaign c, String lang) {
+        List<PromoCampaignMedia> media = mediaRepository.findByCampaignId(c.getId());
+        String url = pickMedia(media, lang, true);
+        if (url == null) url = pickMedia(media, "az", true);
+        if (url == null) {
+            if (c.getLogoUrlOverride() != null) url = c.getLogoUrlOverride();
+            else if (c.getPartnerId() != null) {
+                url = partnerRepository.findById(c.getPartnerId()).map(PromoPartner::getLogoUrl).orElse(null);
+            }
+        }
+        return url;
+    }
+
+    /**
+     * B5: M3 story hero image, localized (402x950 @3x). az fallback.
+     */
+    private String resolveHeroUrl(PromoCampaign c, String lang) {
+        List<PromoCampaignMedia> media = mediaRepository.findByCampaignId(c.getId());
+        String url = pickMedia(media, lang, false);
+        if (url == null) url = pickMedia(media, "az", false);
+        return url;
+    }
+
+    private String pickMedia(List<PromoCampaignMedia> media, String lang, boolean banner) {
+        for (PromoCampaignMedia m : media) {
+            if (m.getLocale().name().equals(lang)) {
+                String url = banner ? m.getBannerImageUrl() : m.getHeroImageUrl();
+                if (url != null && !url.isBlank()) return url;
+            }
+        }
+        return null;
     }
 
     private PopupImages resolveImages(PromoCampaign c) {

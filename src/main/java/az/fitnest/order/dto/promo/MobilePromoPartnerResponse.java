@@ -12,6 +12,7 @@ public class MobilePromoPartnerResponse {
     private UUID id;
     private String name;
     private String logoUrl;
+    private String logoOnDarkUrl;
     private String brandColor;
     private String textColor;
 }
