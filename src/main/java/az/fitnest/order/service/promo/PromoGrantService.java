@@ -180,9 +180,8 @@ public class PromoGrantService {
                 throw new BadRequestException("error.promo_not_eligible");
             }
         } else {
-            phoneHash = phone != null && !phone.isBlank()
-                    ? phoneHasher.hashPhone(phoneHasher.normalizePhone(phone))
-                    : "";
+            String normalized = phone != null && !phone.isBlank() ? phoneHasher.normalizePhone(phone) : null;
+            phoneHash = normalized != null ? phoneHasher.hashPhone(normalized) : "";
         }
         PromoGrant existing = grantRepository.findByCampaignIdAndUserId(campaignId, userId).orElse(null);
         if (existing != null) return existing;
