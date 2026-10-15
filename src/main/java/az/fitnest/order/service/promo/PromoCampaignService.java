@@ -207,7 +207,7 @@ public class PromoCampaignService {
                 .build()).collect(Collectors.toList()));
         popupRepository.findByCampaignId(id).ifPresent(p -> req.setPopup(AdminPromoCampaignPopupRequest.builder()
                 .ctaTarget(p.getCtaTarget().name())
-                .planId(p.getPlanId())
+                .packageId(p.getPackageId())
                 .url(p.getUrl())
                 .imageUrl(p.getImageUrl())
                 .brandColorOverride(source.getBrandColorOverride())
@@ -569,7 +569,7 @@ public class PromoCampaignService {
         PromoCampaignPopup entity = new PromoCampaignPopup();
         entity.setCampaignId(campaignId);
         entity.setCtaTarget(PromoCtaTarget.valueOf(popup.getCtaTarget().toUpperCase()));
-        entity.setPlanId(popup.getPlanId());
+        entity.setPackageId(popup.getPackageId());
         entity.setUrl(popup.getUrl());
         entity.setImageUrl(popup.getImageUrl());
         entity.setDurationSec(popup.getDurationSec() != null ? popup.getDurationSec() : 7);
@@ -604,7 +604,7 @@ public class PromoCampaignService {
         AdminPromoCampaignPopupResponse popupResp = popupRepository.findByCampaignId(c.getId())
                 .map(p -> AdminPromoCampaignPopupResponse.builder()
                         .ctaTarget(p.getCtaTarget().name())
-                        .planId(p.getPlanId())
+                        .packageId(p.getPackageId())
                         .url(p.getUrl())
                         .imageUrl(p.getImageUrl())
                         .brandColorOverride(c.getBrandColorOverride())
