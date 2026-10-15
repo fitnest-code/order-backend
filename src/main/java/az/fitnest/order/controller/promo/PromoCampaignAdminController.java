@@ -31,7 +31,6 @@ public class PromoCampaignAdminController {
     private final az.fitnest.order.service.promo.PromoNumbersQueryService numbersQueryService;
     private final az.fitnest.order.service.promo.PromoAuditLogService auditLogService;
     private final az.fitnest.order.service.promo.PromoGrantService grantService;
-    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     @GetMapping("/summary")
     @Operation(summary = "KPI summary for A1 campaign list")
@@ -56,24 +55,6 @@ public class PromoCampaignAdminController {
     @Operation(summary = "Check code uniqueness")
     public ResponseEntity<AdminPromoCodeAvailabilityResponse> checkCode(@RequestParam String code) {
         return ResponseEntity.ok(campaignService.checkCodeAvailability(code));
-    }
-
-    @GetMapping("/_debug/schema")
-    @Operation(summary = "TEMPORARY: flyway history + promo column types")
-    public ResponseEntity<Map<String, Object>> debugSchema() {
-        List<Map<String, Object>> history;
-        try {
-            history = jdbcTemplate.queryForList(
-                    "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank DESC LIMIT 15");
-        } catch (Exception e) {
-            history = List.of(Map.of("error", String.valueOf(e.getMessage())));
-        }
-        List<Map<String, Object>> columns = jdbcTemplate.queryForList(
-                "SELECT table_name, column_name, udt_name FROM information_schema.columns " +
-                "WHERE table_name IN ('promo_campaign','promo_partner','promo_grant','promo_audience_number','promo_campaign_media','promo_campaign_popup','promo_audit_log') " +
-                "AND column_name IN ('plan_ids','default_prefixes','allowed_prefixes','tier_codes','logo_on_dark_url','logo_on_dark_url_override','duration_sec','banner_image_url','hero_image_url') " +
-                "ORDER BY table_name, column_name");
-        return ResponseEntity.ok(Map.of("flyway", history, "columns", columns));
     }
 
     @PostMapping
