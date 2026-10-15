@@ -25,7 +25,7 @@ public class PromoCampaignPopup {
     private PromoCtaTarget ctaTarget;
 
     @Column(name = "plan_id")
-    private String planId;
+    private String packageId;
 
     @Column(name = "url")
     private String url;

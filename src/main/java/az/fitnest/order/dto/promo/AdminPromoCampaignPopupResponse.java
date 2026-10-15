@@ -10,7 +10,7 @@ import java.util.UUID;
 public class AdminPromoCampaignPopupResponse {
 
     private String ctaTarget;
-    private String planId;
+    private String packageId;
     private String url;
     private String imageUrl;
     private String brandColorOverride;

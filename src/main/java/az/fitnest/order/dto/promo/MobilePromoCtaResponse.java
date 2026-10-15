@@ -11,7 +11,7 @@ public class MobilePromoCtaResponse {
 
     private String label;
     private String target; // PLANS, PLAN_DETAIL, URL, PROMO_DETAIL (M3 partner screen)
-    private String planId;
+    private String packageId;
     private String url;
     private UUID campaignId;
     private String code;

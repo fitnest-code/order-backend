@@ -17,7 +17,8 @@ public record CheckoutRequest(
     @JsonProperty("option_id")
     Long option_id,
 
-    @Schema(description = "Taksit (0: yox, 1: bəli)", example = "0")
+    @Deprecated
+    @Schema(description = "Köhnə sahə (N2) - qəbul edilir, amma nəzərə alınmır. Ödəniş növü paymentType ilə təyin olunur.", example = "0")
     Integer is_installment,
 
     @Schema(description = "Promokod (yalnız istifadəçiyə ayrılmış kod)", example = "Bakcell20")

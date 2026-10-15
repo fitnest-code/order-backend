@@ -9,4 +9,5 @@ public class MobilePromoDetailResponse {
 
     private String heroImageUrl;
     private Integer durationSec;
+    private MobilePromoCtaResponse cta;
 }
