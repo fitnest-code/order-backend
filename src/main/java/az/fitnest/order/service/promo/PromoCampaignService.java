@@ -568,6 +568,7 @@ public class PromoCampaignService {
         if (popup == null) return;
         PromoCampaignPopup entity = new PromoCampaignPopup();
         entity.setCampaignId(campaignId);
+        entity.setCampaign(campaignRepository.getReferenceById(campaignId));
         entity.setCtaTarget(PromoCtaTarget.valueOf(popup.getCtaTarget().toUpperCase()));
         entity.setPackageId(popup.getPackageId());
         entity.setUrl(popup.getUrl());
