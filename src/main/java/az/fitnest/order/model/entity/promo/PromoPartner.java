@@ -1,6 +1,8 @@
 package az.fitnest.order.model.entity.promo;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -46,6 +48,7 @@ public class PromoPartner {
     @Column(name = "retention_days", nullable = false)
     private Integer retentionDays = 90;
 
+    @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "default_prefixes")
     private String[] defaultPrefixes;
 

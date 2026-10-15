@@ -1,6 +1,8 @@
 package az.fitnest.order.model.entity.promo;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -53,12 +55,15 @@ public class PromoCampaign {
     @Column(name = "identifier_type", nullable = false, length = 16)
     private PromoIdentifierType identifierType = PromoIdentifierType.PHONE;
 
+    @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "allowed_prefixes")
     private String[] allowedPrefixes;
 
+    @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "plan_ids")
     private String[] planIds;
 
+    @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "tier_codes")
     private String[] tierCodes;
 
