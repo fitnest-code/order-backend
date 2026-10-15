@@ -2,11 +2,15 @@ package az.fitnest.order.dto.promo;
 
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
 import java.time.OffsetDateTime;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class AdminPromoCampaignNumberItemResponse {
 
     private String phone; // masked by default

@@ -2,12 +2,16 @@ package az.fitnest.order.dto.promo;
 
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class MobilePromoPopupResponse {
 
     private UUID grantId;
