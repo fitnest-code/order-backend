@@ -35,9 +35,4 @@ public class PromoCampaignPopup {
 
     @Column(name = "duration_sec", nullable = false)
     private Integer durationSec = 7;
-
-    @OneToOne(fetch = FetchType.LAZY)
-    @MapsId
-    @JoinColumn(name = "campaign_id")
-    private PromoCampaign campaign;
 }
