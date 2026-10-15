@@ -2,6 +2,8 @@ package az.fitnest.order.service.promo;
 
 import az.fitnest.order.model.entity.promo.*;
 import az.fitnest.order.repository.promo.*;
+import az.fitnest.order.exception.BadRequestException;
+import az.fitnest.order.exception.ConflictException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -157,6 +159,38 @@ public class PromoGrantService {
         if (!expired.isEmpty()) {
             log.info("Expired {} promo reservations", expired.size());
         }
+    }
+
+    /**
+     * Admin manual grant (support/testing). For list campaigns a phone must be
+     * given and be on the list; BR-8 (one account per number) still enforced.
+     */
+    @Transactional
+    public PromoGrant createGrantForAdmin(UUID campaignId, Long userId, String phone) {
+        PromoCampaign campaign = campaignRepository.findById(campaignId)
+                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.promo_campaign_not_found"));
+        if (userId == null) throw new BadRequestException("error.validation");
+        String phoneHash;
+        if (campaign.getAudienceType() == PromoAudienceType.UPLOADED_LIST) {
+            if (phone == null || phone.isBlank()) throw new BadRequestException("error.promo_not_eligible");
+            String normalized = phoneHasher.normalizePhone(phone);
+            if (normalized == null) throw new BadRequestException("error.promo_not_eligible");
+            phoneHash = phoneHasher.hashPhone(normalized);
+            if (!audienceNumberRepository.existsByCampaignIdAndPhoneHash(campaignId, phoneHash)) {
+                throw new BadRequestException("error.promo_not_eligible");
+            }
+        } else {
+            phoneHash = phone != null && !phone.isBlank()
+                    ? phoneHasher.hashPhone(phoneHasher.normalizePhone(phone))
+                    : "";
+        }
+        PromoGrant existing = grantRepository.findByCampaignIdAndUserId(campaignId, userId).orElse(null);
+        if (existing != null) return existing;
+        PromoGrant created = createGrant(campaignId, userId, phoneHash);
+        if (created == null) {
+            throw new ConflictException("error.promo_already_used");
+        }
+        return created;
     }
 
     private Long findUserIdByPhoneHash(String phoneHash) {

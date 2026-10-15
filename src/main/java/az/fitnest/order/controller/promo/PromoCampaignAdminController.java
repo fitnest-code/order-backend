@@ -30,6 +30,7 @@ public class PromoCampaignAdminController {
     private final PromoPartnerService partnerService;
     private final az.fitnest.order.service.promo.PromoNumbersQueryService numbersQueryService;
     private final az.fitnest.order.service.promo.PromoAuditLogService auditLogService;
+    private final az.fitnest.order.service.promo.PromoGrantService grantService;
 
     @GetMapping("/summary")
     @Operation(summary = "KPI summary for A1 campaign list")
@@ -89,6 +90,26 @@ public class PromoCampaignAdminController {
     public ResponseEntity<AdminPromoCampaignResponse> duplicate(@PathVariable UUID id) {
         Long adminId = UserContext.getCurrentUserId();
         return ResponseEntity.ok(campaignService.duplicate(id, adminId));
+    }
+
+    @PostMapping("/{id}/grants")
+    @Operation(summary = "Manually create a grant (support/testing, audit-logged)")
+    public ResponseEntity<Map<String, Object>> createGrant(@PathVariable UUID id,
+                                                          @RequestBody Map<String, Object> body) {
+        Long adminId = UserContext.getCurrentUserId();
+        Object userIdRaw = body.get("userId");
+        Long userId = userIdRaw instanceof Number n ? n.longValue()
+                : (userIdRaw != null ? Long.parseLong(userIdRaw.toString()) : null);
+        String phone = body.get("phone") != null ? body.get("phone").toString() : null;
+        var grant = grantService.createGrantForAdmin(id, userId, phone);
+        auditLogService.log(adminId, "GRANT_CREATE", "PROMO_GRANT", grant.getId(),
+                null, "{\"campaignId\":\"" + id + "\",\"userId\":" + userId + "}", null, null);
+        return ResponseEntity.ok(Map.of(
+                "grantId", grant.getId(),
+                "campaignId", grant.getCampaignId(),
+                "userId", grant.getUserId(),
+                "status", grant.getStatus().name(),
+                "popupStatus", grant.getPopupStatus().name()));
     }
 
     @GetMapping("/{id}/publish-check")
