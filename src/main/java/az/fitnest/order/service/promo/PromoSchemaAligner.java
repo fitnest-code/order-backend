@@ -82,6 +82,17 @@ public class PromoSchemaAligner implements ApplicationRunner {
     private void alignIndexes() {
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_promo_grant_reserved_order ON promo_grant(reserved_order_id)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_promo_grant_redeemed_order ON promo_grant(redeemed_order_id)");
+        // promo_audit_log has no entity (raw JdbcTemplate writes); ddl-auto never
+        // creates it, so ensure it here. Matches V18 definition.
+        jdbc.execute("CREATE TABLE IF NOT EXISTS promo_audit_log (" +
+                "id UUID PRIMARY KEY DEFAULT gen_random_uuid(), " +
+                "admin_id BIGINT NOT NULL, action VARCHAR(64) NOT NULL, " +
+                "entity_type VARCHAR(32) NOT NULL, entity_id UUID, " +
+                "before_diff JSONB, after_diff JSONB, ip VARCHAR(64), user_agent VARCHAR(255), " +
+                "created_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_promo_audit_log_created_at ON promo_audit_log(created_at)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_promo_audit_log_entity ON promo_audit_log(entity_type, entity_id)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_promo_audit_log_admin ON promo_audit_log(admin_id)");
     }
 
     private void seedBakcell() {
