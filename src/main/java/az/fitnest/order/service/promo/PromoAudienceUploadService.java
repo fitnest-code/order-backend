@@ -81,7 +81,15 @@ public class PromoAudienceUploadService {
 
         // Async per spec (NFR-6): 200k rows <2 min; client polls status every 2s.
         // The original file is never persisted (NFR-3); only bytes in memory for the worker.
-        processor.processAsync(upload.getId(), bytes, lower.endsWith(".xlsx"));
+        // MUST run after commit: the worker reads the row in its own transaction,
+        // and an early start would find nothing and exit silently.
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        processor.processAsync(upload.getId(), bytes, lower.endsWith(".xlsx"));
+                    }
+                });
         auditLogService.log(adminId, "UPLOAD", "PROMO_AUDIENCE", campaignId,
                 null, "{\"file\":\"" + filename.replace("\"", "") + "\",\"mode\":\"" + mode + "\"}", null, null);
         return map(upload);
