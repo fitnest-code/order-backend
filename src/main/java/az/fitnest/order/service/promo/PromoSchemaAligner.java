@@ -35,25 +35,34 @@ public class PromoSchemaAligner implements ApplicationRunner {
     private String udt(String table, String column) {
         try {
             String v = jdbc.queryForObject(
-                    "SELECT udt_name FROM information_schema.columns WHERE table_name = ? AND column_name = ?",
+                    "SELECT udt_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ? AND column_name = ?",
                     String.class, table, column);
             return v != null ? v : "";
         } catch (Exception e) {
+            log.warn("Promo schema: udt lookup failed for {}.{}: {}", table, column, e.getMessage());
             return "";
         }
     }
 
     private void alignArrays() {
         String planIdsType = udt("promo_campaign", "plan_ids");
-        log.info("Promo schema: promo_campaign.plan_ids current type = '{}'", planIdsType);
+        log.warn("Promo schema: promo_campaign.plan_ids current type = '{}'", planIdsType);
         if ("_uuid".equals(planIdsType)) {
-            jdbc.execute("ALTER TABLE promo_campaign ALTER COLUMN plan_ids TYPE TEXT[] USING plan_ids::text[]");
-            log.info("Promo schema: converted promo_campaign.plan_ids uuid[] -> text[]");
+            // Element-wise rebuild: avoids relying on a uuid[]::text[] array cast.
+            jdbc.execute("ALTER TABLE promo_campaign ADD COLUMN IF NOT EXISTS plan_ids_new TEXT[]");
+            jdbc.execute("UPDATE promo_campaign SET plan_ids_new = (SELECT array_agg(e::text) FROM unnest(plan_ids) AS e) WHERE plan_ids IS NOT NULL");
+            jdbc.execute("ALTER TABLE promo_campaign DROP COLUMN IF EXISTS plan_ids");
+            jdbc.execute("ALTER TABLE promo_campaign RENAME COLUMN plan_ids_new TO plan_ids");
+            log.warn("Promo schema: converted promo_campaign.plan_ids uuid[] -> text[], now '{}'",
+                    udt("promo_campaign", "plan_ids"));
         }
         String popupPlan = udt("promo_campaign_popup", "plan_id");
         if ("uuid".equals(popupPlan)) {
-            jdbc.execute("ALTER TABLE promo_campaign_popup ALTER COLUMN plan_id TYPE TEXT USING plan_id::text");
-            log.info("Promo schema: converted promo_campaign_popup.plan_id uuid -> text");
+            jdbc.execute("ALTER TABLE promo_campaign_popup ADD COLUMN IF NOT EXISTS plan_id_new TEXT");
+            jdbc.execute("UPDATE promo_campaign_popup SET plan_id_new = plan_id::text WHERE plan_id IS NOT NULL");
+            jdbc.execute("ALTER TABLE promo_campaign_popup DROP COLUMN IF EXISTS plan_id");
+            jdbc.execute("ALTER TABLE promo_campaign_popup RENAME COLUMN plan_id_new TO plan_id");
+            log.warn("Promo schema: converted promo_campaign_popup.plan_id uuid -> text");
         }
     }
 
