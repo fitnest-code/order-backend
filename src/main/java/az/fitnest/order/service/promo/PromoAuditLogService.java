@@ -21,13 +21,17 @@ public class PromoAuditLogService {
 
     private final JdbcTemplate jdbcTemplate;
 
-    @Transactional
+    /**
+     * Runs in its own transaction: an audit write failure rolls back only the
+     * audit row, never the business operation that triggered it.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void log(Long adminId, String action, String entityType, UUID entityId,
                     String beforeJson, String afterJson, String ip, String userAgent) {
         try {
             jdbcTemplate.update(
                     "INSERT INTO promo_audit_log (id, admin_id, action, entity_type, entity_id, before_diff, after_diff, ip, user_agent, created_at) " +
-                            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                            "VALUES (?,?,?, ?, ?, ?::jsonb, ?::jsonb, ?, ?, ?)",
                     UUID.randomUUID(), adminId, action, entityType, entityId,
                     beforeJson, afterJson, ip, userAgent, OffsetDateTime.now());
         } catch (Exception e) {
