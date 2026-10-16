@@ -44,7 +44,9 @@ public class PromoSchemaAligner implements ApplicationRunner {
     }
 
     private void alignArrays() {
-        if ("_uuid".equals(udt("promo_campaign", "plan_ids"))) {
+        String planIdsType = udt("promo_campaign", "plan_ids");
+        log.info("Promo schema: promo_campaign.plan_ids current type = '{}'", planIdsType);
+        if ("_uuid".equals(planIdsType)) {
             jdbc.execute("ALTER TABLE promo_campaign ALTER COLUMN plan_ids TYPE TEXT[] USING plan_ids::text[]");
             log.info("Promo schema: converted promo_campaign.plan_ids uuid[] -> text[]");
         }
@@ -65,7 +67,8 @@ public class PromoSchemaAligner implements ApplicationRunner {
                         "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'promo_campaign_popup_cta_target_check'",
                         String.class);
                 if (def != null && !def.contains("PROMO_DETAIL")) {
-                    jdbc.execute("ALTER TABLE promo_campaign_popup DROP CONSTRAINT promo_campaign_popup_cta_target_check");
+                    log.info("Promo schema: current cta_target check = '{}'", def);
+                    jdbc.execute("ALTER TABLE promo_campaign_popup DROP CONSTRAINT IF EXISTS promo_campaign_popup_cta_target_check");
                     jdbc.execute("ALTER TABLE promo_campaign_popup ADD CONSTRAINT promo_campaign_popup_cta_target_check " +
                             "CHECK (cta_target IN ('PLANS', 'PLAN_DETAIL', 'URL', 'PROMO_DETAIL'))");
                     log.info("Promo schema: extended cta_target check with PROMO_DETAIL");
@@ -83,11 +86,13 @@ public class PromoSchemaAligner implements ApplicationRunner {
 
     private void seedBakcell() {
         try {
+            // created_at/updated_at supplied explicitly: ddl-auto-created tables
+            // have no DEFAULT now() unlike the Flyway scripts.
             jdbc.update("INSERT INTO promo_partner (id, name, logo_url, brand_color, agreement_ref, " +
-                    "retention_days, default_prefixes, status) VALUES " +
+                    "retention_days, default_prefixes, status, created_at, updated_at) VALUES " +
                     "('11111111-1111-1111-1111-111111111111', 'Bakcell', " +
                     "'https://cdn.fitnest.az/partners/bakcell.svg', '#E4002B', 'BAK-2026-001', 90, " +
-                    "ARRAY['55','99'], 'ACTIVE') ON CONFLICT (name) DO NOTHING");
+                    "ARRAY['55','99'], 'ACTIVE', now(), now()) ON CONFLICT (name) DO NOTHING");
         } catch (Exception e) {
             log.warn("Promo schema: bakcell seed skipped: {}", e.getMessage());
         }
