@@ -4,6 +4,9 @@ import az.fitnest.order.dto.promo.AdminPromoPartnerRequest;
 import az.fitnest.order.dto.promo.AdminPromoPartnerResponse;
 import az.fitnest.order.exception.BadRequestException;
 import az.fitnest.order.exception.ResourceNotFoundException;
+import az.fitnest.order.model.entity.promo.PromoCampaign;
+import az.fitnest.order.model.entity.promo.PromoCampaignStatus;
+import az.fitnest.order.model.entity.promo.PromoGrantStatus;
 import az.fitnest.order.model.entity.promo.PromoPartner;
 import az.fitnest.order.model.entity.promo.PromoPartnerStatus;
 import az.fitnest.order.repository.promo.PromoPartnerRepository;
@@ -144,19 +147,19 @@ public class PromoPartnerService {
     private AdminPromoPartnerResponse mapToResponseWithStats(PromoPartner partner) {
         AdminPromoPartnerResponse response = mapToResponse(partner);
 
-        List<az.fitnest.order.model.entity.promo.PromoCampaign> campaigns = campaignRepository.findByPartnerId(partner.getId());
+        List<PromoCampaign> campaigns = campaignRepository.findByPartnerId(partner.getId());
         long activeCampaigns = campaigns.stream()
-                .filter(c -> c.getStatus() == az.fitnest.order.model.entity.promo.PromoCampaignStatus.ACTIVE)
+                .filter(c -> c.getStatus() == PromoCampaignStatus.ACTIVE)
                 .count();
 
         long totalCampaigns = campaigns.size();
         long eligibleNumbers = 0;
         long redeemedCount = 0;
 
-        for (az.fitnest.order.model.entity.promo.PromoCampaign campaign : campaigns) {
+        for (PromoCampaign campaign : campaigns) {
             eligibleNumbers += audienceNumberRepository.countByCampaignId(campaign.getId());
             redeemedCount += grantRepository.countByCampaignIdAndStatus(campaign.getId(),
-                    az.fitnest.order.model.entity.promo.PromoGrantStatus.REDEEMED);
+                    PromoGrantStatus.REDEEMED);
         }
 
         response.setActiveCampaigns((int) activeCampaigns);

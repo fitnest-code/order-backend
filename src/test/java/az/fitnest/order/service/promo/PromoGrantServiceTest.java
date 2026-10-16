@@ -161,17 +161,118 @@ class PromoGrantServiceTest {
         verify(campaignRepository, never()).save(any());
     }
 
-    /** Reservation expiry job returns reserved grants to GRANTED */
+    /** Reservation expiry job releases expired rows in bulk */
     @Test
     void expireReservations_freesExpiredRows() {
-        grant.setStatus(PromoGrantStatus.RESERVED);
-        grant.setReservedUntil(OffsetDateTime.now().minusMinutes(5));
-        when(grantRepository.findByStatusAndReservedUntilBefore(eq(PromoGrantStatus.RESERVED), any()))
-                .thenReturn(List.of(grant));
+        when(grantRepository.releaseExpiredReservations(any())).thenReturn(1);
 
         grantService.expireReservations();
 
-        assertEquals(PromoGrantStatus.GRANTED, grant.getStatus());
-        verify(grantRepository).save(grant);
+        verify(grantRepository).releaseExpiredReservations(any());
+    }
+}
+
+/**
+ * Shared usability gate (used by quote AND order paths alike).
+ * Package-private top-level class in the same file; runs as its own test class.
+ */
+class AssertGrantUsableTest {
+
+    @Mock
+    private PromoGrantRepository grantRepository;
+    @Mock
+    private PromoCampaignRepository campaignRepository;
+    @Mock
+    private PromoPhoneHasher phoneHasher;
+    @Mock
+    private PromoAudienceNumberRepository audienceNumberRepository;
+    @Mock
+    private PromoEventPublisher eventPublisher;
+
+    @InjectMocks
+    private PromoGrantService grantService;
+
+    private UUID campaignId;
+    private PromoCampaign campaign;
+    private PromoGrant grant;
+
+    @BeforeEach
+    void setUp() {
+        org.mockito.MockitoAnnotations.openMocks(this);
+        campaignId = UUID.randomUUID();
+        campaign = new PromoCampaign();
+        campaign.setId(campaignId);
+        campaign.setStatus(PromoCampaignStatus.ACTIVE);
+        campaign.setStartsAt(OffsetDateTime.now().minusDays(1));
+        campaign.setEndsAt(OffsetDateTime.now().plusDays(1));
+        campaign.setPlanIds(new String[]{"12"});
+        grant = new PromoGrant();
+        grant.setId(UUID.randomUUID());
+        grant.setCampaignId(campaignId);
+        grant.setUserId(10L);
+        grant.setStatus(PromoGrantStatus.GRANTED);
+        when(campaignRepository.findById(campaignId)).thenReturn(Optional.of(campaign));
+        when(grantRepository.findByCampaignIdAndUserId(campaignId, 10L)).thenReturn(Optional.of(grant));
+    }
+
+    @Test
+    void happyPath_returnsGrant() {
+        assertSame(grant, grantService.assertGrantUsable(campaignId, 10L, "12"));
+    }
+
+    @Test
+    void paused_throwsNotActive() {
+        campaign.setStatus(PromoCampaignStatus.PAUSED);
+        assertEquals("error.promo_not_active", assertThrows(
+                az.fitnest.order.exception.BadRequestException.class,
+                () -> grantService.assertGrantUsable(campaignId, 10L, "12")).getMessage());
+    }
+
+    @Test
+    void ended_throwsExpired() {
+        campaign.setEndsAt(OffsetDateTime.now().minusSeconds(1));
+        assertEquals("error.promo_expired", assertThrows(
+                az.fitnest.order.exception.BadRequestException.class,
+                () -> grantService.assertGrantUsable(campaignId, 10L, "12")).getMessage());
+    }
+
+    @Test
+    void limitReached_throwsLimitReached() {
+        campaign.setTotalLimit(5);
+        campaign.setRedeemedCount(5);
+        assertEquals("error.promo_limit_reached", assertThrows(
+                az.fitnest.order.exception.BadRequestException.class,
+                () -> grantService.assertGrantUsable(campaignId, 10L, "12")).getMessage());
+    }
+
+    @Test
+    void wrongPlan_throwsPlanNotAllowed() {
+        assertEquals("error.promo_plan_not_allowed", assertThrows(
+                az.fitnest.order.exception.BadRequestException.class,
+                () -> grantService.assertGrantUsable(campaignId, 10L, "99")).getMessage());
+    }
+
+    @Test
+    void noGrant_throwsNotEligible() {
+        when(grantRepository.findByCampaignIdAndUserId(campaignId, 10L)).thenReturn(Optional.empty());
+        assertEquals("error.promo_not_eligible", assertThrows(
+                az.fitnest.order.exception.BadRequestException.class,
+                () -> grantService.assertGrantUsable(campaignId, 10L, "12")).getMessage());
+    }
+
+    @Test
+    void redeemed_throwsAlreadyUsed() {
+        grant.setStatus(PromoGrantStatus.REDEEMED);
+        assertEquals("error.promo_already_used", assertThrows(
+                az.fitnest.order.exception.BadRequestException.class,
+                () -> grantService.assertGrantUsable(campaignId, 10L, "12")).getMessage());
+    }
+
+    @Test
+    void revoked_throwsNotActive() {
+        grant.setStatus(PromoGrantStatus.REVOKED);
+        assertEquals("error.promo_not_active", assertThrows(
+                az.fitnest.order.exception.BadRequestException.class,
+                () -> grantService.assertGrantUsable(campaignId, 10L, "12")).getMessage());
     }
 }

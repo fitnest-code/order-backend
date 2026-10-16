@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -41,11 +42,14 @@ public class PromoEventPublisher {
     }
 
     public void grantReserved(UUID campaignId, String code, UUID partnerId, Long userId, String phoneHash, String orderId) {
-        publish("promo.grant.reserved", campaignId, code, partnerId, userId, phoneHash, Map.of("orderId", orderId));
+        Map<String, Object> extra = new HashMap<>();
+        // Map.of forbids nulls; orderId is null when called outside an order context.
+        if (orderId != null) extra.put("orderId", orderId);
+        publish("promo.grant.reserved", campaignId, code, partnerId, userId, phoneHash, extra);
     }
 
     public void grantRedeemed(UUID campaignId, String code, UUID partnerId, Long userId, String phoneHash,
-                              String orderId, java.math.BigDecimal discountAmount) {
+                              String orderId, BigDecimal discountAmount) {
         Map<String, Object> extra = new HashMap<>();
         extra.put("orderId", orderId);
         extra.put("discountAmount", discountAmount);

@@ -3,6 +3,7 @@ package az.fitnest.order.service.promo;
 import az.fitnest.order.dto.promo.AdminPromoCampaignNumberItemResponse;
 import az.fitnest.order.dto.promo.AdminPromoCampaignNumbersResponse;
 import az.fitnest.order.exception.ForbiddenException;
+import az.fitnest.order.exception.ResourceNotFoundException;
 import az.fitnest.order.model.entity.promo.PromoAudienceType;
 import az.fitnest.order.model.entity.promo.PromoCampaign;
 import az.fitnest.order.model.entity.promo.PromoGrantStatus;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +33,8 @@ import java.util.UUID;
 @Slf4j
 public class PromoNumbersQueryService {
 
+    private static final ZoneId BAKU_ZONE = ZoneId.of("Asia/Baku");
+
     private final JdbcTemplate jdbcTemplate;
     private final PromoCampaignRepository campaignRepository;
     private final PromoPhoneEncryption phoneEncryption;
@@ -41,7 +45,7 @@ public class PromoNumbersQueryService {
     public AdminPromoCampaignNumbersResponse numbers(UUID campaignId, String phone, String status,
                                                      int page, int size, boolean reveal) {
         PromoCampaign campaign = campaignRepository.findById(campaignId)
-                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.promo_campaign_not_found"));
+                .orElseThrow(() -> new ResourceNotFoundException("error.promo_campaign_not_found"));
         if (campaign.getAudienceType() != PromoAudienceType.UPLOADED_LIST) {
             return AdminPromoCampaignNumbersResponse.builder()
                     .items(List.of()).page(page).size(size).totalElements(0L).totalPages(0).build();
@@ -113,14 +117,15 @@ public class PromoNumbersQueryService {
                     .status(displayStatus)
                     .registered(gstatus != null)
                     .sawPopup("SEEN".equals(popupStatus))
-                    .redeemedAt(redeemedAt instanceof Timestamp ts ? ts.toInstant().atOffset(OffsetDateTime.now().getOffset()) : null)
+                    .redeemedAt(redeemedAt instanceof Timestamp ts
+                            ? ts.toInstant().atZone(BAKU_ZONE).toOffsetDateTime() : null)
                     .userId(userId instanceof Number num ? num.longValue() : null)
                     .build());
         }
 
         if (reveal) {
             auditLogService.log(UserContext.getCurrentUserId(), "PII_REVEAL", "PROMO_AUDIENCE", campaignId,
-                    null, "{\"page\":" + page + ",\"size\":" + size + "}", null, null);
+                    null, Map.of("page", page, "size", size), null, null);
         }
 
         int totalPages = size > 0 ? (int) Math.ceil((double) (total != null ? total : 0) / size) : 0;
@@ -139,11 +144,11 @@ public class PromoNumbersQueryService {
                 ps -> { ps.setObject(1, campaignId); ps.setString(2, phoneHash); },
                 rs -> rs.next() ? rs.getBytes(1) : null);
         if (enc == null) {
-            throw new az.fitnest.order.exception.ResourceNotFoundException("error.promo_number_not_found");
+            throw new ResourceNotFoundException("error.promo_number_not_found");
         }
         String full = phoneEncryption.decrypt(enc);
         auditLogService.log(UserContext.getCurrentUserId(), "PII_REVEAL", "PROMO_NUMBER", campaignId,
-                "{\"phoneHash\":\"" + phoneHash + "\"}", null, null, null);
+                Map.of("phoneHash", phoneHash), null, null, null);
         return full;
     }
 

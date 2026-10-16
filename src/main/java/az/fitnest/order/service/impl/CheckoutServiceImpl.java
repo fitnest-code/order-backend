@@ -55,11 +55,11 @@ public class CheckoutServiceImpl implements CheckoutService {
         BigDecimal payable = baseAmount;
 
         if (request.promoCode() != null && !request.promoCode().isBlank()) {
+            boolean useFitCoin = Boolean.TRUE.equals(request.useFitCoin());
             promoCampaignId = promoOrderService.resolveAndReserve(
-                    userId, request.promoCode(), packageIdStr, payable, orderId);
+                    userId, request.promoCode(), packageIdStr, useFitCoin, request.paymentType(), orderId);
 
-            // discount amount from the order's stored campaign (per user, per plan)
-            discount = promoOrderService.discountFor(userId, request.promoCode(), baseAmount, option.getId());
+            discount = promoOrderService.discountFor(request.promoCode(), baseAmount);
             payable = baseAmount.subtract(discount);
             if (payable.compareTo(BigDecimal.ZERO) < 0) payable = BigDecimal.ZERO;
         }

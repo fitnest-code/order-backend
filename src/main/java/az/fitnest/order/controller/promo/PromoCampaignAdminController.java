@@ -2,8 +2,14 @@ package az.fitnest.order.controller.promo;
 
 import az.fitnest.order.dto.promo.*;
 import az.fitnest.order.exception.BadRequestException;
+import az.fitnest.order.exception.ForbiddenException;
+import az.fitnest.order.service.promo.PromoAuditLogService;
 import az.fitnest.order.service.promo.PromoCampaignService;
+import az.fitnest.order.service.promo.PromoGrantService;
+import az.fitnest.order.service.promo.PromoNumbersQueryService;
 import az.fitnest.order.service.promo.PromoPartnerService;
+import az.fitnest.order.model.entity.promo.PromoGrant;
+import az.fitnest.order.model.entity.promo.PromoPopupStatus;
 import az.fitnest.order.util.UserContext;import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -28,9 +34,9 @@ public class PromoCampaignAdminController {
 
     private final PromoCampaignService campaignService;
     private final PromoPartnerService partnerService;
-    private final az.fitnest.order.service.promo.PromoNumbersQueryService numbersQueryService;
-    private final az.fitnest.order.service.promo.PromoAuditLogService auditLogService;
-    private final az.fitnest.order.service.promo.PromoGrantService grantService;
+    private final PromoNumbersQueryService numbersQueryService;
+    private final PromoAuditLogService auditLogService;
+    private final PromoGrantService grantService;
 
     @GetMapping("/summary")
     @Operation(summary = "KPI summary for A1 campaign list")
@@ -103,7 +109,7 @@ public class PromoCampaignAdminController {
         String phone = body.get("phone") != null ? body.get("phone").toString() : null;
         var grant = grantService.createGrantForAdmin(id, userId, phone);
         auditLogService.log(adminId, "GRANT_CREATE", "PROMO_GRANT", grant.getId(),
-                null, "{\"campaignId\":\"" + id + "\",\"userId\":" + userId + "}", null, null);
+                null, Map.of("campaignId", id.toString(), "userId", userId), null, null);
         return ResponseEntity.ok(Map.of(
                 "grantId", grant.getId(),
                 "campaignId", grant.getCampaignId(),
@@ -182,21 +188,21 @@ public class PromoCampaignAdminController {
     @Operation(summary = "Export campaign CSV (masked phones unless PROMO_PII_VIEW)")
     public ResponseEntity<String> exportCsv(@PathVariable UUID id,
                                             @RequestParam(defaultValue = "false") boolean reveal) {
-        if (reveal && !az.fitnest.order.util.UserContext.hasAuthority("PROMO_PII_VIEW")) {
-            throw new az.fitnest.order.exception.ForbiddenException("error.forbidden");
+        if (reveal && !UserContext.hasAuthority("PROMO_PII_VIEW")) {
+            throw new ForbiddenException("error.forbidden");
         }
-        List<az.fitnest.order.model.entity.promo.PromoGrant> grants = campaignService.exportGrants(id);
+        List<PromoGrant> grants = campaignService.exportGrants(id);
         StringBuilder sb = new StringBuilder("status,phone_hash,registered,saw_popup,redeemed_at\n");
         for (var g : grants) {
             sb.append(g.getStatus()).append(',')
                     .append(g.getPhoneHash()).append(',')
                     .append(true).append(',')
-                    .append(g.getPopupStatus() == az.fitnest.order.model.entity.promo.PromoPopupStatus.SEEN).append(',')
+                    .append(g.getPopupStatus() == PromoPopupStatus.SEEN).append(',')
                     .append(g.getRedeemedAt() != null ? g.getRedeemedAt().toString() : "")
                     .append('\n');
         }
-        auditLogService.log(az.fitnest.order.util.UserContext.getCurrentUserId(), "EXPORT", "PROMO_CAMPAIGN", id,
-                null, "{\"rows\":" + grants.size() + ",\"reveal\":" + reveal + "}", null, null);
+        auditLogService.log(UserContext.getCurrentUserId(), "EXPORT", "PROMO_CAMPAIGN", id,
+                null, Map.of("rows", grants.size(), "reveal", reveal), null, null);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=promo_campaign_export_" + id + ".csv")
                 .contentType(MediaType.parseMediaType("text/csv"))

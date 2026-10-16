@@ -1,9 +1,8 @@
 package az.fitnest.order.kafka;
 
-import az.fitnest.order.model.entity.promo.*;
-import az.fitnest.order.repository.promo.*;
-import az.fitnest.order.service.promo.PromoPhoneHasher;
+import az.fitnest.order.repository.promo.PromoAudienceNumberRepository;
 import az.fitnest.order.service.promo.PromoGrantService;
+import az.fitnest.order.service.promo.PromoPhoneHasher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -12,16 +11,14 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
 /**
  * Consumes user.phone.verified published by identity-backend.
  * Payload: { userId, phoneNormalised, verifiedAt }
- * For each verified user phone, we create grants for any campaign whose
- * audience list contains that phone hash (and whose audience type is
- * UPLOADED_LIST). BR-8 is enforced inside PromoGrantService.
+ * Creates a grant in every list campaign containing that phone hash.
+ * BR-8 (one account per number) is enforced inside PromoGrantService.
  */
 @Component
 @RequiredArgsConstructor
@@ -29,11 +26,9 @@ import java.util.UUID;
 public class UserPhoneVerifiedListener {
 
     private final PromoAudienceNumberRepository audienceNumberRepository;
-    private final PromoCampaignRepository campaignRepository;
     private final PromoGrantService grantService;
-    private final PromoGrantRepository grantRepository;
     private final PromoPhoneHasher phoneHasher;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "${promo.kafka.topic.user-phone-verified:user.phone.verified}",
             groupId = "${promo.kafka.group-id:order-backend-promo}")
@@ -58,21 +53,13 @@ public class UserPhoneVerifiedListener {
         if (normalized == null) return;
         String phoneHash = phoneHasher.hashPhone(normalized);
 
-        OffsetDateTime now = OffsetDateTime.now();
-        List<PromoCampaign> campaigns = campaignRepository.findByStatusIn(List.of(
-                PromoCampaignStatus.DRAFT, PromoCampaignStatus.SCHEDULED,
-                PromoCampaignStatus.ACTIVE, PromoCampaignStatus.PAUSED));
-
-        for (PromoCampaign campaign : campaigns) {
-            if (campaign.getAudienceType() != PromoAudienceType.UPLOADED_LIST) {
-                continue; // NEW_USERS / ALL_USERS grants handled elsewhere
-            }
-            if (audienceNumberRepository.existsByCampaignIdAndPhoneHash(campaign.getId(), phoneHash)) {
-                try {
-                    grantService.createGrant(campaign.getId(), userId, phoneHash);
-                } catch (Exception e) {
-                    log.warn("Failed creating grant for user={} campaign={}: {}", userId, campaign.getId(), e.getMessage());
-                }
+        // One indexed lookup finds every relevant campaign (no per-campaign EXISTS).
+        List<UUID> campaignIds = audienceNumberRepository.findCampaignIdsByPhoneHash(phoneHash);
+        for (UUID campaignId : campaignIds) {
+            try {
+                grantService.createGrant(campaignId, userId, phoneHash);
+            } catch (Exception e) {
+                log.warn("Failed creating grant for user={} campaign={}: {}", userId, campaignId, e.getMessage());
             }
         }
     }

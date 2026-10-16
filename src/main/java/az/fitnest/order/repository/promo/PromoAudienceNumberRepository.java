@@ -26,6 +26,10 @@ public interface PromoAudienceNumberRepository extends JpaRepository<PromoAudien
     @Query("SELECT n.phoneHash FROM PromoAudienceNumber n WHERE n.campaignId = :campaignId")
     List<String> findPhoneHashesByCampaignId(@Param("campaignId") UUID campaignId);
 
+    /** All campaigns whose uploaded list contains this phone hash. */
+    @Query("SELECT DISTINCT n.campaignId FROM PromoAudienceNumber n WHERE n.phoneHash = :phoneHash")
+    List<UUID> findCampaignIdsByPhoneHash(@Param("phoneHash") String phoneHash);
+
     @Query("SELECT n.campaignId AS campaignId, COUNT(n) AS cnt FROM PromoAudienceNumber n " +
             "WHERE n.campaignId IN :ids GROUP BY n.campaignId")
     List<Object[]> countByCampaignIds(@Param("ids") List<UUID> ids);

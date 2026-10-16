@@ -13,5 +13,7 @@ public interface PromoCampaignMediaRepository extends JpaRepository<PromoCampaig
 
     List<PromoCampaignMedia> findByCampaignId(UUID campaignId);
 
+    List<PromoCampaignMedia> findByCampaignIdIn(List<UUID> campaignIds);
+
     void deleteByCampaignId(UUID campaignId);
 }

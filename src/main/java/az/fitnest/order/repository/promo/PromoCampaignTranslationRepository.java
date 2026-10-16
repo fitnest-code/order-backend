@@ -13,5 +13,7 @@ public interface PromoCampaignTranslationRepository extends JpaRepository<PromoC
 
     List<PromoCampaignTranslation> findByCampaignId(UUID campaignId);
 
+    List<PromoCampaignTranslation> findByCampaignIdIn(List<UUID> campaignIds);
+
     void deleteByCampaignId(UUID campaignId);
 }

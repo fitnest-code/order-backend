@@ -29,6 +29,17 @@ public interface PromoGrantRepository extends JpaRepository<PromoGrant, UUID> {
 
     List<PromoGrant> findByStatusAndReservedUntilBefore(PromoGrantStatus status, OffsetDateTime now);
 
+    /**
+     * Bulk-release expired reservations in one statement (scheduler tick).
+     * Per-row events are skipped here by design: expiry is routine, and the
+     * grant simply becomes usable again.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE PromoGrant g SET g.status = az.fitnest.order.model.entity.promo.PromoGrantStatus.GRANTED, " +
+            "g.reservedOrderId = NULL, g.reservedUntil = NULL " +
+            "WHERE g.status = az.fitnest.order.model.entity.promo.PromoGrantStatus.RESERVED AND g.reservedUntil < :now")
+    int releaseExpiredReservations(@Param("now") OffsetDateTime now);
+
     List<PromoGrant> findByCampaignIdAndStatusIn(UUID campaignId, List<PromoGrantStatus> statuses);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

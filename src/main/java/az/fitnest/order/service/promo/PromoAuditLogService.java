@@ -4,9 +4,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -20,6 +22,27 @@ import java.util.UUID;
 public class PromoAuditLogService {
 
     private final JdbcTemplate jdbcTemplate;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
+    /**
+     * Structurally-safe variant: diffs are serialized with Jackson, so caller
+     * values can never break the JSONB payload (no string-concat escaping bugs).
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void log(Long adminId, String action, String entityType, UUID entityId,
+                    Map<String, Object> before, Map<String, Object> after, String ip, String userAgent) {
+        log(adminId, action, entityType, entityId, toJson(before), toJson(after), ip, userAgent);
+    }
+
+    private String toJson(Map<String, Object> map) {
+        if (map == null || map.isEmpty()) return null;
+        try {
+            return objectMapper.writeValueAsString(map);
+        } catch (Exception e) {
+            log.warn("Failed serializing audit diff, storing null", e);
+            return null;
+        }
+    }
 
     /**
      * Runs in its own transaction: an audit write failure rolls back only the

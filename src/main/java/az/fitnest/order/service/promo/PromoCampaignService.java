@@ -169,7 +169,7 @@ public class PromoCampaignService {
         }
         campaignRepository.delete(campaign);
         auditLogService.log(adminId, "DELETE", "PROMO_CAMPAIGN", id,
-                "{\"status\":\"DRAFT\"}", "{\"deleted\":true}", null, null);
+                Map.of("status", "DRAFT"), Map.of("deleted", true), null, null);
     }
 
     @Transactional
@@ -292,7 +292,7 @@ public class PromoCampaignService {
         }
         campaignRepository.save(campaign);
         auditLogService.log(adminId, "PUBLISH", "PROMO_CAMPAIGN", id,
-                null, "{\"status\":\"" + campaign.getStatus() + "\"}", null, null);
+                null, Map.of("status", campaign.getStatus().name()), null, null);
         log.info("Published promo campaign {} by admin {}", id, adminId);
         return getDetail(id);
     }
@@ -307,7 +307,7 @@ public class PromoCampaignService {
         campaign.setStatus(PromoCampaignStatus.DRAFT);
         campaignRepository.save(campaign);
         auditLogService.log(adminId, "UNSCHEDULE", "PROMO_CAMPAIGN", id,
-                "{\"status\":\"SCHEDULED\"}", "{\"status\":\"DRAFT\"}", null, null);
+                Map.of("status", "SCHEDULED"), Map.of("status", "DRAFT"), null, null);
         return getDetail(id);
     }
 
@@ -321,7 +321,7 @@ public class PromoCampaignService {
         campaign.setStatus(PromoCampaignStatus.PAUSED);
         campaignRepository.save(campaign);
         auditLogService.log(adminId, "PAUSE", "PROMO_CAMPAIGN", id,
-                "{\"status\":\"ACTIVE\"}", "{\"status\":\"PAUSED\"}", null, null);
+                Map.of("status", "ACTIVE"), Map.of("status", "PAUSED"), null, null);
         return getDetail(id);
     }
 
@@ -338,7 +338,7 @@ public class PromoCampaignService {
         campaign.setStatus(PromoCampaignStatus.ACTIVE);
         campaignRepository.save(campaign);
         auditLogService.log(adminId, "RESUME", "PROMO_CAMPAIGN", id,
-                "{\"status\":\"PAUSED\"}", "{\"status\":\"ACTIVE\"}", null, null);
+                Map.of("status", "PAUSED"), Map.of("status", "ACTIVE"), null, null);
         return getDetail(id);
     }
 
@@ -355,7 +355,7 @@ public class PromoCampaignService {
         campaign.setStatus(PromoCampaignStatus.ENDED);
         campaignRepository.save(campaign);
         auditLogService.log(adminId, "END", "PROMO_CAMPAIGN", id,
-                "{\"status\":\"" + before + "\"}", "{\"status\":\"ENDED\"}", null, null);
+                Map.of("status", before), Map.of("status", "ENDED"), null, null);
         return getDetail(id);
     }
 

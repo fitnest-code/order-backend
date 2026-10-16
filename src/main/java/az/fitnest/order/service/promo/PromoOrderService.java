@@ -1,7 +1,10 @@
 package az.fitnest.order.service.promo;
 
 import az.fitnest.order.exception.BadRequestException;
-import az.fitnest.order.model.entity.promo.*;
+import az.fitnest.order.model.entity.promo.PromoCampaign;
+import az.fitnest.order.model.entity.promo.PromoCampaignStatus;
+import az.fitnest.order.model.entity.promo.PromoGrant;
+import az.fitnest.order.model.entity.promo.PromoGrantStatus;
 import az.fitnest.order.repository.promo.PromoCampaignRepository;
 import az.fitnest.order.repository.promo.PromoGrantRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,11 +20,11 @@ import java.util.UUID;
 /**
  * Integrates promo grants with the order/payment lifecycle (FR-RED-1, 13.3).
  *
- * - reservePromoForOrder: called when an order is created with a promo code.
+ * - {@link #resolveAndReserve}: called when an order is created with a promo code.
  *   Only one parallel order may succeed; the second gets PROMO_RESERVED.
- * - releasePromoReservation: called when payment fails / is cancelled / expired.
- * - redeemPromo: called by the payment outbox inside the SAME transaction that
- *   applies the subscription. A bank callback alone never redeems.
+ * - {@link #releasePromoReservation}: called when payment fails / is cancelled / expired.
+ * - {@link #redeemPromo}: called by the payment outbox inside the SAME transaction
+ *   that applies the subscription. A bank callback alone never redeems.
  */
 @Service
 @RequiredArgsConstructor
@@ -33,56 +36,42 @@ public class PromoOrderService {
     private final PromoGrantRepository grantRepository;
     private final PromoCampaignRepository campaignRepository;
     private final PromoGrantService grantService;
-    private final PromoEventPublisher eventPublisher;
 
     /**
      * Reserves the user's grant for the given promo code.
      *
      * @throws BadRequestException PROMO_RESERVED for the second parallel order,
-     *         PROMO_ALREADY_USED, PROMO_EXPIRED, PROMO_LIMIT_REACHED
+     *         PROMO_ALREADY_USED, PROMO_EXPIRED, PROMO_LIMIT_REACHED,
+     *         PROMO_PAYMENT_TYPE_NOT_ALLOWED
      */
     @Transactional
-    public UUID resolveAndReserve(Long userId, String promoCode, String planId,
-                                  BigDecimal payableAmount, String orderId) {
+    public UUID resolveAndReserve(Long userId, String promoCode, String packageId,
+                                  boolean useFitCoin, String paymentType, String orderId) {
         if (promoCode == null || promoCode.isBlank()) return null;
 
         PromoCampaign campaign = campaignRepository.findByCodeNormalized(promoCode.toUpperCase())
                 .orElseThrow(() -> new BadRequestException("error.promo_not_eligible"));
 
-        if (campaign.getStatus() != PromoCampaignStatus.ACTIVE) {
-            throw new BadRequestException("error.promo_not_active");
-        }
-        OffsetDateTime now = OffsetDateTime.now();
-        if (campaign.getEndsAt().isBefore(now)) {
-            throw new BadRequestException("error.promo_expired");
-        }
-        if (campaign.getTotalLimit() != null && campaign.getRedeemedCount() >= campaign.getTotalLimit()) {
-            throw new BadRequestException("error.promo_limit_reached");
-        }
-        if (planId != null && campaign.getPlanIds() != null && campaign.getPlanIds().length > 0
-                && !java.util.Arrays.asList(campaign.getPlanIds()).contains(planId)) {
-            throw new BadRequestException("error.promo_plan_not_allowed");
-        }
-
-        PromoGrant grant = grantRepository.findByCampaignIdAndUserId(campaign.getId(), userId)
-                .orElseThrow(() -> new BadRequestException("error.promo_not_eligible"));
-
-        if (grant.getStatus() == PromoGrantStatus.REDEEMED) {
-            throw new BadRequestException("error.promo_already_used");
-        }
-        if (grant.getStatus() != PromoGrantStatus.GRANTED && grant.getStatus() != PromoGrantStatus.RESERVED) {
-            throw new BadRequestException("error.promo_not_active");
-        }
+        PromoGrant grant = grantService.assertGrantUsable(campaign.getId(), userId, packageId);
+        assertPaymentRules(campaign, useFitCoin, paymentType);
 
         try {
-            grantService.reserve(campaign.getId(), userId, orderId, now.plusMinutes(RESERVATION_MINUTES));
-        } catch (IllegalStateException e) {
-            String msg = e.getMessage() != null ? e.getMessage() : "";
-            if (msg.contains("RESERVED")) throw new BadRequestException("error.promo_reserved");
-            if (msg.contains("ALREADY_USED")) throw new BadRequestException("error.promo_already_used");
-            throw new BadRequestException("error.promo_reserved");
+            grantService.reserve(campaign.getId(), userId, orderId,
+                    OffsetDateTime.now().plusMinutes(RESERVATION_MINUTES));
+        } catch (PromoReservationException e) {
+            throw new BadRequestException(e.getErrorCode());
         }
         return campaign.getId();
+    }
+
+    private void assertPaymentRules(PromoCampaign campaign, boolean useFitCoin, String paymentType) {
+        if (!Boolean.TRUE.equals(campaign.getAllowFitcoin()) && useFitCoin) {
+            throw new BadRequestException("error.promo_payment_type_not_allowed");
+        }
+        if (paymentType != null && paymentType.equalsIgnoreCase("INSTALLMENT")
+                && !Boolean.TRUE.equals(campaign.getAllowInstallments())) {
+            throw new BadRequestException("error.promo_payment_type_not_allowed");
+        }
     }
 
     @Transactional
@@ -112,36 +101,14 @@ public class PromoOrderService {
     }
 
     /**
-     * Stores the promo snapshot on the order (discount applied at checkout).
-     */
-    public static PromoSnapshot snapshot(UUID campaignId, String code, BigDecimal discountAmount) {
-        return new PromoSnapshot(campaignId, code, discountAmount);
-    }
-
-    /**
-     * Calculates the discount for a code + base amount, for stamping the order.
+     * Discount for a code + base amount, for stamping the order.
      * Returns ZERO when the code does not apply.
      */
     @Transactional(readOnly = true)
-    public BigDecimal discountFor(Long userId, String promoCode, BigDecimal baseAmount, Long optionId) {
+    public BigDecimal discountFor(String promoCode, BigDecimal baseAmount) {
         if (promoCode == null || promoCode.isBlank()) return BigDecimal.ZERO;
         PromoCampaign campaign = campaignRepository.findByCodeNormalized(promoCode.toUpperCase()).orElse(null);
-        if (campaign == null) return BigDecimal.ZERO;
-        if (campaign.getStatus() != PromoCampaignStatus.ACTIVE) return BigDecimal.ZERO;
-
-        BigDecimal discount;
-        if (campaign.getDiscountType() == PromoDiscountType.PERCENT) {
-            discount = baseAmount.multiply(campaign.getDiscountValue())
-                    .divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
-            if (campaign.getMaxDiscountAmount() != null && discount.compareTo(campaign.getMaxDiscountAmount()) > 0) {
-                discount = campaign.getMaxDiscountAmount();
-            }
-        } else {
-            discount = campaign.getDiscountValue();
-        }
-        if (discount.compareTo(baseAmount) > 0) discount = baseAmount;
-        return discount.compareTo(BigDecimal.ZERO) > 0 ? discount : BigDecimal.ZERO;
+        if (campaign == null || campaign.getStatus() != PromoCampaignStatus.ACTIVE) return BigDecimal.ZERO;
+        return PromoPricing.calculateDiscount(campaign, baseAmount);
     }
-
-    public record PromoSnapshot(UUID campaignId, String code, BigDecimal discountAmount) {}
 }

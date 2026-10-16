@@ -2,6 +2,8 @@ package az.fitnest.order.service.promo;
 
 import az.fitnest.order.dto.promo.*;
 import az.fitnest.order.exception.BadRequestException;
+import az.fitnest.order.exception.ResourceNotFoundException;
+import az.fitnest.order.grpc.PaymentGrpcClient;
 import az.fitnest.order.model.entity.PackageOption;
 import az.fitnest.order.model.entity.SubscriptionPackage;
 import az.fitnest.order.model.entity.promo.*;
@@ -15,24 +17,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.OffsetDateTime;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class PromoQuoteService {
 
-    private final PromoGrantRepository grantRepository;
     private final PromoCampaignRepository campaignRepository;
     private final PromoCampaignTranslationRepository translationRepository;
-    private final PromoEligibilityService eligibilityService;
     private final PromoRateLimitService rateLimitService;
     private final SubscriptionPackageRepository packageRepository;
-    private final az.fitnest.order.grpc.PaymentGrpcClient paymentGrpcClient;
+    private final PaymentGrpcClient paymentGrpcClient;
+    private final PromoGrantService grantService;
 
     /**
      * B12: price is resolved server-side from packageId+optionId ("Never price
@@ -59,11 +56,11 @@ public class PromoQuoteService {
         }
         SubscriptionPackage pkg = packageRepository.findById(pkgId)
                 .filter(SubscriptionPackage::getIsActive)
-                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
+                .orElseThrow(() -> new ResourceNotFoundException("error.plan_not_found"));
         PackageOption option = pkg.getOptions().stream()
                 .filter(o -> o.getId().equals(optionId))
                 .findFirst()
-                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.duration_config_not_found"));
+                .orElseThrow(() -> new ResourceNotFoundException("error.duration_config_not_found"));
         BigDecimal base = option.getPriceDiscounted() != null ? option.getPriceDiscounted() : option.getPriceStandard();
         if (base == null) base = BigDecimal.ZERO;
 
@@ -91,27 +88,27 @@ public class PromoQuoteService {
                         return new BadRequestException("error.promo_not_eligible");
                     });
 
+            PromoGrant grant;
             try {
-                validateCampaignUsable(campaign, userId, packageId, paymentType, useFitCoin,
-                        installmentProvider);
+                grant = grantService.assertGrantUsable(campaign.getId(), userId, packageId);
+                validatePaymentRules(campaign, useFitCoin, paymentType, installmentProvider, installmentMonths);
             } catch (BadRequestException e) {
                 rateLimitService.tryConsumeFailedValidation(userId);
                 throw e;
             }
 
-            BigDecimal discount = calculateDiscount(campaign, base);
-
-            Optional<PromoGrant> grantOpt = grantRepository.findByCampaignIdAndUserId(campaign.getId(), userId);
-            if (grantOpt.isPresent() && grantOpt.get().getStatus() == PromoGrantStatus.RESERVED) {
+            if (grant.getStatus() == PromoGrantStatus.RESERVED) {
                 throw new BadRequestException("error.promo_reserved");
             }
 
-            final String[] labelHolder = {"endirim"};
-            translationRepository.findByCampaignId(campaign.getId()).stream()
+            BigDecimal discount = PromoPricing.calculateDiscount(campaign, base);
+
+            String label = translationRepository.findByCampaignId(campaign.getId()).stream()
                     .filter(t -> t.getLocale() == PromoLocale.az)
                     .findFirst()
-                    .ifPresent(t -> labelHolder[0] = t.getCouponLabel() != null ? t.getCouponLabel()
-                            : (t.getCardLabel() != null ? t.getCardLabel() : labelHolder[0]));
+                    .map(t -> t.getCouponLabel() != null ? t.getCouponLabel()
+                            : (t.getCardLabel() != null ? t.getCardLabel() : "endirim"))
+                    .orElse("endirim");
 
             afterPromo = base.subtract(discount);
             if (afterPromo.compareTo(BigDecimal.ZERO) < 0) afterPromo = BigDecimal.ZERO;
@@ -119,7 +116,7 @@ public class PromoQuoteService {
             promoPart = PromoQuotePromoResponse.builder()
                     .code(campaign.getCode())
                     .campaignId(campaign.getId())
-                    .label(labelHolder[0])
+                    .label(label)
                     .discountAmount(discount)
                     .build();
             builder.promo(promoPart);
@@ -179,41 +176,13 @@ public class PromoQuoteService {
         return quote(planId, null, promoCode, useFitCoin, paymentType, null, null);
     }
 
-    private void validateCampaignUsable(PromoCampaign c, Long userId, String packageId, String paymentType,
-                                        boolean useFitCoin, String installmentProvider) {
-        if (c.getStatus() != PromoCampaignStatus.ACTIVE) {
-            throw new BadRequestException("error.promo_not_active");
-        }
-        OffsetDateTime now = OffsetDateTime.now();
-        if (c.getEndsAt().isBefore(now)) throw new BadRequestException("error.promo_expired");
-        if (c.getStartsAt().isAfter(now)) throw new BadRequestException("error.promo_not_active");
-
-        if (c.getTotalLimit() != null && c.getRedeemedCount() >= c.getTotalLimit()) {
-            throw new BadRequestException("error.promo_limit_reached");
-        }
-        if (packageId != null && c.getPlanIds() != null && c.getPlanIds().length > 0
-                && !Arrays.asList(c.getPlanIds()).contains(packageId)) {
-            throw new BadRequestException("error.promo_plan_not_allowed");
-        }
-
-        // grant must exist for the user (server-side eligibility)
-        Optional<PromoGrant> grant = grantRepository.findByCampaignIdAndUserId(c.getId(), userId);
-        if (grant.isEmpty()) {
-            throw new BadRequestException("error.promo_not_eligible");
-        }
-        PromoGrant g = grant.get();
-        if (g.getStatus() == PromoGrantStatus.REDEEMED) {
-            throw new BadRequestException("error.promo_already_used");
-        }
-        if (g.getStatus() != PromoGrantStatus.GRANTED && g.getStatus() != PromoGrantStatus.RESERVED) {
-            throw new BadRequestException("error.promo_not_active");
-        }
-
-        if (!Boolean.TRUE.equals(c.getAllowFitcoin()) && useFitCoin) {
+    private void validatePaymentRules(PromoCampaign campaign, boolean useFitCoin, String paymentType,
+                                      String installmentProvider, Integer installmentMonths) {
+        if (!Boolean.TRUE.equals(campaign.getAllowFitcoin()) && useFitCoin) {
             throw new BadRequestException("error.promo_payment_type_not_allowed");
         }
         if (paymentType != null && paymentType.equalsIgnoreCase("INSTALLMENT")) {
-            if (!Boolean.TRUE.equals(c.getAllowInstallments())) {
+            if (!Boolean.TRUE.equals(campaign.getAllowInstallments())) {
                 throw new BadRequestException("error.promo_payment_type_not_allowed");
             }
             if (installmentProvider != null
@@ -221,20 +190,9 @@ public class PromoQuoteService {
                     && !installmentProvider.equalsIgnoreCase("BOLKART")) {
                 throw new BadRequestException("error.promo_installment_provider_invalid");
             }
-        }
-    }
-
-    private BigDecimal calculateDiscount(PromoCampaign c, BigDecimal base) {
-        BigDecimal discount;
-        if (c.getDiscountType() == PromoDiscountType.PERCENT) {
-            discount = base.multiply(c.getDiscountValue()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-            if (c.getMaxDiscountAmount() != null && discount.compareTo(c.getMaxDiscountAmount()) > 0) {
-                discount = c.getMaxDiscountAmount();
+            if (installmentMonths == null || installmentMonths <= 0) {
+                throw new BadRequestException("error.promo_installment_months_required");
             }
-        } else {
-            discount = c.getDiscountValue();
         }
-        if (discount.compareTo(base) > 0) discount = base;
-        return discount;
     }
 }

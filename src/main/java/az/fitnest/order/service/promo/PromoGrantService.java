@@ -4,13 +4,15 @@ import az.fitnest.order.model.entity.promo.*;
 import az.fitnest.order.repository.promo.*;
 import az.fitnest.order.exception.BadRequestException;
 import az.fitnest.order.exception.ConflictException;
+import az.fitnest.order.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.util.List;
+import java.util.Arrays;
 import java.util.UUID;
 
 @Service
@@ -48,64 +50,79 @@ public class PromoGrantService {
     }
 
     @Transactional
-    public void createGrantsForNumbers(UUID campaignId, List<String> phoneHashes) {
-        for (String hash : phoneHashes) {
-            // Look up user by phone hash
-            Long userId = findUserIdByPhoneHash(hash);
-            if (userId != null) {
-                try {
-                    createGrant(campaignId, userId, hash);
-                } catch (Exception e) {
-                    log.warn("Failed creating grant for campaign={} hash={}", campaignId, hash, e);
-                }
-            }
-        }
-    }
-
-    @Transactional
     public void markPopupSeen(UUID grantId) {
-        grantRepository.findById(grantId).ifPresent(g -> {
-            g.setPopupStatus(PromoPopupStatus.SEEN);
-            g.setPopupSeenAt(OffsetDateTime.now());
-            grantRepository.save(g);
-            campaignRepository.findById(g.getCampaignId()).ifPresent(c ->
-                    eventPublisher.popupSeen(g.getCampaignId(), c.getCode(), c.getPartnerId(), g.getUserId(), g.getPhoneHash()));
-        });
+        PromoGrant grant = grantRepository.findById(grantId).orElse(null);
+        if (grant == null || grant.getPopupStatus() == PromoPopupStatus.SEEN) return;
+        grant.setPopupStatus(PromoPopupStatus.SEEN);
+        grant.setPopupSeenAt(OffsetDateTime.now());
+        grantRepository.save(grant);
+        campaignRepository.findById(grant.getCampaignId()).ifPresent(c ->
+                eventPublisher.popupSeen(grant.getCampaignId(), c.getCode(), c.getPartnerId(),
+                        grant.getUserId(), grant.getPhoneHash()));
     }
 
     @Transactional
     public PromoGrant reserve(UUID campaignId, Long userId, String orderId, OffsetDateTime until) {
-        try {
-            PromoGrant grant = grantRepository.findByCampaignIdAndUserIdWithLock(campaignId, userId)
-                    .orElseThrow(() -> new IllegalStateException("GRANT_NOT_FOUND"));
-            if (grant.getStatus() == PromoGrantStatus.REDEEMED) {
-                throw new IllegalStateException("PROMO_ALREADY_USED");
-            }
-            if (grant.getStatus() == PromoGrantStatus.RESERVED && grant.getReservedOrderId() != null
-                    && !grant.getReservedOrderId().equals(orderId)) {
-                throw new IllegalStateException("PROMO_RESERVED");
-            }
-            if (grant.getStatus() != PromoGrantStatus.GRANTED && grant.getStatus() != PromoGrantStatus.RESERVED) {
-                throw new IllegalStateException("PROMO_NOT_ACTIVE");
-            }
-            grant.setStatus(PromoGrantStatus.RESERVED);
-            grant.setReservedOrderId(orderId);
-            grant.setReservedUntil(until);
-            PromoGrant saved = grantRepository.save(grant);
-            campaignRepository.findById(campaignId).ifPresent(c ->
-                    eventPublisher.grantReserved(campaignId, c.getCode(), c.getPartnerId(), userId, grant.getPhoneHash(), null));
-            return saved;
-        } finally {
-            // lock released at transaction end
+        PromoGrant grant = grantRepository.findByCampaignIdAndUserIdWithLock(campaignId, userId)
+                .orElseThrow(() -> new PromoReservationException("error.promo_not_eligible"));
+        if (grant.getStatus() == PromoGrantStatus.REDEEMED) {
+            throw new PromoReservationException("error.promo_already_used");
         }
+        if (grant.getStatus() == PromoGrantStatus.RESERVED && grant.getReservedOrderId() != null
+                && !grant.getReservedOrderId().equals(orderId)) {
+            throw new PromoReservationException("error.promo_reserved");
+        }
+        if (grant.getStatus() != PromoGrantStatus.GRANTED && grant.getStatus() != PromoGrantStatus.RESERVED) {
+            throw new PromoReservationException("error.promo_not_active");
+        }
+        grant.setStatus(PromoGrantStatus.RESERVED);
+        grant.setReservedOrderId(orderId);
+        grant.setReservedUntil(until);
+        PromoGrant saved = grantRepository.save(grant);
+        campaignRepository.findById(campaignId).ifPresent(c ->
+                eventPublisher.grantReserved(campaignId, c.getCode(), c.getPartnerId(), userId, grant.getPhoneHash(), orderId));
+        return saved;
     }
 
-    private String phoneHashSupplier(PromoGrant grant) {
-        return grant != null ? grant.getPhoneHash() : null;
+    /**
+     * Shared usability gate used by quote and order paths alike (status window,
+     * total limit, plan allowlist, grant state). Payment-method rules live with
+     * the caller, which knows useFitCoin/paymentType.
+     *
+     * @return the usable grant
+     * @throws BadRequestException with the API error code when unusable
+     */
+    @Transactional(readOnly = true)
+    public PromoGrant assertGrantUsable(UUID campaignId, Long userId, String packageId) {
+        PromoCampaign campaign = campaignRepository.findById(campaignId)
+                .orElseThrow(() -> new ResourceNotFoundException("error.promo_campaign_not_found"));
+        if (campaign.getStatus() != PromoCampaignStatus.ACTIVE) {
+            throw new BadRequestException("error.promo_not_active");
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        if (campaign.getEndsAt().isBefore(now)) throw new BadRequestException("error.promo_expired");
+        if (campaign.getStartsAt().isAfter(now)) throw new BadRequestException("error.promo_not_active");
+        if (campaign.getTotalLimit() != null && campaign.getRedeemedCount() >= campaign.getTotalLimit()) {
+            throw new BadRequestException("error.promo_limit_reached");
+        }
+        if (packageId != null && campaign.getPlanIds() != null && campaign.getPlanIds().length > 0
+                && !Arrays.asList(campaign.getPlanIds()).contains(packageId)) {
+            throw new BadRequestException("error.promo_plan_not_allowed");
+        }
+        PromoGrant grant = grantRepository.findByCampaignIdAndUserId(campaignId, userId)
+                .orElseThrow(() -> new BadRequestException("error.promo_not_eligible"));
+        if (grant.getStatus() == PromoGrantStatus.REDEEMED) {
+            throw new BadRequestException("error.promo_already_used");
+        }
+        if (grant.getStatus() != PromoGrantStatus.GRANTED && grant.getStatus() != PromoGrantStatus.RESERVED) {
+            throw new BadRequestException("error.promo_not_active");
+        }
+        return grant;
     }
 
     @Transactional
-    public void release(UUID grantId) {        grantRepository.findById(grantId).ifPresent(g -> {
+    public void release(UUID grantId) {
+        grantRepository.findById(grantId).ifPresent(g -> {
             if (g.getStatus() == PromoGrantStatus.RESERVED) {
                 g.setStatus(PromoGrantStatus.GRANTED);
                 g.setReservedOrderId(null);
@@ -119,8 +136,8 @@ public class PromoGrantService {
 
     @Transactional
     public void redeem(UUID grantId, String orderId, String paymentId,
-                       java.math.BigDecimal baseAmount, java.math.BigDecimal discountAmount,
-                       java.math.BigDecimal finalAmount) {
+                       BigDecimal baseAmount, BigDecimal discountAmount,
+                       BigDecimal finalAmount) {
         PromoGrant grant = grantRepository.findByIdWithLock(grantId).orElse(null);
         if (grant == null) return;
         if (grant.getStatus() == PromoGrantStatus.REDEEMED) return;
@@ -148,16 +165,9 @@ public class PromoGrantService {
 
     @Transactional
     public void expireReservations() {
-        OffsetDateTime now = OffsetDateTime.now();
-        List<PromoGrant> expired = grantRepository.findByStatusAndReservedUntilBefore(PromoGrantStatus.RESERVED, now);
-        for (PromoGrant g : expired) {
-            g.setStatus(PromoGrantStatus.GRANTED);
-            g.setReservedOrderId(null);
-            g.setReservedUntil(null);
-            grantRepository.save(g);
-        }
-        if (!expired.isEmpty()) {
-            log.info("Expired {} promo reservations", expired.size());
+        int released = grantRepository.releaseExpiredReservations(OffsetDateTime.now());
+        if (released > 0) {
+            log.info("Expired {} promo reservations", released);
         }
     }
 
@@ -168,7 +178,7 @@ public class PromoGrantService {
     @Transactional
     public PromoGrant createGrantForAdmin(UUID campaignId, Long userId, String phone) {
         PromoCampaign campaign = campaignRepository.findById(campaignId)
-                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.promo_campaign_not_found"));
+                .orElseThrow(() -> new ResourceNotFoundException("error.promo_campaign_not_found"));
         if (userId == null) throw new BadRequestException("error.validation");
         String phoneHash;
         if (campaign.getAudienceType() == PromoAudienceType.UPLOADED_LIST) {
@@ -190,11 +200,5 @@ public class PromoGrantService {
             throw new ConflictException("error.promo_already_used");
         }
         return created;
-    }
-
-    private Long findUserIdByPhoneHash(String phoneHash) {
-        // Look up via user-backend gRPC or local users table if available.
-        // Identity service publishes user.phone.verified; on that event we create grants.
-        return null;
     }
 }
