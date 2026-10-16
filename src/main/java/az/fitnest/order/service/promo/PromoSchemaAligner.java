@@ -29,8 +29,22 @@ public class PromoSchemaAligner implements ApplicationRunner {
             alignConstraints();
             alignIndexes();
             seedBakcell();
+            recoverStuckUploads();
         } catch (Exception e) {
             log.error("Promo schema alignment failed (non-fatal, investigate)", e);
+        }
+    }
+
+    /**
+     * Async workers die with the pod on rollout/restart, leaving rows stuck in
+     * PROCESSING forever. Mark them FAILED so the admin can simply re-upload.
+     */
+    private void recoverStuckUploads() {
+        try {
+            int n = jdbc.update("UPDATE promo_audience_upload SET status = 'FAILED' WHERE status = 'PROCESSING'");
+            if (n > 0) log.warn("Promo schema: marked {} stuck PROCESSING upload(s) as FAILED", n);
+        } catch (Exception e) {
+            log.warn("Promo schema: stuck-upload recovery skipped: {}", e.getMessage());
         }
     }
 
@@ -79,8 +93,7 @@ public class PromoSchemaAligner implements ApplicationRunner {
         }
     }
 
-    private void alignIndexes() {
-        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_promo_grant_reserved_order ON promo_grant(reserved_order_id)");
+    private void alignIndexes() {        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_promo_grant_reserved_order ON promo_grant(reserved_order_id)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_promo_grant_redeemed_order ON promo_grant(redeemed_order_id)");
         // promo_audit_log has no entity (raw JdbcTemplate writes); ddl-auto never
         // creates it, so ensure it here. Matches V18 definition.
