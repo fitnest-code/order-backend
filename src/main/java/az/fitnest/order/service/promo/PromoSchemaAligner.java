@@ -58,24 +58,13 @@ public class PromoSchemaAligner implements ApplicationRunner {
     }
 
     private void alignConstraints() {
+        // The IN-list check is redundant with the PromoCtaTarget enum (validated
+        // in Java). DDL-managed DBs may lack it, Flyway DBs have the V22 version;
+        // either way a plain DROP is safe and sufficient.
         try {
-            Integer count = jdbc.queryForObject(
-                    "SELECT COUNT(*) FROM pg_constraint WHERE conname = 'promo_campaign_popup_cta_target_check'",
-                    Integer.class);
-            if (count != null && count > 0) {
-                String def = jdbc.queryForObject(
-                        "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'promo_campaign_popup_cta_target_check'",
-                        String.class);
-                if (def != null && !def.contains("PROMO_DETAIL")) {
-                    log.info("Promo schema: current cta_target check = '{}'", def);
-                    jdbc.execute("ALTER TABLE promo_campaign_popup DROP CONSTRAINT IF EXISTS promo_campaign_popup_cta_target_check");
-                    jdbc.execute("ALTER TABLE promo_campaign_popup ADD CONSTRAINT promo_campaign_popup_cta_target_check " +
-                            "CHECK (cta_target IN ('PLANS', 'PLAN_DETAIL', 'URL', 'PROMO_DETAIL'))");
-                    log.info("Promo schema: extended cta_target check with PROMO_DETAIL");
-                }
-            }
+            jdbc.execute("ALTER TABLE promo_campaign_popup DROP CONSTRAINT IF EXISTS promo_campaign_popup_cta_target_check");
         } catch (Exception e) {
-            log.warn("Promo schema: cta_target check alignment skipped: {}", e.getMessage());
+            log.warn("Promo schema: cta_target check drop skipped: {}", e.getMessage());
         }
     }
 
