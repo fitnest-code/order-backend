@@ -32,9 +32,9 @@ public class CheckoutServiceImpl implements CheckoutService {
     @Transactional
     @Override
     public CheckoutResponse processCheckout(Long userId, CheckoutRequest request) {
-        // B13: camelCase aliases accepted; snake_case kept for old clients.
-        String packageIdStr = request.packageId() != null ? request.packageId() : request.package_id();
-        Long optionId = request.optionId() != null ? request.optionId() : request.option_id();
+        // B13: camelCase aliases accepted via @JsonAlias; snake_case kept for old clients.
+        String packageIdStr = request.package_id();
+        Long optionId = request.option_id();
         Long packageId = Long.parseLong(packageIdStr);
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .filter(SubscriptionPackage::getIsActive)

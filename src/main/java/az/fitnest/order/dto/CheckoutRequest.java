@@ -1,5 +1,6 @@
 package az.fitnest.order.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
@@ -11,10 +12,12 @@ import java.math.BigDecimal;
 public record CheckoutRequest(
     @NotNull(message = "Paket ID-si mütləqdir")
     @JsonProperty("package_id")
+    @JsonAlias({"packageId"})
     String package_id,
 
     @NotNull(message = "Option ID-si mütləqdir")
     @JsonProperty("option_id")
+    @JsonAlias({"optionId"})
     Long option_id,
 
     @Deprecated
@@ -43,12 +46,5 @@ public record CheckoutRequest(
 
     @Schema(description = "Taksit ay sayı")
     @JsonProperty("installmentMonths")
-    Integer installmentMonths,
-
-    // B13 camelCase aliases of package_id / option_id (either form accepted)
-    @JsonProperty("packageId")
-    String packageId,
-
-    @JsonProperty("optionId")
-    Long optionId
+    Integer installmentMonths
 ) {}
