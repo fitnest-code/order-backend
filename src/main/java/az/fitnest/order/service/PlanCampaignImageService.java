@@ -1,6 +1,9 @@
 package az.fitnest.order.service;
 
 import az.fitnest.order.exception.BadRequestException;
+import az.fitnest.order.exception.ResourceNotFoundException;
+import az.fitnest.order.model.entity.PlanCampaignImage;
+import az.fitnest.order.repository.PlanCampaignImageRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.*;
@@ -18,14 +21,17 @@ public class PlanCampaignImageService {
     private final RestTemplate http;
     private final String storageUrl;
     private final String mediaBaseUrl;
+    private final PlanCampaignImageRepository images;
     public PlanCampaignImageService(
             @Value("${storage.backend.url:http://storage-backend:8080}") String storageUrl,
             @Value("${plan-campaign.media-base-url:}") String mediaBaseUrl,
-            @Value("${spring.profiles.active:development}") String profiles) {
+            @Value("${spring.profiles.active:development}") String profiles,
+            PlanCampaignImageRepository images) {
         this.storageUrl = storageUrl;
+        this.images = images;
         this.mediaBaseUrl = mediaBaseUrl.isBlank()
                 ? (Arrays.asList(profiles.split(",")).contains("production")
-                    ? "https://media.fitnest.az/stream/" : "https://api-dev.fitnest.az/api/v1/media/stream/")
+                    ? "https://api.fitnest.az/api/v2/me/plan-campaigns/images/" : "https://api-dev.fitnest.az/api/v2/me/plan-campaigns/images/")
                 : mediaBaseUrl;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(3)); factory.setReadTimeout(Duration.ofSeconds(30));
@@ -55,6 +61,22 @@ public class PlanCampaignImageService {
         }
         String fsId = fileInfo.get("fsId").toString();
         if (!fsId.matches("\\d+")) throw new IllegalStateException("Invalid storage image identifier");
+        PlanCampaignImage image = new PlanCampaignImage(); image.setFsId(fsId);
+        image.setUploadedBy(adminId); image.setUploadedAt(java.time.OffsetDateTime.now());
+        images.saveAndFlush(image);
         return Map.of("url", mediaBaseUrl + fsId, "fsId", fsId);
+    }
+
+    public ResponseEntity<byte[]> read(String fsId) {
+        if (!fsId.matches("\\d{1,20}") || !images.existsById(fsId)) {
+            throw new ResourceNotFoundException("error.plan_campaign_not_found");
+        }
+        ResponseEntity<byte[]> response = http.getForEntity(storageUrl + "/api/v1/media/stream/" + fsId, byte[].class);
+        MediaType type = response.getHeaders().getContentType();
+        if (type == null || !Set.of("image/png", "image/jpeg", "image/webp").contains(type.toString().split(";")[0])) {
+            throw new IllegalStateException("Storage returned an unsupported image");
+        }
+        return ResponseEntity.ok().contentType(type).cacheControl(CacheControl.noStore())
+                .header("X-Content-Type-Options", "nosniff").body(response.getBody());
     }
 }

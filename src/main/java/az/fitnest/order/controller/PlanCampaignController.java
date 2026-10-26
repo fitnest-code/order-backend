@@ -1,6 +1,7 @@
 package az.fitnest.order.controller;
 
 import az.fitnest.order.service.PlanCampaignService;
+import az.fitnest.order.service.PlanCampaignImageService;
 import az.fitnest.order.util.UserContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
@@ -11,6 +12,9 @@ import java.time.OffsetDateTime;
 @RequestMapping("/api/v2/me/plan-campaigns")
 public class PlanCampaignController {
     private final PlanCampaignService service;
+    private final PlanCampaignImageService images;
+    @GetMapping("/images/{fsId}")
+    public ResponseEntity<byte[]> image(@PathVariable String fsId) { return images.read(fsId); }
 
     @GetMapping
     public ResponseEntity<PlanCampaignService.MobileResponse> get(
