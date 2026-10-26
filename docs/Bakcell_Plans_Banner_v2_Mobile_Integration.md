@@ -60,7 +60,7 @@ This is an illustrative enabled response, not evidence that a live campaign has 
         "heading": "Bakcell-ə özəl kampaniya",
         "subtitle": "3, 6 və 12 aylıq planlarda xüsusi təkliflər",
         "specialOffersTitle": "Xüsusi təkliflər",
-        "bannerImageUrl": "https://media.fitnest.az/stream/123456789",
+        "bannerImageUrl": "https://api.fitnest.az/api/v2/me/plan-campaigns/images/123456789",
         "imageAlt": "Bakcell-ə özəl kampaniya"
       },
       "packageIds": [],
@@ -102,7 +102,7 @@ Visibility also requires `enabled=true`, a complete AZ content block, and a curr
 5. Use `durationMonths` rather than hardcoding 3, 6, and 12. Keep ineligible duration cards in their ordinary section.
 6. On package changes, refetch with the selected `packageId`. Discard responses from an older package selection or account session. Hide the previous banner while a different package's eligibility is unresolved.
 7. If the request fails, continue rendering packages and checkout. Do not fall back to bundled Bakcell artwork or a mock Bakcell campaign for a user whose eligibility is unknown.
-8. If an image fails to load, omit its image view without reserving an empty image frame. The eligible text block may remain visible. Use `imageAlt` for accessibility; decorative icons should not repeat the heading to screen readers.
+8. CMS uploads return authenticated image URLs under `/api/v2/me/plan-campaigns/images/{fsId}`. Load those with the signed-in user's Bearer token using your normal authenticated image loader. Only attach that token for the trusted API host; never forward it to arbitrary external image URLs. If an image fails to load, omit its image view without reserving an empty image frame. The eligible text block may remain visible. Use `imageAlt` for accessibility; decorative icons should not repeat the heading to screen readers.
 9. This phase defines no banner tap action or coupon selection. A tap must not initiate payment, automatically apply a coupon, or alter the displayed price.
 
 When both October and Bakcell campaigns are returned by their respective endpoints, render the Bakcell artwork at the top and retain October bonus-month labels on the affected existing duration cards. Avoid two large stacked hero banners. Suppression of October business benefits is not authorized by this presentation response.
@@ -120,7 +120,7 @@ suspend fun getPlanCampaigns(
 
 Add a repository/use-case method, then load it from `SubscriptionPackagesViewModel` after the package selection is known. Use a cancellable job or a request generation key on `onChangePlan`; an old response must not overwrite the current selection. Add explicit state for the returned v2 item, separate from the existing October `campaign` state.
 
-In `SubscriptionPackagesScreen`, add an image banner above package chips and the server-provided offer heading before matching duration cards. Consume optional theme images safely. Preserve existing selection, subscription status, coin previews, and navigation to payment.
+In `SubscriptionPackagesScreen`, add an image banner above package chips and the server-provided offer heading before matching duration cards. Use the authenticated OkHttp image loader for API-host images. Consume optional theme images safely. Preserve existing selection, subscription status, coin previews, and navigation to payment.
 
 ## iOS changes to make
 
@@ -128,7 +128,7 @@ Add a separate endpoint using the root API base with the full `/api/v2/me/plan-c
 
 Create `Decodable` DTOs with UUIDs represented as `String` or `UUID`, optional theme-image fields, and integer package/duration arrays. In `SubscriptionPlansViewController`, request content for the current tier in addition to existing package and October reads. Cancel or discard outdated results when the selected tier changes.
 
-Insert the artwork above the chips using its aspect ratio. Render the icon and offer text immediately before eligible duration rows. Remove old banner constraints before installing new ones; avoid leaving a fixed height when the response is empty. Reconfigure light/dark assets on trait changes without caching eligibility across accounts.
+Insert the artwork above the chips using its aspect ratio. Load API-host images using an authorized URLRequest or your image loader's request modifier; a bare unauthenticated URLSession image read will return 401. Render the icon and offer text immediately before eligible duration rows. Remove old banner constraints before installing new ones; avoid leaving a fixed height when the response is empty. Reconfigure light/dark assets on trait changes without caching eligibility across accounts.
 
 ## Admin content management
 
@@ -144,6 +144,8 @@ The seeded record is disabled and has no images or schedule. Enabling requires A
 | GET | `/api/v2/admin/plan-campaigns/{id}` | Read one record and its version |
 | PUT | `/api/v2/admin/plan-campaigns/{id}` | Save content, schedule, visibility, and targeting |
 | POST | `/api/v2/admin/plan-campaigns/images` | Multipart image upload using part name `file` |
+| GET | `/api/v2/admin/plan-campaigns/images/{fsId}` | Admin image preview through the same-origin proxy |
+| GET | `/api/v2/me/plan-campaigns/images/{fsId}` | Image bytes for authenticated mobile clients |
 
 Admin routes require ADMIN. PUT is a full update and must include the most recently read `version`. A stale version returns 409; reload and reapply the intended edit. Prefix targeting is fixed server-side and is not editable in the admin request.
 
@@ -167,7 +169,7 @@ Admin routes require ADMIN. PUT is a full update and must include the most recen
 }
 ```
 
-Image upload returns `{"url":"https://…/stream/123456789","fsId":"123456789"}`. URLs are environment-specific: do not copy development storage URLs into production. Uploaded images are public marketing assets; audience filtering controls API visibility, not confidentiality of the image bytes.
+Image upload returns `{"url":"https://api.fitnest.az/api/v2/me/plan-campaigns/images/123456789","fsId":"123456789"}` in production. URLs are environment-specific: do not copy development storage URLs into production. The image routes serve only files registered through this CMS, require authentication, and return `Cache-Control: no-store`. They are not a phone-prefix authorization boundary; any authenticated account with a known registered image URL can read its bytes. Audience filtering controls campaign API visibility. Use external public HTTPS images only for approved marketing assets.
 
 ## Acceptance checks for mobile developers
 

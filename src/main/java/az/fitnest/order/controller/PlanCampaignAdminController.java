@@ -16,6 +16,8 @@ import java.util.UUID;
 public class PlanCampaignAdminController {
     private final PlanCampaignService service;
     private final PlanCampaignImageService imageService;
+    @GetMapping("/images/{fsId}")
+    public org.springframework.http.ResponseEntity<byte[]> image(@PathVariable String fsId) { return imageService.read(fsId); }
     @PostMapping(value = "/images", consumes = "multipart/form-data")
     public java.util.Map<String, String> upload(@RequestPart("file") org.springframework.web.multipart.MultipartFile file) throws java.io.IOException {
         return imageService.upload(file, UserContext.getCurrentUserId());
