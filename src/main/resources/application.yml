@@ -18,6 +18,10 @@ server:
     mime-types: application/json,text/plain,text/css,application/javascript,application/openapi+json,application/vnd.api+json,text/html,application/xml,application/vnd.oai.openapi+json
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 8MB
+      max-request-size: 9MB
   threads:
     virtual:
       enabled: true
