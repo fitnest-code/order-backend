@@ -25,6 +25,7 @@ service GymService {
   rpc CountGymsByPackage(catalog.CountGymsByPackageRequest) returns (catalog.CountGymsByPackageResponse);
   rpc CountGymsByPackages(catalog.CountGymsByPackagesRequest) returns (catalog.CountGymsByPackagesResponse);
   rpc HasActiveReservations(catalog.HasActiveReservationsRequest) returns (catalog.HasActiveReservationsResponse);
+  rpc GetHomeGymInfo(catalog.GetHomeGymInfoRequest) returns (catalog.GetHomeGymInfoResponse);
 }
 
 message GetGymDetailRequest {

@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import az.fitnest.order.model.enums.EntryMode;
 import java.time.LocalDateTime;
 
 @Entity
@@ -106,6 +107,11 @@ public class Subscription {
 
     @Column(name = "campaign_banner_dismissed_at")
     private LocalDateTime campaignBannerDismissedAt;
+
+    /** Home-gym state machine (spec v2): HOME_GYM_PENDING -> HOME_GYM -> STANDARD. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "entry_mode", nullable = false, length = 30)
+    private EntryMode entryMode = EntryMode.HOME_GYM_PENDING;
 
     // Field access: Hibernate increments this directly — never mask null in a getter.
     @Version
