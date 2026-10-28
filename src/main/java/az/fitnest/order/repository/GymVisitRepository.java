@@ -6,5 +6,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface GymVisitRepository extends JpaRepository<GymVisit, Long> {
+    java.util.List<GymVisit> findBySubscriptionIdAndCheckedInAtGreaterThanEqualAndCheckedInAtLessThanOrderByCheckedInAtAsc(
+            Long subscriptionId, java.time.LocalDateTime start, java.time.LocalDateTime end);
     void deleteByUserId(Long userId);
 }
