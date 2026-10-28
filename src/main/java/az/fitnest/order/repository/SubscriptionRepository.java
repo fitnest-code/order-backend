@@ -45,14 +45,16 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
 
     /**
      * Home-gym reminder candidates: active, still pending a selection, purchased at least
-     * 24h ago and never reminded. Refunded/cancelled/expired/frozen rows are excluded
-     * because their status is not ACTIVE.
+     * 24h ago and never reminded. Cancelled/expired/frozen rows are excluded because their
+     * status is not ACTIVE; refunded rows are excluded by {@code refundedAt} because a
+     * refund keeps the status ACTIVE (V19).
      */
     @org.springframework.data.jpa.repository.Query("SELECT s FROM Subscription s " +
             "WHERE s.status = 'ACTIVE' " +
             "AND s.entryMode = az.fitnest.order.model.enums.EntryMode.HOME_GYM_PENDING " +
             "AND s.startAt <= :cutoff " +
             "AND s.homeGymReminderSentAt IS NULL " +
+            "AND s.refundedAt IS NULL " +
             "AND (s.endAt IS NULL OR s.endAt > :now)")
     List<Subscription> findHomeGymReminderCandidates(
             @org.springframework.data.repository.query.Param("cutoff") LocalDateTime cutoff,

@@ -117,6 +117,14 @@ public class Subscription {
     @Column(name = "home_gym_reminder_sent_at")
     private LocalDateTime homeGymReminderSentAt;
 
+    /**
+     * Payment refund marker. A refund keeps {@code status = ACTIVE} until the paid period
+     * runs out, so status alone cannot tell a refunded row apart from a live one
+     * (V19). Post-purchase jobs, including the home-gym reminder, skip refunded rows.
+     */
+    @Column(name = "refunded_at")
+    private LocalDateTime refundedAt;
+
     // Field access: Hibernate increments this directly — never mask null in a getter.
     @Version
     @Column(name = "version", nullable = false)

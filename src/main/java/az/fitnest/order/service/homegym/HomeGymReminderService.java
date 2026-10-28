@@ -22,9 +22,10 @@ import java.util.List;
  * <p>The reminder is sent once per subscription, 24h after purchase. When that moment
  * falls between 22:00 and 09:00 it is moved to 10:00 (Baku) so the subscriber is not
  * woken up. It is skipped when a home gym is already selected (any history row), the
- * subscription is not active (cancelled/refunded/frozen/expired) or the package has no
- * gym the subscriber may pick. Only a push is sent: the in-app banner 5.1 (R9) is already
- * visible until a home gym is selected. Deep link: screen 1.3 (home-gym selection).
+ * subscription is not active (cancelled/frozen/expired), it was refunded
+ * ({@code subscriptions.refunded_at}, V19) or the package has no gym the subscriber may
+ * pick. Only a push is sent: the in-app banner 5.1 (R9) is already visible until a home
+ * gym is selected. Deep link: screen 1.3 (home-gym selection).
  */
 @Slf4j
 @Service

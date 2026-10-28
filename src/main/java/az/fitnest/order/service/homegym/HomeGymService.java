@@ -398,6 +398,9 @@ public class HomeGymService {
      * Refund (payment-backend {@code PAYMENT_REFUND_CANCEL}): the home gym becomes ENDED
      * with the dedicated {@code REFUND} reason and the gym settlement report is recalculated
      * from the actual visits (spec "Kənar hallar": actual usage, not a full void).
+     *
+     * <p>The refund marker ({@code refunded_at}) is written here because a refund keeps
+     * {@code status = ACTIVE}; the 24h home-gym reminder must not fire afterwards.
      */
     @Transactional
     public void onRefund(Long subscriptionId) {
@@ -407,6 +410,10 @@ public class HomeGymService {
         Subscription subscription = subscriptionRepository.findById(subscriptionId).orElse(null);
         if (subscription == null) {
             return;
+        }
+        if (subscription.getRefundedAt() == null) {
+            subscription.setRefundedAt(periodCalculator.now());
+            subscriptionRepository.save(subscription);
         }
         SubscriptionHomeGym active = homeGymRepository.findActiveForUpdate(subscriptionId).orElse(null);
         if (active != null) {

@@ -75,7 +75,23 @@ class HomeGymRefundAndPackageRemovalTest {
         assertEquals(HomeGymEndReason.REFUND, active.getEndReason());
         assertNull(active.getEndsAt());
         assertEquals(EntryMode.STANDARD, subscription.getEntryMode());
+        assertEquals(LocalDateTime.of(2026, 10, 27, 12, 0), subscription.getRefundedAt());
         verify(eventPublisher).publishSubscriptionEvent(eq(9L), eq("HOME_GYM_ENDED"), eq(5L), any());
+        verify(settlementService).resettleSubscription(5L);
+    }
+
+    @Test
+    void repeatedRefundKeepsTheFirstRefundTimestamp() {
+        Subscription subscription = subscription(5L, 9L, 100L);
+        LocalDateTime firstRefund = LocalDateTime.of(2026, 10, 20, 9, 0);
+        subscription.setRefundedAt(firstRefund);
+
+        when(subscriptionRepository.findById(5L)).thenReturn(Optional.of(subscription));
+        when(homeGymRepository.findActiveForUpdate(5L)).thenReturn(Optional.empty());
+
+        service.onRefund(5L);
+
+        assertEquals(firstRefund, subscription.getRefundedAt());
         verify(settlementService).resettleSubscription(5L);
     }
 
