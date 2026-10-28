@@ -8,5 +8,7 @@ public enum HomeGymEndReason {
     CHANGE,
     UPGRADE_NOT_IN_PACKAGE,
     GYM_HOME_DISABLED,
-    SUBSCRIPTION_ENDED
+    SUBSCRIPTION_ENDED,
+    /** Payment refund: the home gym ended because the subscription was refunded. */
+    REFUND
 }

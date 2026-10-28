@@ -56,3 +56,12 @@ message GetHomeGymInfoResponse {
   string available_hours = 5;
 }
 
+// Home-gym reminder: the package has at least one gym the subscriber can pick (R1).
+message HasEligibleHomeGymRequest {
+  int64 package_id = 1;
+}
+
+message HasEligibleHomeGymResponse {
+  bool eligible = 1;
+}
+

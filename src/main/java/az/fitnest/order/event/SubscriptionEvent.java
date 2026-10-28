@@ -28,6 +28,15 @@ public class SubscriptionEvent implements Serializable {
     private Map<String, String> body;
     private List<Long> recipients;
 
+    /** F-04: package the subscriber holds, used by the "{gym} is leaving {package}" push. */
+    private String packageName;
+
+    /** Planned end of the home gym (F-04/R18), shown in the push. */
+    private String endsAt;
+
+    /** Screen the mobile app opens from the push (e.g. the 24h reminder → 1.3). */
+    private String deepLink;
+
     /**
      * End of the current subscription (ISO-8601 offset date-time), used by the
      * {@code HOME_GYM_SELECTED} push to show "unlimited until ...".

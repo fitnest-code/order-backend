@@ -11,6 +11,7 @@ import az.fitnest.order.model.enums.HomeGymStatus;
 import az.fitnest.order.repository.GymVisitRepository;
 import az.fitnest.order.repository.HomeGymIdempotencyRepository;
 import az.fitnest.order.repository.SubscriptionHomeGymRepository;
+import az.fitnest.order.repository.SubscriptionPackageRepository;
 import az.fitnest.order.repository.SubscriptionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,7 @@ class HomeGymRefundAndPackageRemovalTest {
     @Mock private SubscriptionEventPublisher eventPublisher;
     @Mock private HomeGymSettlementService settlementService;
     @Mock private ObjectMapper objectMapper;
+    @Mock private SubscriptionPackageRepository packageRepository;
 
     @InjectMocks private HomeGymService service;
 
@@ -70,7 +72,7 @@ class HomeGymRefundAndPackageRemovalTest {
         service.onRefund(5L);
 
         assertEquals(HomeGymStatus.ENDED, active.getStatus());
-        assertEquals(HomeGymEndReason.SUBSCRIPTION_ENDED, active.getEndReason());
+        assertEquals(HomeGymEndReason.REFUND, active.getEndReason());
         assertNull(active.getEndsAt());
         assertEquals(EntryMode.STANDARD, subscription.getEntryMode());
         verify(eventPublisher).publishSubscriptionEvent(eq(9L), eq("HOME_GYM_ENDED"), eq(5L), any());
@@ -92,9 +94,13 @@ class HomeGymRefundAndPackageRemovalTest {
 
         when(periodCalculator.periodEndsAt(subscription.getStartAt()))
                 .thenReturn(LocalDateTime.of(2026, 11, 5, 0, 0));
+        when(periodCalculator.toOffset(LocalDateTime.of(2026, 11, 5, 0, 0)))
+                .thenReturn(java.time.OffsetDateTime.of(2026, 11, 5, 0, 0, 0, 0,
+                        java.time.ZoneOffset.ofHours(4)));
         when(homeGymRepository.findActiveSubscriptionIdsByGymId(100L)).thenReturn(List.of(5L));
         when(subscriptionRepository.findById(5L)).thenReturn(Optional.of(subscription));
         when(homeGymRepository.findActiveForUpdate(5L)).thenReturn(Optional.of(active));
+        when(packageRepository.findById(3L)).thenReturn(Optional.of(packageEntity(3L, "Gold")));
         when(catalogClient.getHomeGymInfo(100L, 3L)).thenReturn(
                 new CatalogServiceGrpcClient.HomeGymInfo(true, "FitZone", false, true, null));
 
@@ -104,7 +110,7 @@ class HomeGymRefundAndPackageRemovalTest {
         assertEquals(LocalDateTime.of(2026, 11, 5, 0, 0), active.getEndsAt());
         assertEquals(HomeGymEndReason.GYM_HOME_DISABLED, active.getEndReason());
         assertEquals(HomeGymStatus.ACTIVE, active.getStatus());
-        verify(eventPublisher).publishSubscriptionEvent(eq(9L), eq("HOME_GYM_DISABLED_BY_GYM"), eq(5L), any());
+        verify(eventPublisher).publishSubscriptionEvent(eq(9L), eq("HOME_GYM_PACKAGE_REMOVED"), eq(5L), any());
     }
 
     @Test
@@ -121,8 +127,14 @@ class HomeGymRefundAndPackageRemovalTest {
         verify(homeGymRepository, org.mockito.Mockito.never()).findActiveForUpdate(anyLong());
     }
 
-    private Subscription subscription(Long id, Long userId, Long packageId) {
-        Subscription subscription = new Subscription();
+    private az.fitnest.order.model.entity.SubscriptionPackage packageEntity(Long id, String name) {
+        var pkg = new az.fitnest.order.model.entity.SubscriptionPackage();
+        pkg.setId(id);
+        pkg.setName(name);
+        return pkg;
+    }
+
+    private Subscription subscription(Long id, Long userId, Long packageId) {        Subscription subscription = new Subscription();
         subscription.setSubscriptionId(id);
         subscription.setUserId(userId);
         subscription.setPackageId(packageId);

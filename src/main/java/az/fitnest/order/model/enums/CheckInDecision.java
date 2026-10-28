@@ -16,5 +16,9 @@ public enum CheckInDecision {
     HOME_MONTHLY_LIMIT_REACHED,
     TIER_NOT_ALLOWED_AT_THIS_TIME,
     SUBSCRIPTION_FROZEN,
-    NO_ACTIVE_SUBSCRIPTION
+    NO_ACTIVE_SUBSCRIPTION,
+    /** T-16: the same qrScanId was already used for a different gym. */
+    QR_SCAN_CONFLICT,
+    /** T-16: qrScanId is not a canonical UUID (mobile sends a UUID v4). */
+    INVALID_QR_SCAN_ID
 }

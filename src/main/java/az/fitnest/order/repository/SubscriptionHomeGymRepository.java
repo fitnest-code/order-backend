@@ -44,6 +44,8 @@ public interface SubscriptionHomeGymRepository extends JpaRepository<Subscriptio
 
     boolean existsBySubscriptionIdAndStatus(Long subscriptionId, HomeGymStatus status);
 
+    boolean existsBySubscriptionId(Long subscriptionId);
+
     long countByGymIdAndStatus(Long gymId, HomeGymStatus status);
 
     List<SubscriptionHomeGym> findByStatusAndEndReasonIsNull(HomeGymStatus status);

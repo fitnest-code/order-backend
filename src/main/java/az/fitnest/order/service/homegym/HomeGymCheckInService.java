@@ -63,6 +63,12 @@ public class HomeGymCheckInService {
         LocalDateTime dayStart = periodCalculator.dayStart(now);
         LocalDateTime dayEnd = periodCalculator.nextDayStart(now);
 
+        // T-16: the mobile app generates a UUID v4 for every QR read and reuses it on
+        // retries. Anything else is a client bug and must not reach the dedup index.
+        if (context.qrScanId() != null && !isCanonicalUuid(context.qrScanId())) {
+            return rejected(CheckInDecision.INVALID_QR_SCAN_ID, "home_gym.invalid_qr_scan_id");
+        }
+
         Subscription locked = lockCurrentSubscription(userId);
         if (locked == null) {
             return rejected(CheckInDecision.NO_ACTIVE_SUBSCRIPTION, "home_gym.no_active_subscription");
@@ -109,6 +115,10 @@ public class HomeGymCheckInService {
                             subscription.getSubscriptionId(), context.qrScanId())
                     .orElse(null);
             if (duplicate != null) {
+                // T-16: an id may only be replayed for the gym it was first used at.
+                if (!duplicate.getGymId().equals(gymId)) {
+                    return rejected(CheckInDecision.QR_SCAN_CONFLICT, "home_gym.qr_scan_conflict");
+                }
                 VisitEntryType duplicateType = duplicate.getEntryType() != null
                         ? duplicate.getEntryType() : VisitEntryType.STANDARD;
                 CheckInDecision duplicateDecision = duplicateType == VisitEntryType.HOME_UNLIMITED
@@ -581,6 +591,20 @@ public class HomeGymCheckInService {
             case TIER_NOT_ALLOWED_AT_THIS_TIME -> "qr.tier_not_allowed";
             case SUBSCRIPTION_FROZEN -> "error.subscription_frozen";
             case NO_ACTIVE_SUBSCRIPTION -> "home_gym.no_active_subscription";
+            case QR_SCAN_CONFLICT -> "home_gym.qr_scan_conflict";
+            case INVALID_QR_SCAN_ID -> "home_gym.invalid_qr_scan_id";
         };
+    }
+
+    /** T-16: canonical 36-character UUID (the mobile app sends a v4 UUID). */
+    static boolean isCanonicalUuid(String value) {
+        if (value == null || value.length() != 36) {
+            return false;
+        }
+        try {
+            return UUID.fromString(value).toString().equalsIgnoreCase(value);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 }

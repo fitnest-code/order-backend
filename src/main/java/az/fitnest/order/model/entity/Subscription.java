@@ -113,6 +113,10 @@ public class Subscription {
     @Column(name = "entry_mode", nullable = false, length = 30)
     private EntryMode entryMode = EntryMode.HOME_GYM_PENDING;
 
+    /** Push "select your home gym" is sent once, 24h after purchase (spec push table). */
+    @Column(name = "home_gym_reminder_sent_at")
+    private LocalDateTime homeGymReminderSentAt;
+
     // Field access: Hibernate increments this directly — never mask null in a getter.
     @Version
     @Column(name = "version", nullable = false)

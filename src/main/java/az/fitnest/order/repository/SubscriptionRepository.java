@@ -43,6 +43,21 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     @org.springframework.data.jpa.repository.Query("SELECT s FROM Subscription s WHERE s.subscriptionId = :id")
     Optional<Subscription> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
 
+    /**
+     * Home-gym reminder candidates: active, still pending a selection, purchased at least
+     * 24h ago and never reminded. Refunded/cancelled/expired/frozen rows are excluded
+     * because their status is not ACTIVE.
+     */
+    @org.springframework.data.jpa.repository.Query("SELECT s FROM Subscription s " +
+            "WHERE s.status = 'ACTIVE' " +
+            "AND s.entryMode = az.fitnest.order.model.enums.EntryMode.HOME_GYM_PENDING " +
+            "AND s.startAt <= :cutoff " +
+            "AND s.homeGymReminderSentAt IS NULL " +
+            "AND (s.endAt IS NULL OR s.endAt > :now)")
+    List<Subscription> findHomeGymReminderCandidates(
+            @org.springframework.data.repository.query.Param("cutoff") LocalDateTime cutoff,
+            @org.springframework.data.repository.query.Param("now") LocalDateTime now);
+
     void deleteByUserId(Long userId);
 }
 

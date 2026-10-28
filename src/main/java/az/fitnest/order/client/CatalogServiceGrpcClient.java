@@ -109,6 +109,26 @@ public class CatalogServiceGrpcClient {
         }
     }
 
+    /**
+     * True when the package has at least one gym the subscriber may pick as home gym.
+     * Used to suppress the 24h reminder for packages without eligible gyms.
+     * Fails open: a catalog outage must not hide the reminder from everyone.
+     */
+    public boolean hasEligibleHomeGym(Long packageId) {
+        if (packageId == null) {
+            return false;
+        }
+        try {
+            return stub().hasEligibleHomeGym(
+                    az.fitnest.catalog.grpc.HasEligibleHomeGymRequest.newBuilder()
+                            .setPackageId(packageId)
+                            .build()).getEligible();
+        } catch (Exception e) {
+            log.warn("Could not resolve eligible home gyms for package {}: {}", packageId, e.getMessage());
+            return true;
+        }
+    }
+
     public boolean hasActiveReservations(Long userId, java.time.LocalDateTime startTime, java.time.LocalDateTime endTime) {
         if (userId == null) {
             return false;

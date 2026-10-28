@@ -23,6 +23,7 @@ import az.fitnest.order.model.enums.VisitEntryType;
 import az.fitnest.order.repository.GymVisitRepository;
 import az.fitnest.order.repository.HomeGymIdempotencyRepository;
 import az.fitnest.order.repository.SubscriptionHomeGymRepository;
+import az.fitnest.order.repository.SubscriptionPackageRepository;
 import az.fitnest.order.repository.SubscriptionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +57,7 @@ public class HomeGymService {
     private final SubscriptionEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final HomeGymSettlementService settlementService;
+    private final SubscriptionPackageRepository packageRepository;
 
     // ---------------------------------------------------------------------
     // Read model
@@ -393,8 +395,9 @@ public class HomeGymService {
     // ---------------------------------------------------------------------
 
     /**
-     * Refund (payment-backend {@code PAYMENT_REFUND_CANCEL}): the home gym becomes ENDED and
-     * the gym settlement report is recalculated from the actual visits.
+     * Refund (payment-backend {@code PAYMENT_REFUND_CANCEL}): the home gym becomes ENDED
+     * with the dedicated {@code REFUND} reason and the gym settlement report is recalculated
+     * from the actual visits (spec "Kənar hallar": actual usage, not a full void).
      */
     @Transactional
     public void onRefund(Long subscriptionId) {
@@ -407,7 +410,7 @@ public class HomeGymService {
         }
         SubscriptionHomeGym active = homeGymRepository.findActiveForUpdate(subscriptionId).orElse(null);
         if (active != null) {
-            endHomeGym(subscription, active, HomeGymEndReason.SUBSCRIPTION_ENDED,
+            endHomeGym(subscription, active, HomeGymEndReason.REFUND,
                     periodCalculator.now(), null);
         }
         settlementService.resettleSubscription(subscriptionId);
@@ -430,6 +433,10 @@ public class HomeGymService {
      * subscriber that no longer has the gym in their package (including inherited access):
      * the selection keeps working until the end of the current subscription month, then the
      * hourly job ends it with {@code GYM_HOME_DISABLED} and a push is sent.
+     *
+     * <p>The F-04 notification itself is sent only to subscribers whose own package is one
+     * of the removed packages; inherited losses are still ended silently and get the
+     * {@code HOME_GYM_ENDED} push when the month ends.
      *
      * @return number of affected subscriptions
      */
@@ -465,16 +472,33 @@ public class HomeGymService {
             active.setEndReason(HomeGymEndReason.GYM_HOME_DISABLED);
             homeGymRepository.save(active);
 
-            SubscriptionEvent event = new SubscriptionEvent(
-                    subscription.getUserId(), "HOME_GYM_DISABLED_BY_GYM", subscriptionId);
-            event.setGymId(gymId);
-            event.setGymName(gymName);
-            eventPublisher.publishSubscriptionEvent(subscription.getUserId(), event.getAction(),
-                    subscriptionId, event);
+            // F-04: only the subscribers of the removed package are notified.
+            boolean removedPackage = packageIds != null && subscription.getPackageId() != null
+                    && packageIds.contains(subscription.getPackageId());
+            if (removedPackage) {
+                SubscriptionEvent event = new SubscriptionEvent(
+                        subscription.getUserId(), "HOME_GYM_PACKAGE_REMOVED", subscriptionId);
+                event.setGymId(gymId);
+                event.setGymName(gymName);
+                event.setPackageName(packageName(subscription.getPackageId()));
+                var endsAt = periodCalculator.toOffset(periodEnd);
+                event.setEndsAt(endsAt != null ? endsAt.toString() : null);
+                eventPublisher.publishSubscriptionEvent(subscription.getUserId(), event.getAction(),
+                        subscriptionId, event);
+            }
             affected++;
         }
         log.info("Package removal for gym {} affected {} home-gym subscriber(s)", gymId, affected);
         return affected;
+    }
+
+    private String packageName(Long packageId) {
+        if (packageId == null) {
+            return null;
+        }
+        return packageRepository.findById(packageId)
+                .map(az.fitnest.order.model.entity.SubscriptionPackage::getName)
+                .orElse(null);
     }
 
     // ---------------------------------------------------------------------
