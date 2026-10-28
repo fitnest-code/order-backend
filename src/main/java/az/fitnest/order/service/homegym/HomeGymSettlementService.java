@@ -98,8 +98,33 @@ public class HomeGymSettlementService {
         return created;
     }
 
-    private int settlePeriod(YearMonth runMonth, Subscription subscription, LocalDate periodStart) {
-        Long subscriptionId = subscription.getSubscriptionId();
+    /**
+     * Refund path (spec §"Kənar hallar": refund → home gym ENDED, gym settlement report
+     * updated). All settlement lines of the subscription are recomputed from the actual
+     * visits so a refunded subscription does not keep a stale gym charge.
+     *
+     * @return number of recreated settlement lines
+     */
+    @Transactional
+    public int resettleSubscription(Long subscriptionId) {
+        Subscription subscription = subscriptionRepository.findById(subscriptionId).orElse(null);
+        if (subscription == null) {
+            return 0;
+        }
+        List<GymSettlementLine> existing = settlementLineRepository.findBySubscriptionId(subscriptionId);
+        if (!existing.isEmpty()) {
+            settlementLineRepository.deleteAllInBatch(existing);
+        }
+        int created = 0;
+        for (LocalDate periodStart : gymVisitRepository.findDistinctPeriodsBySubscriptionId(subscriptionId)) {
+            created += settlePeriod(YearMonth.from(periodStart), subscription, periodStart);
+        }
+        log.info("Home-gym settlement recalculated for subscription {}: {} line(s)",
+                subscriptionId, created);
+        return created;
+    }
+
+    private int settlePeriod(YearMonth runMonth, Subscription subscription, LocalDate periodStart) {        Long subscriptionId = subscription.getSubscriptionId();
         List<GymVisit> visits = gymVisitRepository
                 .findBySubscriptionIdAndPeriodStartOrderByCheckedInAtAsc(subscriptionId, periodStart);
         if (visits.isEmpty()) {

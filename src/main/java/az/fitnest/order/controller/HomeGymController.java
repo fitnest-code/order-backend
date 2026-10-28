@@ -1,5 +1,6 @@
 package az.fitnest.order.controller;
 
+import az.fitnest.order.dto.homegym.HomeGymHistoryItem;
 import az.fitnest.order.dto.homegym.HomeGymResponse;
 import az.fitnest.order.dto.homegym.HomeGymSelectRequest;
 import az.fitnest.order.dto.homegym.HomeGymVisitPage;
@@ -57,6 +58,19 @@ public class HomeGymController {
             @RequestParam(defaultValue = "20") int size) {
         Long userId = UserContext.getCurrentUserId();
         return ResponseEntity.ok(homeGymService.getVisits(userId, subscriptionId, page, size));
+    }
+
+    @GetMapping("/subscriptions/{subscriptionId}/home-gym/history")
+    public ResponseEntity<List<HomeGymHistoryItem>> getHomeGymHistory(@PathVariable Long subscriptionId) {
+        Long userId = UserContext.getCurrentUserId();
+        return ResponseEntity.ok(homeGymService.getHistory(userId, subscriptionId, false));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/admin/subscriptions/{subscriptionId}/home-gym/history")
+    public ResponseEntity<List<HomeGymHistoryItem>> getHomeGymHistoryAsAdmin(
+            @PathVariable Long subscriptionId) {
+        return ResponseEntity.ok(homeGymService.getHistory(null, subscriptionId, true));
     }
 
     @PreAuthorize("hasRole('ADMIN')")

@@ -2,6 +2,7 @@ package az.fitnest.order.service.homegym;
 
 import az.fitnest.order.client.CatalogServiceGrpcClient;
 import az.fitnest.order.dto.homegym.HomeGymContext;
+import az.fitnest.order.dto.homegym.HomeGymHistoryItem;
 import az.fitnest.order.dto.homegym.HomeGymResponse;
 import az.fitnest.order.dto.homegym.HomeGymSelectRequest;
 import az.fitnest.order.dto.homegym.HomeGymVisitPage;
@@ -54,6 +55,7 @@ public class HomeGymService {
     private final HomeGymSelectionPolicy selectionPolicy;
     private final SubscriptionEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final HomeGymSettlementService settlementService;
 
     // ---------------------------------------------------------------------
     // Read model
@@ -126,6 +128,30 @@ public class HomeGymService {
                     visit.getSinglePrice()));
         }
         return new HomeGymVisitPage(items, safePage, safeSize, visitPage.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public List<HomeGymHistoryItem> getHistory(Long userId, Long subscriptionId, boolean admin) {
+        requireSubscription(admin ? null : userId, subscriptionId, false);
+        List<SubscriptionHomeGym> rows = homeGymRepository
+                .findBySubscriptionIdOrderBySelectedAtDesc(subscriptionId);
+        List<HomeGymHistoryItem> items = new ArrayList<>();
+        java.util.Map<Long, String> gymNames = new java.util.HashMap<>();
+        for (SubscriptionHomeGym row : rows) {
+            String gymName = gymNames.computeIfAbsent(row.getGymId(),
+                    id -> safeGymName(id, null));
+            items.add(new HomeGymHistoryItem(
+                    row.getId(),
+                    row.getGymId(),
+                    gymName,
+                    row.getStatus() != null ? row.getStatus().name() : null,
+                    row.getSource() != null ? row.getSource().name() : null,
+                    periodCalculator.toOffset(row.getSelectedAt()),
+                    periodCalculator.toOffset(row.getEndedAt()),
+                    row.getEndReason() != null ? row.getEndReason().name() : null,
+                    periodCalculator.toOffset(row.getEndsAt())));
+        }
+        return items;
     }
 
     // ---------------------------------------------------------------------
@@ -252,6 +278,9 @@ public class HomeGymService {
      * R8/FIRST_QR: the initial offer visit was recorded as STANDARD so the counters stay
      * correct if the offer is declined. Accepting the offer promotes it to HOME_UNLIMITED
      * and gives the unused unit back to the legacy remaining-limit counter.
+     *
+     * <p>F-05: the first-QR offer is only valid on the day the visit happened. Accepting it
+     * later leaves the visit STANDARD, so the promotion is limited to today's visit.
      */
     private void promoteFirstQrVisit(Subscription subscription, Long gymId, LocalDateTime now) {
         LocalDate periodStart = periodCalculator.periodStart(subscription.getStartAt(), now.toLocalDate());
@@ -260,6 +289,12 @@ public class HomeGymService {
                         subscription.getSubscriptionId(), gymId, VisitEntryType.STANDARD, periodStart)
                 .orElse(null);
         if (visit == null || Boolean.FALSE.equals(visit.getCountsTowardsLimit())) {
+            return;
+        }
+        if (visit.getCheckedInAt() == null
+                || !visit.getCheckedInAt().toLocalDate().equals(now.toLocalDate())) {
+            log.info("First-QR offer expired for subscription {} gym {}: visit was on {}",
+                    subscription.getSubscriptionId(), gymId, visit.getCheckedInAt());
             return;
         }
         visit.setEntryType(VisitEntryType.HOME_UNLIMITED);
@@ -351,6 +386,95 @@ public class HomeGymService {
             event.setRecipients(recipients);
             eventPublisher.publishSubscriptionEvent(subscription.getUserId(), event.getAction(), subscriptionId, event);
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Refund and package removal (spec "Kənar hallar" / F-04)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Refund (payment-backend {@code PAYMENT_REFUND_CANCEL}): the home gym becomes ENDED and
+     * the gym settlement report is recalculated from the actual visits.
+     */
+    @Transactional
+    public void onRefund(Long subscriptionId) {
+        if (subscriptionId == null) {
+            return;
+        }
+        Subscription subscription = subscriptionRepository.findById(subscriptionId).orElse(null);
+        if (subscription == null) {
+            return;
+        }
+        SubscriptionHomeGym active = homeGymRepository.findActiveForUpdate(subscriptionId).orElse(null);
+        if (active != null) {
+            endHomeGym(subscription, active, HomeGymEndReason.SUBSCRIPTION_ENDED,
+                    periodCalculator.now(), null);
+        }
+        settlementService.resettleSubscription(subscriptionId);
+        log.info("Refund applied to subscription {}: home gym ended={}, settlement recalculated",
+                subscriptionId, active != null);
+    }
+
+    @Transactional
+    public void onRefundForUser(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        for (Subscription subscription : subscriptionRepository.findByUserId(userId)) {
+            onRefund(subscription.getSubscriptionId());
+        }
+    }
+
+    /**
+     * F-04: a package was removed from a gym. The R18 flow applies to every active home-gym
+     * subscriber that no longer has the gym in their package (including inherited access):
+     * the selection keeps working until the end of the current subscription month, then the
+     * hourly job ends it with {@code GYM_HOME_DISABLED} and a push is sent.
+     *
+     * @return number of affected subscriptions
+     */
+    @Transactional
+    public int onGymPackageRemoved(Long gymId, List<Long> packageIds, String gymName) {
+        if (gymId == null) {
+            return 0;
+        }
+        int affected = 0;
+        for (Long subscriptionId : homeGymRepository.findActiveSubscriptionIdsByGymId(gymId)) {
+            Subscription subscription = subscriptionRepository.findById(subscriptionId).orElse(null);
+            if (subscription == null) {
+                continue;
+            }
+            boolean stillIncluded;
+            try {
+                var info = catalogClient.getHomeGymInfo(gymId, subscription.getPackageId());
+                stillIncluded = info.found() && info.supportsPackage() && info.homeEligible();
+            } catch (Exception e) {
+                // Fail safe: only the removed package ids can be verified locally.
+                stillIncluded = packageIds != null && subscription.getPackageId() != null
+                        && !packageIds.contains(subscription.getPackageId());
+            }
+            if (stillIncluded) {
+                continue;
+            }
+            SubscriptionHomeGym active = homeGymRepository.findActiveForUpdate(subscriptionId).orElse(null);
+            if (active == null || !gymId.equals(active.getGymId())) {
+                continue;
+            }
+            LocalDateTime periodEnd = periodCalculator.periodEndsAt(subscription.getStartAt());
+            active.setEndsAt(periodEnd);
+            active.setEndReason(HomeGymEndReason.GYM_HOME_DISABLED);
+            homeGymRepository.save(active);
+
+            SubscriptionEvent event = new SubscriptionEvent(
+                    subscription.getUserId(), "HOME_GYM_DISABLED_BY_GYM", subscriptionId);
+            event.setGymId(gymId);
+            event.setGymName(gymName);
+            eventPublisher.publishSubscriptionEvent(subscription.getUserId(), event.getAction(),
+                    subscriptionId, event);
+            affected++;
+        }
+        log.info("Package removal for gym {} affected {} home-gym subscriber(s)", gymId, affected);
+        return affected;
     }
 
     // ---------------------------------------------------------------------
@@ -547,7 +671,8 @@ public class HomeGymService {
                     gymInfo.name(),
                     periodCalculator.toOffset(active.getSelectedAt()),
                     gymInfo.availableHours(),
-                    periodCalculator.toOffset(active.getEndsAt()));
+                    periodCalculator.toOffset(active.getEndsAt()),
+                    active.getSource() != null ? active.getSource().name() : null);
         }
 
         long homeVisitsToday = active == null ? 0

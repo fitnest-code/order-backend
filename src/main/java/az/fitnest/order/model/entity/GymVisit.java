@@ -67,4 +67,8 @@ public class GymVisit {
     @Builder.Default
     @Column(name = "counts_towards_limit", nullable = false)
     private Boolean countsTowardsLimit = true;
+
+    /** T-16: client-generated scan id, used to collapse retried QR scans into one visit. */
+    @Column(name = "qr_scan_id", length = 120)
+    private String qrScanId;
 }

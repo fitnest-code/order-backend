@@ -28,6 +28,7 @@ public class HomeGymEventListener {
 
     public static final String HOME_GYM_DISABLED = "HOME_GYM_DISABLED";
     public static final String HOME_GYM_HOME_DISABLED = "HOME_GYM_HOME_DISABLED";
+    public static final String HOME_GYM_PACKAGE_REMOVED = "HOME_GYM_PACKAGE_REMOVED";
 
     private final ObjectMapper objectMapper;
     private final HomeGymDisableCampaignRepository campaignRepository;
@@ -47,6 +48,18 @@ public class HomeGymEventListener {
         }
 
         String eventType = stringValue(event.get("eventType"));
+        if (HOME_GYM_PACKAGE_REMOVED.equals(eventType)) {
+            // F-04: a package was removed from a gym; order re-checks each subscriber through
+            // catalog gRPC (inherited access included) and schedules the R18 flow.
+            Long removedGymId = longValue(event.get("gymId"));
+            if (removedGymId == null) {
+                log.warn("Ignoring package-removal event without gymId: {}", message);
+                return;
+            }
+            homeGymService.onGymPackageRemoved(removedGymId, recipients(event.get("packageIds")),
+                    stringValue(event.get("gymName")));
+            return;
+        }
         if (!HOME_GYM_DISABLED.equals(eventType) && !HOME_GYM_HOME_DISABLED.equals(eventType)) {
             return;
         }

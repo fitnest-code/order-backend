@@ -87,6 +87,8 @@ message CheckInRequest {
   double unlimited_price = 9;
   string gym_name = 10;
   string available_hours = 11;
+  // T-16: client-generated scan id for idempotent QR processing.
+  string qr_scan_id = 12;
 }
 
 message CheckInResponse {

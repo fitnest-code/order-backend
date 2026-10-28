@@ -38,6 +38,10 @@ public interface SubscriptionHomeGymRepository extends JpaRepository<Subscriptio
             "WHERE h.gymId = :gymId AND h.status = az.fitnest.order.model.enums.HomeGymStatus.ACTIVE")
     List<Long> findActiveSubscriptionIdsByGymId(@Param("gymId") Long gymId);
 
+    @Query("SELECT DISTINCT h.subscriptionId FROM SubscriptionHomeGym h " +
+            "WHERE h.userId = :userId AND h.status = az.fitnest.order.model.enums.HomeGymStatus.ACTIVE")
+    List<Long> findActiveSubscriptionIdsByUserId(@Param("userId") Long userId);
+
     boolean existsBySubscriptionIdAndStatus(Long subscriptionId, HomeGymStatus status);
 
     long countByGymIdAndStatus(Long gymId, HomeGymStatus status);

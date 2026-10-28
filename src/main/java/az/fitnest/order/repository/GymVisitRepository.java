@@ -60,6 +60,10 @@ public interface GymVisitRepository extends JpaRepository<GymVisit, Long> {
     Optional<GymVisit> findFirstBySubscriptionIdAndGymIdAndEntryTypeAndPeriodStartOrderByCheckedInAtDesc(
             Long subscriptionId, Long gymId, VisitEntryType entryType, LocalDate periodStart);
 
+    /** T-16: a retried scan must not create a second visit. */
+    Optional<GymVisit> findFirstBySubscriptionIdAndQrScanIdOrderByCheckedInAtDesc(
+            Long subscriptionId, String qrScanId);
+
     @org.springframework.data.jpa.repository.Query(
             "SELECT COUNT(v) FROM GymVisit v WHERE v.subscriptionId = :subscriptionId " +
                     "AND v.periodStart = :periodStart AND v.entryType = :entryType " +
@@ -113,4 +117,12 @@ public interface GymVisitRepository extends JpaRepository<GymVisit, Long> {
     List<Object[]> countCountableVisitsByGym(
             @org.springframework.data.repository.query.Param("subscriptionId") Long subscriptionId,
             @org.springframework.data.repository.query.Param("periodStart") LocalDate periodStart);
+
+    /** All subscription-months that have visits, used when a refund forces a recalculation. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT DISTINCT v.periodStart FROM GymVisit v " +
+                    "WHERE v.subscriptionId = :subscriptionId AND v.periodStart IS NOT NULL " +
+                    "ORDER BY v.periodStart")
+    List<LocalDate> findDistinctPeriodsBySubscriptionId(
+            @org.springframework.data.repository.query.Param("subscriptionId") Long subscriptionId);
 }

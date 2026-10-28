@@ -19,6 +19,7 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
             @org.springframework.data.jpa.repository.Query("SELECT s.userId FROM Subscription s")
             java.util.List<Long> findAllUserIds();
     List<Subscription> findByUserIdAndStatus(Long userId, String status);
+    List<Subscription> findByUserId(Long userId);
     List<Subscription> findByUserIdAndStatusIn(Long userId, List<String> statuses);
     boolean existsByUserIdAndStatusIn(Long userId, List<String> statuses);
     List<Subscription> findByStatusInAndEndAtBefore(List<String> statuses, LocalDateTime now);

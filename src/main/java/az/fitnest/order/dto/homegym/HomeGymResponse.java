@@ -36,7 +36,8 @@ public record HomeGymResponse(
             String name,
             OffsetDateTime selectedAt,
             String availableHours,
-            OffsetDateTime endsAt) {
+            OffsetDateTime endsAt,
+            String source) {
     }
 
     public record StandardVisits(int used, int limit, int remaining) {

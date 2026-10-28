@@ -15,4 +15,6 @@ public interface GymSettlementLineRepository extends JpaRepository<GymSettlement
             Long gymId, Long subscriptionId, LocalDate periodStart);
 
     List<GymSettlementLine> findByRunMonthOrderByGymIdAsc(String runMonth);
+
+    List<GymSettlementLine> findBySubscriptionId(Long subscriptionId);
 }

@@ -289,6 +289,8 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
                 freezeFinalizeService.terminateActive(request.getSubscriptionId(), reason);
                 if ("PAYMENT_REFUND_CANCEL".equalsIgnoreCase(reason)) {
                     subscriptionService.revokeCampaignBonusForRefund(request.getSubscriptionId(), null);
+                    // Spec "Kənar hallar": refund ends the home gym and refreshes gym settlement.
+                    homeGymService.onRefund(request.getSubscriptionId());
                 }
             } else if (request.getUserId() > 0) {
                 Long userId = request.getUserId();
@@ -302,6 +304,7 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
                         .forEach(sub -> freezeFinalizeService.terminateActive(sub.getSubscriptionId(), reason));
                 if ("PAYMENT_REFUND_CANCEL".equalsIgnoreCase(reason)) {
                     subscriptionService.revokeCampaignBonusForRefund(null, userId);
+                    homeGymService.onRefundForUser(userId);
                 }
             } else {
                 responseObserver.onError(io.grpc.Status.INVALID_ARGUMENT

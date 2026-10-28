@@ -101,6 +101,23 @@ public class HomeGymCheckInService {
         long standardVisitsUsed = standardVisits + (mode == EntryMode.STANDARD ? allHomeVisits : 0);
         long totalVisits = standardVisits + allHomeVisits;
 
+        // T-16: a retried QR scan with the same client-generated id must not write a second
+        // visit. The subscription row is already locked, so the check is race-free.
+        if (context.qrScanId() != null) {
+            GymVisit duplicate = gymVisitRepository
+                    .findFirstBySubscriptionIdAndQrScanIdOrderByCheckedInAtDesc(
+                            subscription.getSubscriptionId(), context.qrScanId())
+                    .orElse(null);
+            if (duplicate != null) {
+                VisitEntryType duplicateType = duplicate.getEntryType() != null
+                        ? duplicate.getEntryType() : VisitEntryType.STANDARD;
+                CheckInDecision duplicateDecision = duplicateType == VisitEntryType.HOME_UNLIMITED
+                        ? CheckInDecision.ENTERED_HOME_UNLIMITED : CheckInDecision.ENTERED_STANDARD;
+                return entered(duplicateDecision, duplicateType, duplicate, duplicate.getHomeGymId(),
+                        standardVisitsUsed, limit, homeVisits, mode);
+            }
+        }
+
         boolean atHomeGym = active != null && active.getGymId().equals(gymId);
 
         // R10: reservations (consumeFrozen) keep their legacy behaviour and never consume
@@ -465,6 +482,7 @@ public class HomeGymCheckInService {
                 .singlePrice(context.singlePrice())
                 .unlimitedPrice(context.unlimitedPrice())
                 .countsTowardsLimit(countsTowardsLimit)
+                .qrScanId(context.qrScanId())
                 .build();
         return gymVisitRepository.save(visit);
     }

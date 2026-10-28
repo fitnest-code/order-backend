@@ -14,5 +14,6 @@ public record HomeGymCheckInContext(
         Long timeSlotRuleId,
         String pricePackage,
         BigDecimal singlePrice,
-        BigDecimal unlimitedPrice) {
+        BigDecimal unlimitedPrice,
+        String qrScanId) {
 }
