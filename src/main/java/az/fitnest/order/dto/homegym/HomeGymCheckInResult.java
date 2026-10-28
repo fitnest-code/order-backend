@@ -24,11 +24,13 @@ public record HomeGymCheckInResult(
         String confirmationType,
         String confirmationToken,
         OffsetDateTime confirmationExpiresAt,
-        String homeGymName) {
+        String homeGymName,
+        /** R21: earliest moment the subscriber may enter the home gym again (tomorrow 00:00). */
+        OffsetDateTime nextHomeEntryAt) {
 
     public static HomeGymCheckInResult entered(CheckInDecision decision, VisitEntryType entryType, Long visitId,
                                                 Long homeGymId, long standardVisitsUsed) {
         return new HomeGymCheckInResult(true, decision, null, entryType, visitId, homeGymId, null,
-                standardVisitsUsed, 12, 0, null, null, null, null, null, null);
+                standardVisitsUsed, 12, 0, null, null, null, null, null, null, null);
     }
 }

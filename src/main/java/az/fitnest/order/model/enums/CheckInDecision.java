@@ -10,6 +10,10 @@ public enum CheckInDecision {
     CONFIRMATION_REQUIRED,
     OTHER_GYMS_LOCKED,
     VISIT_LIMIT_EXCEEDED,
+    /** R21: the home gym already had its one visit of the Baku calendar day. */
+    DAILY_LIMIT_REACHED,
+    /** R21: the home gym already had its 30 visits of the subscription month. */
+    HOME_MONTHLY_LIMIT_REACHED,
     TIER_NOT_ALLOWED_AT_THIS_TIME,
     SUBSCRIPTION_FROZEN,
     NO_ACTIVE_SUBSCRIPTION

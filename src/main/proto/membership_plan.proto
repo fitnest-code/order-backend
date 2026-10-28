@@ -110,6 +110,8 @@ message CheckInResponse {
   string gym_name = 18;
   int64 target_gym_id = 19;
   string home_gym_name = 20;
+  // R21: earliest next home-gym entry (tomorrow 00:00 Asia/Baku) for DAILY_LIMIT_REACHED.
+  string next_home_entry_at = 21;
 }
 
 message CheckOptionInPackageExistsRequest {

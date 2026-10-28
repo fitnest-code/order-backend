@@ -74,7 +74,9 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
                     .setGymName(request.getGymName())
                     .setAvailableHours(request.getAvailableHours())
                     .setTargetGymId(result.targetGymId() != null ? result.targetGymId() : 0L)
-                    .setHomeGymName(result.homeGymName() != null ? result.homeGymName() : "");
+                    .setHomeGymName(result.homeGymName() != null ? result.homeGymName() : "")
+                    .setNextHomeEntryAt(result.nextHomeEntryAt() != null
+                            ? result.nextHomeEntryAt().toString() : "");
             responseObserver.onNext(response.build());
         } catch (Exception e) {
             responseObserver.onNext(az.fitnest.order.grpc.CheckInResponse.newBuilder()

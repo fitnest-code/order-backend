@@ -60,6 +60,8 @@ public class HomeGymCheckInService {
         Long userId = context.userId();
         Long gymId = context.gymId();
         LocalDateTime now = periodCalculator.now();
+        LocalDateTime dayStart = periodCalculator.dayStart(now);
+        LocalDateTime dayEnd = periodCalculator.nextDayStart(now);
 
         Subscription locked = lockCurrentSubscription(userId);
         if (locked == null) {
@@ -132,8 +134,18 @@ public class HomeGymCheckInService {
                     active != null ? active.getGymId() : null, standardVisitsUsed, limit, homeVisits, mode);
         }
 
-        // 1. Entering the active home gym is always unlimited (R3).
+        // 1. Entering the active home gym: R21 daily and monthly gates, then unlimited entry (R3).
         if (atHomeGym) {
+            long homeVisitsToday = gymVisitRepository.countCountableBySubscriptionAndGymAndTypeBetween(
+                    subscription.getSubscriptionId(), gymId, VisitEntryType.HOME_UNLIMITED, dayStart, dayEnd);
+            if (homeVisitsToday >= HomeGymPeriodCalculator.HOME_DAILY_VISIT_LIMIT) {
+                return dailyLimitReached(subscription, active, homeVisits, standardVisitsUsed, limit,
+                        periodStart, now);
+            }
+            if (homeVisits >= HomeGymPeriodCalculator.HOME_MONTHLY_VISIT_LIMIT) {
+                return monthlyLimitReached(subscription, active, homeVisits, standardVisitsUsed, limit,
+                        periodStart);
+            }
             GymVisit visit = recordVisit(subscription, gymId, active.getGymId(), periodStart, now,
                     VisitEntryType.HOME_UNLIMITED, context, true);
             publishCheckIn(subscription, false);
@@ -207,6 +219,7 @@ public class HomeGymCheckInService {
         publishCheckIn(subscription, false);
 
         boolean offer = mode == EntryMode.HOME_GYM_PENDING
+                && totalVisits == 0
                 && !homeGymRepository.existsBySubscriptionIdAndStatus(subscription.getSubscriptionId(),
                 HomeGymStatus.ACTIVE)
                 && !homeGymRepository.existsBySubscriptionIdAndStatus(subscription.getSubscriptionId(),
@@ -243,12 +256,13 @@ public class HomeGymCheckInService {
                 null,
                 null,
                 null,
+                null,
                 null);
     }
 
     private HomeGymCheckInResult rejected(CheckInDecision decision, String messageKey) {
         return new HomeGymCheckInResult(false, decision, messageKey, null, null, null, null,
-                0, HomeGymPeriodCalculator.DEFAULT_STANDARD_LIMIT, 0, null, null, null, null, null, null);
+                0, HomeGymPeriodCalculator.DEFAULT_STANDARD_LIMIT, 0, null, null, null, null, null, null, null);
     }
 
     private HomeGymCheckInResult otherGymsLocked(Subscription subscription, Long gymId,
@@ -266,6 +280,7 @@ public class HomeGymCheckInService {
                 limit,
                 homeVisits,
                 periodCalculator.toOffset(periodCalculator.periodEndsAt(subscription.getStartAt())),
+                null,
                 null,
                 null,
                 null,
@@ -289,6 +304,7 @@ public class HomeGymCheckInService {
                 homeVisits,
                 null,
                 periodCalculator.toOffset(periodCalculator.periodEndsAt(subscription.getStartAt())),
+                null,
                 null,
                 null,
                 null,
@@ -316,7 +332,58 @@ public class HomeGymCheckInService {
                 ConfirmationType.SWITCH_TO_STANDARD.name(),
                 token.getToken(),
                 periodCalculator.toOffset(token.getExpiresAt()),
-                homeGymName);
+                homeGymName,
+                null);
+    }
+
+    /** R21: the home gym already had its one visit of the Baku calendar day. */
+    private HomeGymCheckInResult dailyLimitReached(Subscription subscription, SubscriptionHomeGym active,
+                                                   long homeVisits, long standardVisits, int limit,
+                                                   LocalDate periodStart, LocalDateTime now) {
+        return new HomeGymCheckInResult(
+                false,
+                CheckInDecision.DAILY_LIMIT_REACHED,
+                "home_gym.daily_limit",
+                null,
+                null,
+                active.getGymId(),
+                active.getGymId(),
+                standardVisits,
+                limit,
+                homeVisits,
+                null,
+                periodCalculator.toOffset(periodCalculator.periodEndsAt(
+                        subscription.getStartAt(), periodStart)),
+                null,
+                null,
+                null,
+                null,
+                periodCalculator.toOffset(periodCalculator.nextDayStart(now)));
+    }
+
+    /** R21: the home gym already had its 30 visits of the subscription month. */
+    private HomeGymCheckInResult monthlyLimitReached(Subscription subscription, SubscriptionHomeGym active,
+                                                     long homeVisits, long standardVisits, int limit,
+                                                     LocalDate periodStart) {
+        return new HomeGymCheckInResult(
+                false,
+                CheckInDecision.HOME_MONTHLY_LIMIT_REACHED,
+                "home_gym.monthly_limit",
+                null,
+                null,
+                active.getGymId(),
+                active.getGymId(),
+                standardVisits,
+                limit,
+                homeVisits,
+                null,
+                periodCalculator.toOffset(periodCalculator.periodEndsAt(
+                        subscription.getStartAt(), periodStart)),
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     // ------------------------------------------------------------------
@@ -491,6 +558,8 @@ public class HomeGymCheckInService {
             case CONFIRMATION_REQUIRED -> "home_gym.switch_warning";
             case OTHER_GYMS_LOCKED -> "home_gym.other_gyms_locked";
             case VISIT_LIMIT_EXCEEDED -> "qr.limit_reached";
+            case DAILY_LIMIT_REACHED -> "home_gym.daily_limit";
+            case HOME_MONTHLY_LIMIT_REACHED -> "home_gym.monthly_limit";
             case TIER_NOT_ALLOWED_AT_THIS_TIME -> "qr.tier_not_allowed";
             case SUBSCRIPTION_FROZEN -> "error.subscription_frozen";
             case NO_ACTIVE_SUBSCRIPTION -> "home_gym.no_active_subscription";

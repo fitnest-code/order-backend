@@ -51,6 +51,7 @@ public class HomeGymService {
     private final HomeGymIdempotencyRepository idempotencyRepository;
     private final CatalogServiceGrpcClient catalogClient;
     private final HomeGymPeriodCalculator periodCalculator;
+    private final HomeGymSelectionPolicy selectionPolicy;
     private final SubscriptionEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
@@ -156,6 +157,27 @@ public class HomeGymService {
         Subscription subscription = requireSubscription(admin ? null : userId, subscriptionId, true);
         ensureSelectable(subscription);
 
+        LocalDateTime now = periodCalculator.now();
+        LocalDate periodStart = periodCalculator.periodStart(subscription.getStartAt(), now.toLocalDate());
+        SubscriptionHomeGym active = homeGymRepository.findActiveForUpdate(subscriptionId).orElse(null);
+
+        // R20: without an active home gym the selection is closed as soon as the month has
+        // visits at more than one gym; when all visits are at one gym only that gym may be
+        // selected (R19). The rule also applies to the admin endpoint.
+        HomeGymSelectionPolicy.SelectionState selection = active == null
+                ? selectionPolicy.evaluate(subscriptionId, periodStart) : null;
+        if (selection != null) {
+            if (selection.multipleGyms()
+                    || (selection.soleGymId() != null && !selection.soleGymId().equals(request.gymId()))) {
+                throw new HomeGymException("HOME_GYM_SELECTION_CLOSED", HttpStatus.CONFLICT,
+                        "error.home_gym.selection_closed");
+            }
+            if (request.source() == HomeGymSource.SUGGESTED && selection.soleGymId() == null) {
+                throw new HomeGymException("INVALID_SOURCE", HttpStatus.BAD_REQUEST,
+                        "error.home_gym.invalid_source");
+            }
+        }
+
         var info = catalogClient.getHomeGymInfo(request.gymId(), subscription.getPackageId());
         if (!info.found()) {
             throw new ResourceNotFoundException("error.home_gym.gym_not_found");
@@ -168,10 +190,6 @@ public class HomeGymService {
             throw new HomeGymException("GYM_HOME_DISABLED", HttpStatus.UNPROCESSABLE_ENTITY,
                     "error.home_gym.gym_home_disabled");
         }
-
-        LocalDateTime now = periodCalculator.now();
-        LocalDate periodStart = periodCalculator.periodStart(subscription.getStartAt(), now.toLocalDate());
-        SubscriptionHomeGym active = homeGymRepository.findActiveForUpdate(subscriptionId).orElse(null);
 
         Long previousGymId = null;
         if (active != null) {
@@ -206,6 +224,10 @@ public class HomeGymService {
         subscription.setEntryMode(EntryMode.HOME_GYM);
         if (request.source() == HomeGymSource.FIRST_QR && currentMode == EntryMode.HOME_GYM_PENDING) {
             promoteFirstQrVisit(subscription, request.gymId(), now);
+        } else if (selection != null && request.gymId().equals(selection.soleGymId())) {
+            // R19: every countable visit of the period at the selected gym becomes a home-gym
+            // visit (the limit units are given back, R4/R6/R16 counters stay consistent).
+            convertVisitsToHomeGym(subscription, request.gymId(), periodStart);
         }
         subscriptionRepository.save(subscription);
 
@@ -244,13 +266,41 @@ public class HomeGymService {
         visit.setHomeGymId(gymId);
         gymVisitRepository.save(visit);
 
-        if (subscription.getRemainingLimit() != null) {
-            int restored = subscription.getRemainingLimit() + 1;
-            if (subscription.getTotalLimit() != null && subscription.getTotalLimit() > 0) {
-                restored = Math.min(restored, subscription.getTotalLimit());
+        restoreLimitUnits(subscription, 1);
+    }
+
+    /**
+     * R19: converts every countable STANDARD visit of the subscription month at the selected
+     * gym into a HOME_UNLIMITED visit and gives the consumed limit units back.
+     */
+    private void convertVisitsToHomeGym(Subscription subscription, Long gymId, LocalDate periodStart) {
+        List<GymVisit> visits = gymVisitRepository
+                .findBySubscriptionIdAndGymIdAndPeriodStartOrderByCheckedInAtAsc(
+                        subscription.getSubscriptionId(), gymId, periodStart);
+        int converted = 0;
+        for (GymVisit visit : visits) {
+            if (visit.getEntryType() == VisitEntryType.STANDARD
+                    && !Boolean.FALSE.equals(visit.getCountsTowardsLimit())) {
+                visit.setEntryType(VisitEntryType.HOME_UNLIMITED);
+                visit.setHomeGymId(gymId);
+                gymVisitRepository.save(visit);
+                converted++;
             }
-            subscription.setRemainingLimit(restored);
         }
+        if (converted > 0) {
+            restoreLimitUnits(subscription, converted);
+        }
+    }
+
+    private void restoreLimitUnits(Subscription subscription, int units) {
+        if (units <= 0 || subscription.getRemainingLimit() == null) {
+            return;
+        }
+        int restored = subscription.getRemainingLimit() + units;
+        if (subscription.getTotalLimit() != null && subscription.getTotalLimit() > 0) {
+            restored = Math.min(restored, subscription.getTotalLimit());
+        }
+        subscription.setRemainingLimit(restored);
         if ("FINISHED".equals(subscription.getStatus()) && subscription.getEntryMode() == EntryMode.HOME_GYM) {
             subscription.setStatus("ACTIVE");
         }
@@ -468,6 +518,7 @@ public class HomeGymService {
     private HomeGymResponse buildResponse(Subscription subscription) {
         LocalDateTime now = periodCalculator.now();
         LocalDate periodStart = periodCalculator.periodStart(subscription.getStartAt(), now.toLocalDate());
+        LocalDateTime periodEnds = periodCalculator.periodEndsAt(subscription.getStartAt(), periodStart);
         int limit = resolveLimit(subscription);
         EntryMode mode = subscription.getEntryMode() != null
                 ? subscription.getEntryMode() : EntryMode.HOME_GYM_PENDING;
@@ -499,8 +550,17 @@ public class HomeGymService {
                     periodCalculator.toOffset(active.getEndsAt()));
         }
 
-        Long homeVisitsForCurrent = active == null ? 0 : homeVisits;
-        boolean otherGymsLocked = active != null && homeVisitsForCurrent >= HomeGymPeriodCalculator.DEFAULT_STANDARD_LIMIT;
+        long homeVisitsToday = active == null ? 0
+                : gymVisitRepository.countCountableBySubscriptionAndGymAndTypeBetween(
+                        subscription.getSubscriptionId(), active.getGymId(), VisitEntryType.HOME_UNLIMITED,
+                        periodCalculator.dayStart(now), periodCalculator.nextDayStart(now));
+        boolean homeVisitedToday = homeVisitsToday > 0;
+        // R21: the daily gate reopens at 00:00 Asia/Baku.
+        var nextHomeEntryAt = homeVisitedToday
+                ? periodCalculator.toOffset(periodCalculator.nextDayStart(now)) : null;
+
+        boolean otherGymsLocked = active != null
+                && homeVisits >= HomeGymPeriodCalculator.DEFAULT_STANDARD_LIMIT;
         // R4: the home gym can only be changed while it has no visits at all in this
         // subscription month, including standard visits made before it was selected.
         long visitsToCurrent = active == null ? 0
@@ -510,18 +570,68 @@ public class HomeGymService {
         int used = (int) standardVisits;
         int remaining = Math.max(0, limit - used);
 
+        boolean canSelect;
+        String selectBlockedReason = null;
+        java.time.OffsetDateTime selectAvailableFrom = null;
+        HomeGymResponse.SuggestedHomeGym suggested = null;
+
+        if (active != null) {
+            canSelect = false;
+        } else {
+            HomeGymSelectionPolicy.SelectionState selection =
+                    selectionPolicy.evaluate(subscription.getSubscriptionId(), periodStart);
+            if (selection.multipleGyms()) {
+                // R20: visits at two or more gyms close the selection until next month.
+                canSelect = false;
+                selectBlockedReason = HomeGymSelectionPolicy.MULTIPLE_GYMS_THIS_PERIOD;
+                selectAvailableFrom = periodCalculator.toOffset(periodEnds);
+            } else if (selection.soleGymId() != null) {
+                // R19: only the visited gym may be selected; suggest it when it is eligible.
+                var gymInfo = catalogClient.getHomeGymInfo(selection.soleGymId(), subscription.getPackageId());
+                if (!gymInfo.found() || !gymInfo.supportsPackage()) {
+                    canSelect = false;
+                    selectBlockedReason = "GYM_NOT_IN_PACKAGE";
+                    selectAvailableFrom = periodCalculator.toOffset(periodEnds);
+                } else if (!gymInfo.homeEligible()) {
+                    canSelect = false;
+                    selectBlockedReason = "GYM_HOME_DISABLED";
+                    selectAvailableFrom = periodCalculator.toOffset(periodEnds);
+                } else {
+                    canSelect = true;
+                    if (selection.soleGymVisits() <= HomeGymPeriodCalculator.DEFAULT_STANDARD_LIMIT) {
+                        suggested = new HomeGymResponse.SuggestedHomeGym(
+                                selection.soleGymId(), gymInfo.name(), selection.soleGymVisits());
+                    }
+                }
+            } else {
+                canSelect = true;
+            }
+        }
+
+        boolean showHomeGymBanner = active == null && canSelect;
+        int homeMonthlyLimit = HomeGymPeriodCalculator.HOME_MONTHLY_VISIT_LIMIT;
+        int homeVisitsRemaining = (int) Math.max(0, homeMonthlyLimit - homeVisits);
+
         return new HomeGymResponse(
                 subscription.getSubscriptionId(),
                 mode.name(),
                 info,
                 canChange,
                 blockedReason,
-                homeVisitsForCurrent,
+                homeVisits,
+                homeMonthlyLimit,
+                homeVisitsRemaining,
+                homeVisitedToday,
+                nextHomeEntryAt,
                 otherGymsLocked,
                 new HomeGymResponse.StandardVisits(used, limit, remaining),
-                periodCalculator.toOffset(periodCalculator.periodEndsAt(subscription.getStartAt())),
+                periodCalculator.toOffset(periodEnds),
                 periodCalculator.toOffset(subscription.getEndAt()),
-                mode != EntryMode.HOME_GYM);
+                showHomeGymBanner,
+                canSelect,
+                selectBlockedReason,
+                selectAvailableFrom,
+                suggested);
     }
 
     public int resolveLimit(Subscription subscription) {

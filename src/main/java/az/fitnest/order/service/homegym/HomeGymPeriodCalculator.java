@@ -21,9 +21,23 @@ public class HomeGymPeriodCalculator {
 
     public static final ZoneId BAKU = ZoneId.of("Asia/Baku");
     public static final int DEFAULT_STANDARD_LIMIT = 12;
+    /** R21: maximum home-gym visits in one subscription month. */
+    public static final int HOME_MONTHLY_VISIT_LIMIT = 30;
+    /** R21: maximum home-gym visits in one Baku calendar day. */
+    public static final int HOME_DAILY_VISIT_LIMIT = 1;
 
     public LocalDateTime now() {
         return LocalDateTime.now(BAKU);
+    }
+
+    /** Start of the Baku calendar day containing {@code moment}. */
+    public LocalDateTime dayStart(LocalDateTime moment) {
+        return moment.toLocalDate().atStartOfDay();
+    }
+
+    /** Exclusive start of the next Baku calendar day (R21 {@code nextHomeEntryAt}). */
+    public LocalDateTime nextDayStart(LocalDateTime moment) {
+        return moment.toLocalDate().plusDays(1).atStartOfDay();
     }
 
     /** Start date of the subscription month containing {@code reference}. */
