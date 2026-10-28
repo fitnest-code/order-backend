@@ -50,6 +50,13 @@ public class HomeGymReminderService {
     @Transactional
     public void sendDueReminders() {
         LocalDateTime now = periodCalculator.now();
+        // Quiet hours are applied to the target moment, but a delayed run (deploy, backlog,
+        // long outage) can arrive much later. Never push between 22:00 and 09:00: the next
+        // run at/after 10:00 sends it, and the reminder stays "once per subscription".
+        if (isQuietHour(now.toLocalTime())) {
+            log.debug("Home-gym reminders paused during quiet hours ({})", now);
+            return;
+        }
         List<Subscription> candidates = subscriptionRepository
                 .findHomeGymReminderCandidates(now.minusHours(24), now);
         int sent = 0;
@@ -103,5 +110,10 @@ public class HomeGymReminderService {
             return target.toLocalDate().atTime(MORNING_SEND_AT);
         }
         return target;
+    }
+
+    /** 22:00–08:59 must never carry a push. */
+    static boolean isQuietHour(LocalTime time) {
+        return !time.isBefore(QUIET_FROM) || time.isBefore(QUIET_TO);
     }
 }

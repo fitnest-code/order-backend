@@ -121,6 +121,28 @@ class HomeGymCheckInQrAndReminderTest {
                 HomeGymReminderService.reminderAt(LocalDateTime.of(2026, 11, 5, 21, 59)));
     }
 
+    @Test
+    void quietHourCoversTwentyTwoToNine() {
+        assertFalse(HomeGymReminderService.isQuietHour(java.time.LocalTime.of(21, 59)));
+        assertTrue(HomeGymReminderService.isQuietHour(java.time.LocalTime.of(22, 0)));
+        assertTrue(HomeGymReminderService.isQuietHour(java.time.LocalTime.of(23, 59)));
+        assertTrue(HomeGymReminderService.isQuietHour(java.time.LocalTime.of(0, 0)));
+        assertTrue(HomeGymReminderService.isQuietHour(java.time.LocalTime.of(8, 59)));
+        assertFalse(HomeGymReminderService.isQuietHour(java.time.LocalTime.of(9, 0)));
+    }
+
+    @Test
+    void reminderJobSendsNothingDuringQuietHours() {
+        when(periodCalculator.now()).thenReturn(LocalDateTime.of(2026, 10, 27, 23, 30));
+        HomeGymReminderService reminderService = new HomeGymReminderService(
+                subscriptionRepository, homeGymRepository, catalogClient, periodCalculator, eventPublisher);
+
+        reminderService.sendDueReminders();
+
+        verifyNoInteractions(subscriptionRepository);
+        verifyNoInteractions(eventPublisher);
+    }
+
     private void stubLockedSubscription(Subscription subscription) {
         when(periodCalculator.now()).thenReturn(LocalDateTime.of(2026, 10, 27, 12, 0));
         when(periodCalculator.dayStart(any())).thenReturn(LocalDateTime.of(2026, 10, 27, 0, 0));
