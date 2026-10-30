@@ -1,6 +1,7 @@
 package az.fitnest.order.service.homegym;
 
 import az.fitnest.order.client.CatalogServiceGrpcClient;
+import az.fitnest.order.config.HomeGymLimits;
 import az.fitnest.order.dto.homegym.HomeGymContext;
 import az.fitnest.order.dto.homegym.HomeGymHistoryItem;
 import az.fitnest.order.dto.homegym.HomeGymResponse;
@@ -58,6 +59,7 @@ public class HomeGymService {
     private final ObjectMapper objectMapper;
     private final HomeGymSettlementService settlementService;
     private final SubscriptionPackageRepository packageRepository;
+    private final HomeGymLimits homeGymLimits;
 
     // ---------------------------------------------------------------------
     // Read model
@@ -674,6 +676,7 @@ public class HomeGymService {
         LocalDateTime now = periodCalculator.now();
         LocalDate periodStart = periodCalculator.periodStart(subscription.getStartAt(), now.toLocalDate());
         LocalDateTime periodEnds = periodCalculator.periodEndsAt(subscription.getStartAt(), periodStart);
+        HomeGymLimits.Snapshot config = homeGymLimits.snapshot();
         int limit = resolveLimit(subscription);
         EntryMode mode = subscription.getEntryMode() != null
                 ? subscription.getEntryMode() : EntryMode.HOME_GYM_PENDING;
@@ -716,7 +719,7 @@ public class HomeGymService {
                 ? periodCalculator.toOffset(periodCalculator.nextDayStart(now)) : null;
 
         boolean otherGymsLocked = active != null
-                && homeVisits >= HomeGymPeriodCalculator.DEFAULT_STANDARD_LIMIT;
+                && homeVisits >= config.otherGymsLockThreshold();
         // R4: the home gym can only be changed while it has no visits at all in this
         // subscription month, including standard visits made before it was selected.
         long visitsToCurrent = active == null ? 0
@@ -754,7 +757,7 @@ public class HomeGymService {
                     selectAvailableFrom = periodCalculator.toOffset(periodEnds);
                 } else {
                     canSelect = true;
-                    if (selection.soleGymVisits() <= HomeGymPeriodCalculator.DEFAULT_STANDARD_LIMIT) {
+                    if (selection.soleGymVisits() <= config.standardMonthlyLimit()) {
                         suggested = new HomeGymResponse.SuggestedHomeGym(
                                 selection.soleGymId(), gymInfo.name(), selection.soleGymVisits());
                     }
@@ -765,7 +768,7 @@ public class HomeGymService {
         }
 
         boolean showHomeGymBanner = active == null && canSelect;
-        int homeMonthlyLimit = HomeGymPeriodCalculator.HOME_MONTHLY_VISIT_LIMIT;
+        int homeMonthlyLimit = config.homeGymMonthlyLimit();
         int homeVisitsRemaining = (int) Math.max(0, homeMonthlyLimit - homeVisits);
 
         return new HomeGymResponse(
@@ -794,7 +797,7 @@ public class HomeGymService {
         if (subscription != null && subscription.getTotalLimit() != null && subscription.getTotalLimit() > 0) {
             return subscription.getTotalLimit();
         }
-        return HomeGymPeriodCalculator.DEFAULT_STANDARD_LIMIT;
+        return homeGymLimits.standardMonthlyLimit();
     }
 
     private long countVisitsAtGym(Long subscriptionId, LocalDate periodStart, Long gymId) {

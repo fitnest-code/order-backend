@@ -1,6 +1,7 @@
 package az.fitnest.order.service.homegym;
 
 import az.fitnest.order.client.CatalogServiceGrpcClient;
+import az.fitnest.order.config.HomeGymLimits;
 import az.fitnest.order.dto.homegym.HomeGymCheckInContext;
 import az.fitnest.order.dto.homegym.HomeGymCheckInResult;
 import az.fitnest.order.event.SubscriptionEvent;
@@ -44,8 +45,6 @@ public class HomeGymCheckInService {
 
     public static final String CONFIRMATION_SWITCH_TO_STANDARD = "SWITCH_TO_STANDARD";
     private static final int CONFIRMATION_TTL_MINUTES = 5;
-    /** R6: other gyms are locked once the home gym has 12 visits in the subscription month. */
-    private static final int OTHER_GYMS_LOCK_THRESHOLD = HomeGymPeriodCalculator.DEFAULT_STANDARD_LIMIT;
 
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionHomeGymRepository homeGymRepository;
@@ -54,6 +53,7 @@ public class HomeGymCheckInService {
     private final CatalogServiceGrpcClient catalogClient;
     private final HomeGymPeriodCalculator periodCalculator;
     private final SubscriptionEventPublisher eventPublisher;
+    private final HomeGymLimits homeGymLimits;
 
     @Transactional
     public HomeGymCheckInResult checkIn(HomeGymCheckInContext context) {
@@ -62,6 +62,8 @@ public class HomeGymCheckInService {
         LocalDateTime now = periodCalculator.now();
         LocalDateTime dayStart = periodCalculator.dayStart(now);
         LocalDateTime dayEnd = periodCalculator.nextDayStart(now);
+        // One snapshot per request: the daily/monthly/lock gates must not mix two configurations.
+        HomeGymLimits.Snapshot config = homeGymLimits.snapshot();
 
         // T-16: the mobile app generates a UUID v4 for every QR read and reuses it on
         // retries. Anything else is a client bug and must not reach the dedup index.
@@ -165,11 +167,11 @@ public class HomeGymCheckInService {
         if (atHomeGym) {
             long homeVisitsToday = gymVisitRepository.countCountableBySubscriptionAndGymAndTypeBetween(
                     subscription.getSubscriptionId(), gymId, VisitEntryType.HOME_UNLIMITED, dayStart, dayEnd);
-            if (homeVisitsToday >= HomeGymPeriodCalculator.HOME_DAILY_VISIT_LIMIT) {
+            if (homeVisitsToday >= config.homeGymDailyLimit()) {
                 return dailyLimitReached(subscription, active, homeVisits, standardVisitsUsed, limit,
                         periodStart, now);
             }
-            if (homeVisits >= HomeGymPeriodCalculator.HOME_MONTHLY_VISIT_LIMIT) {
+            if (homeVisits >= config.homeGymMonthlyLimit()) {
                 return monthlyLimitReached(subscription, active, homeVisits, standardVisitsUsed, limit,
                         periodStart);
             }
@@ -182,7 +184,7 @@ public class HomeGymCheckInService {
 
         // 2. Another gym with an active home gym: R5/R6.
         if (active != null) {
-            if (homeVisits >= OTHER_GYMS_LOCK_THRESHOLD) {
+            if (homeVisits >= config.otherGymsLockThreshold()) {
                 return otherGymsLocked(subscription, gymId, active, homeVisits, standardVisitsUsed, limit, periodStart);
             }
             if (totalVisits >= limit) {
@@ -195,7 +197,7 @@ public class HomeGymCheckInService {
                 return confirmationRequired(subscription, gymId, active, homeVisits, standardVisitsUsed, limit, now);
             }
             HomeGymConfirmationToken token = validateConfirmationToken(
-                    context, subscription, active, homeVisits, now);
+                    context, subscription, active, homeVisits, now, config);
             if (token == null) {
                 return confirmationRequired(subscription, gymId, active, homeVisits, standardVisitsUsed, limit, now);
             }
@@ -289,7 +291,7 @@ public class HomeGymCheckInService {
 
     private HomeGymCheckInResult rejected(CheckInDecision decision, String messageKey) {
         return new HomeGymCheckInResult(false, decision, messageKey, null, null, null, null,
-                0, HomeGymPeriodCalculator.DEFAULT_STANDARD_LIMIT, 0, null, null, null, null, null, null, null);
+                0, homeGymLimits.standardMonthlyLimit(), 0, null, null, null, null, null, null, null);
     }
 
     private HomeGymCheckInResult otherGymsLocked(Subscription subscription, Long gymId,
@@ -439,7 +441,8 @@ public class HomeGymCheckInService {
                                                                Subscription subscription,
                                                                SubscriptionHomeGym active,
                                                                long homeVisits,
-                                                               LocalDateTime now) {
+                                                               LocalDateTime now,
+                                                               HomeGymLimits.Snapshot config) {
         String raw = context.confirmationToken();
         if (raw == null || raw.isBlank()) {
             return null;
@@ -454,7 +457,7 @@ public class HomeGymCheckInService {
                 && token.getTargetGymId().equals(context.gymId())
                 && token.getConfirmationType() == ConfirmationType.SWITCH_TO_STANDARD;
         boolean usable = matches && !token.getExpiresAt().isBefore(now)
-                && homeVisits < OTHER_GYMS_LOCK_THRESHOLD;
+                && homeVisits < config.otherGymsLockThreshold();
         if (usable) {
             Optional<GymVisit> latestHomeVisit = gymVisitRepository
                     .findFirstBySubscriptionIdAndGymIdAndEntryTypeOrderByCheckedInAtDesc(
@@ -566,7 +569,7 @@ public class HomeGymCheckInService {
         if (subscription.getTotalLimit() != null && subscription.getTotalLimit() > 0) {
             return subscription.getTotalLimit();
         }
-        return HomeGymPeriodCalculator.DEFAULT_STANDARD_LIMIT;
+        return homeGymLimits.standardMonthlyLimit();
     }
 
     private String safeGymName(Long gymId, Long packageId) {

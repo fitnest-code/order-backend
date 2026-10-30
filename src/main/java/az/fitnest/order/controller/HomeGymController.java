@@ -2,11 +2,14 @@ package az.fitnest.order.controller;
 
 import az.fitnest.order.dto.homegym.HomeGymHistoryItem;
 import az.fitnest.order.dto.homegym.HomeGymResponse;
+import az.fitnest.order.dto.homegym.HomeGymRulesResponse;
 import az.fitnest.order.dto.homegym.HomeGymSelectRequest;
 import az.fitnest.order.dto.homegym.HomeGymVisitPage;
+import az.fitnest.order.service.homegym.HomeGymRulesService;
 import az.fitnest.order.service.homegym.HomeGymService;
 import az.fitnest.order.util.UserContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,6 +37,19 @@ import java.util.Map;
 public class HomeGymController {
 
     private final HomeGymService homeGymService;
+    private final HomeGymRulesService homeGymRulesService;
+
+    /**
+     * "Əsas zal qaydaları" block (screens 1.1 and 1.4).
+     *
+     * <p>Authentication is required, but the payload does not depend on the user: the
+     * language comes from {@code Accept-Language} (az/en/ru, default az) and the numbers
+     * from the home-gym configuration.
+     */
+    @GetMapping("/home-gym/rules")
+    public ResponseEntity<HomeGymRulesResponse> getHomeGymRules() {
+        return ResponseEntity.ok(homeGymRulesService.getRules(LocaleContextHolder.getLocale()));
+    }
 
     @GetMapping("/subscriptions/{subscriptionId}/home-gym")
     public ResponseEntity<HomeGymResponse> getHomeGym(@PathVariable Long subscriptionId) {

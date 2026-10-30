@@ -20,11 +20,6 @@ import java.time.YearMonth;
 public class HomeGymPeriodCalculator {
 
     public static final ZoneId BAKU = ZoneId.of("Asia/Baku");
-    public static final int DEFAULT_STANDARD_LIMIT = 12;
-    /** R21: maximum home-gym visits in one subscription month. */
-    public static final int HOME_MONTHLY_VISIT_LIMIT = 30;
-    /** R21: maximum home-gym visits in one Baku calendar day. */
-    public static final int HOME_DAILY_VISIT_LIMIT = 1;
 
     public LocalDateTime now() {
         return LocalDateTime.now(BAKU);

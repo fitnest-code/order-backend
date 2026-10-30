@@ -1,6 +1,7 @@
 package az.fitnest.order.service.homegym;
 
 import az.fitnest.order.client.CatalogServiceGrpcClient;
+import az.fitnest.order.config.HomeGymLimits;
 import az.fitnest.order.dto.homegym.HomeGymCheckInContext;
 import az.fitnest.order.dto.homegym.HomeGymCheckInResult;
 import az.fitnest.order.event.SubscriptionEventPublisher;
@@ -13,6 +14,7 @@ import az.fitnest.order.repository.GymVisitRepository;
 import az.fitnest.order.repository.HomeGymConfirmationTokenRepository;
 import az.fitnest.order.repository.SubscriptionHomeGymRepository;
 import az.fitnest.order.repository.SubscriptionRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -28,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -46,8 +49,16 @@ class HomeGymCheckInQrAndReminderTest {
     @Mock private CatalogServiceGrpcClient catalogClient;
     @Mock private HomeGymPeriodCalculator periodCalculator;
     @Mock private SubscriptionEventPublisher eventPublisher;
+    @Mock private HomeGymLimits homeGymLimits;
 
     @InjectMocks private HomeGymCheckInService service;
+
+    @BeforeEach
+    void configureLimits() {
+        lenient().when(homeGymLimits.snapshot())
+                .thenReturn(new HomeGymLimits.Snapshot(30, 1, 12, 12));
+        lenient().when(homeGymLimits.standardMonthlyLimit()).thenReturn(12);
+    }
 
     @Test
     void invalidQrScanIdIsRejectedBeforeTouchingTheSubscription() {

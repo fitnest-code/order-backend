@@ -1,6 +1,7 @@
 package az.fitnest.order.service.homegym;
 
 import az.fitnest.order.client.CatalogServiceGrpcClient;
+import az.fitnest.order.config.HomeGymLimits;
 import az.fitnest.order.event.SubscriptionEventPublisher;
 import az.fitnest.order.model.entity.Subscription;
 import az.fitnest.order.model.entity.SubscriptionHomeGym;
@@ -47,6 +48,7 @@ class HomeGymRefundAndPackageRemovalTest {
     @Mock private HomeGymSettlementService settlementService;
     @Mock private ObjectMapper objectMapper;
     @Mock private SubscriptionPackageRepository packageRepository;
+    @Mock private HomeGymLimits homeGymLimits;
 
     @InjectMocks private HomeGymService service;
 
