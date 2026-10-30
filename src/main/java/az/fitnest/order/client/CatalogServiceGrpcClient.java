@@ -79,6 +79,56 @@ public class CatalogServiceGrpcClient {
         }
     }
 
+    public HomeGymInfo getHomeGymInfo(Long gymId, Long packageId) {
+        if (gymId == null) {
+            return HomeGymInfo.notFound();
+        }
+        try {
+            az.fitnest.catalog.grpc.GetHomeGymInfoRequest request = az.fitnest.catalog.grpc.GetHomeGymInfoRequest.newBuilder()
+                    .setGymId(gymId)
+                    .setPackageId(packageId != null ? packageId : 0L)
+                    .build();
+            az.fitnest.catalog.grpc.GetHomeGymInfoResponse response = stub().getHomeGymInfo(request);
+            return new HomeGymInfo(
+                    response.getFound(),
+                    response.getName(),
+                    response.getSupportsPackage(),
+                    response.getHomeEligible(),
+                    response.getAvailableHours().isBlank() ? null : response.getAvailableHours());
+        } catch (Exception e) {
+            log.error("Failed to load home-gym info for gymId={}, packageId={}: {}", gymId, packageId, e.getMessage());
+            // Fail closed: the selection check must not allow an unverified gym.
+            return HomeGymInfo.notFound();
+        }
+    }
+
+    public record HomeGymInfo(boolean found, String name, boolean supportsPackage,
+                              boolean homeEligible, String availableHours) {
+        public static HomeGymInfo notFound() {
+            return new HomeGymInfo(false, null, false, false, null);
+        }
+    }
+
+    /**
+     * True when the package has at least one gym the subscriber may pick as home gym.
+     * Used to suppress the 24h reminder for packages without eligible gyms.
+     * Fails open: a catalog outage must not hide the reminder from everyone.
+     */
+    public boolean hasEligibleHomeGym(Long packageId) {
+        if (packageId == null) {
+            return false;
+        }
+        try {
+            return stub().hasEligibleHomeGym(
+                    az.fitnest.catalog.grpc.HasEligibleHomeGymRequest.newBuilder()
+                            .setPackageId(packageId)
+                            .build()).getEligible();
+        } catch (Exception e) {
+            log.warn("Could not resolve eligible home gyms for package {}: {}", packageId, e.getMessage());
+            return true;
+        }
+    }
+
     public boolean hasActiveReservations(Long userId, java.time.LocalDateTime startTime, java.time.LocalDateTime endTime) {
         if (userId == null) {
             return false;

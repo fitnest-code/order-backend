@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import az.fitnest.order.model.enums.EntryMode;
 import java.time.LocalDateTime;
 
 @Entity
@@ -106,6 +107,23 @@ public class Subscription {
 
     @Column(name = "campaign_banner_dismissed_at")
     private LocalDateTime campaignBannerDismissedAt;
+
+    /** Home-gym state machine (spec v2): HOME_GYM_PENDING -> HOME_GYM -> STANDARD. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "entry_mode", nullable = false, length = 30)
+    private EntryMode entryMode = EntryMode.HOME_GYM_PENDING;
+
+    /** Push "select your home gym" is sent once, 24h after purchase (spec push table). */
+    @Column(name = "home_gym_reminder_sent_at")
+    private LocalDateTime homeGymReminderSentAt;
+
+    /**
+     * Payment refund marker. A refund keeps {@code status = ACTIVE} until the paid period
+     * runs out, so status alone cannot tell a refunded row apart from a live one
+     * (V19). Post-purchase jobs, including the home-gym reminder, skip refunded rows.
+     */
+    @Column(name = "refunded_at")
+    private LocalDateTime refundedAt;
 
     // Field access: Hibernate increments this directly — never mask null in a getter.
     @Version

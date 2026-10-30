@@ -148,6 +148,16 @@ payment:
   backend:
     url: ${PAYMENT_BACKEND_URL:http://payment-backend:8080}
 
+# Home-gym visit limits. The QR decision engine and GET /api/v1/home-gym/rules read these
+# values through az.fitnest.order.config.HomeGymLimits, so text and enforcement always agree.
+home_gym:
+  monthly_limit: ${HOME_GYM_MONTHLY_LIMIT:30}
+  daily_limit: ${HOME_GYM_DAILY_LIMIT:1}
+  other_gyms_lock_threshold: ${HOME_GYM_OTHER_GYMS_LOCK_THRESHOLD:12}
+
+standard:
+  monthly_limit: ${STANDARD_MONTHLY_LIMIT:12}
+
 management:
   endpoints:
     web:

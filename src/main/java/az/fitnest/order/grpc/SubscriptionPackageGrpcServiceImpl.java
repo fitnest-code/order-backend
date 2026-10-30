@@ -14,6 +14,7 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
 
     private final SubscriptionPackageRepository packageRepository;
     private final az.fitnest.order.service.impl.UserSubscriptionService userSubscriptionService;
+    private final az.fitnest.order.service.homegym.HomeGymCheckInService homeGymCheckInService;
 
     @Override
     public void getPackageNamesByIds(GetPackageNamesByIdsRequest request, StreamObserver<GetPackageNamesByIdsResponse> responseObserver) {
@@ -40,11 +41,44 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
     @Override
     public void checkIn(az.fitnest.order.grpc.CheckInRequest request, StreamObserver<az.fitnest.order.grpc.CheckInResponse> responseObserver) {
         try {
-            boolean success = userSubscriptionService.checkIn(request.getUserId(), request.getGymId(), request.getConsumeFrozen());
-            responseObserver.onNext(az.fitnest.order.grpc.CheckInResponse.newBuilder()
-                    .setSuccess(success)
-                    .setMessage("Checked in successfully")
-                    .build());
+            az.fitnest.order.dto.homegym.HomeGymCheckInContext context =
+                    new az.fitnest.order.dto.homegym.HomeGymCheckInContext(
+                            request.getUserId(),
+                            request.getGymId(),
+                            request.getConsumeFrozen(),
+                            emptyToNull(request.getConfirmation()),
+                            emptyToNull(request.getConfirmationToken()),
+                            request.getTimeSlotRuleId() > 0 ? request.getTimeSlotRuleId() : null,
+                            emptyToNull(request.getPricePackage()),
+                            java.math.BigDecimal.valueOf(request.getSinglePrice()),
+                            java.math.BigDecimal.valueOf(request.getUnlimitedPrice()),
+                            emptyToNull(request.getQrScanId()));
+            az.fitnest.order.dto.homegym.HomeGymCheckInResult result = homeGymCheckInService.checkIn(context);
+
+            az.fitnest.order.grpc.CheckInResponse.Builder response = az.fitnest.order.grpc.CheckInResponse.newBuilder()
+                    .setSuccess(result.success())
+                    .setMessage(result.messageKey() != null ? result.messageKey() : "")
+                    .setDecision(result.decision() != null ? result.decision().name() : "")
+                    .setMessageKey(result.messageKey() != null ? result.messageKey() : "")
+                    .setEntryType(result.entryType() != null ? result.entryType().name() : "")
+                    .setVisitId(result.visitId() != null ? result.visitId() : 0L)
+                    .setHomeGymId(result.homeGymId() != null ? result.homeGymId() : 0L)
+                    .setStandardVisitsUsed(result.standardVisitsUsed())
+                    .setStandardVisitsLimit(result.standardVisitsLimit())
+                    .setHomeVisitsThisPeriod(result.homeVisitsThisPeriod())
+                    .setUnlocksAt(result.unlocksAt() != null ? result.unlocksAt().toString() : "")
+                    .setRenewsAt(result.renewsAt() != null ? result.renewsAt().toString() : "")
+                    .setConfirmationType(result.confirmationType() != null ? result.confirmationType() : "")
+                    .setConfirmationToken(result.confirmationToken() != null ? result.confirmationToken() : "")
+                    .setConfirmationExpiresAt(result.confirmationExpiresAt() != null
+                            ? result.confirmationExpiresAt().toString() : "")
+                    .setGymName(request.getGymName())
+                    .setAvailableHours(request.getAvailableHours())
+                    .setTargetGymId(result.targetGymId() != null ? result.targetGymId() : 0L)
+                    .setHomeGymName(result.homeGymName() != null ? result.homeGymName() : "")
+                    .setNextHomeEntryAt(result.nextHomeEntryAt() != null
+                            ? result.nextHomeEntryAt().toString() : "");
+            responseObserver.onNext(response.build());
         } catch (Exception e) {
             responseObserver.onNext(az.fitnest.order.grpc.CheckInResponse.newBuilder()
                     .setSuccess(false)
@@ -52,6 +86,10 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
                     .build());
         }
         responseObserver.onCompleted();
+    }
+
+    private String emptyToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     @Override
