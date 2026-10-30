@@ -166,7 +166,7 @@ class CampaignAdminOffersValidationTest {
                 .andExpect(jsonPath("$.error.status").value(500))
                 .andExpect(jsonPath("$.error.code").value("RUNTIME_EXCEPTION"))
                 .andExpect(jsonPath("$.error.message").value(
-                        org.hamcrest.Matchers.containsString("Validation failure")));
+                        org.hamcrest.Matchers.containsString("error.internal_server_error")));
 
         verify(campaignOfferRepository, never()).save(any(CampaignOffer.class));
         verify(campaignOfferRepository, never()).deleteByCampaignId(any());
@@ -207,7 +207,7 @@ class CampaignAdminOffersValidationTest {
                 .andExpect(jsonPath("$.error.status").value(500))
                 .andExpect(jsonPath("$.error.code").value("RUNTIME_EXCEPTION"))
                 .andExpect(jsonPath("$.error.message").value(
-                        org.hamcrest.Matchers.containsString("Validation failure")));
+                        org.hamcrest.Matchers.containsString("error.internal_server_error")));
 
         verify(campaignOfferRepository, never()).save(any(CampaignOffer.class));
         verify(campaignOfferRepository, never()).deleteByCampaignId(any());
@@ -249,8 +249,8 @@ class CampaignAdminOffersValidationTest {
         assertEqualsOffer(saved.get(2), 1L, 12, 3);
 
         // Only the offer carrying a label gets a translation entry.
-        verify(translationService).autoTranslateAndSave("CAMPAIGNOFFER", "10", "label", "3+1 ay");
-        verify(translationService, times(1)).autoTranslateAndSave(anyString(), anyString(), anyString(), anyString());
+        verify(translationService).saveTranslation("CAMPAIGNOFFER", "10", "AZ", "label", "3+1 ay");
+        verify(translationService, times(1)).saveTranslation(anyString(), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
@@ -283,7 +283,7 @@ class CampaignAdminOffersValidationTest {
                 .andExpect(jsonPath("$.error.status").value(500))
                 .andExpect(jsonPath("$.error.code").value("RUNTIME_EXCEPTION"))
                 .andExpect(jsonPath("$.error.message").value(
-                        org.hamcrest.Matchers.containsString("Validation failure")));
+                        org.hamcrest.Matchers.containsString("error.internal_server_error")));
 
         // The controller body never runs: no delete, no insert.
         verify(campaignTermRepository, never()).deleteByCampaignId(any());
@@ -314,7 +314,7 @@ class CampaignAdminOffersValidationTest {
         org.junit.jupiter.api.Assertions.assertEquals(1, saved.getSortOrder());
         org.junit.jupiter.api.Assertions.assertEquals(Boolean.TRUE, saved.getIsPositive());
 
-        verify(translationService).autoTranslateAndSave("CAMPAIGNTERM", "30", "text", "Kampaniya şərtləri");
+        verify(translationService).saveTranslation("CAMPAIGNTERM", "30", "AZ", "text", "Kampaniya şərtləri");
     }
 
     private static void assertEqualsOffer(CampaignOffer offer, long campaignId, int base, int bonus) {

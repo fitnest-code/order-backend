@@ -9,6 +9,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "orders")
@@ -43,4 +44,13 @@ public class Order {
 
     @Column(name = "provider_reference")
     private String providerReference;
+
+    @Column(name = "promo_campaign_id")
+    private UUID promoCampaignId;
+
+    @Column(name = "promo_code", length = 16)
+    private String promoCode;
+
+    @Column(name = "promo_discount_amount", precision = 10, scale = 2)
+    private BigDecimal promoDiscountAmount;
 }

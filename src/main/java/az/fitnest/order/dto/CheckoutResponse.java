@@ -4,7 +4,7 @@ import lombok.Builder;
 
 @Builder
 public record CheckoutResponse(
-    String order_id,
+    String orderId,
     String status,
     Double amount,
     String currency,

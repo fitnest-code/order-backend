@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import az.fitnest.order.util.UserContext;
 import az.fitnest.order.event.SubscriptionEventPublisher;
@@ -270,15 +271,7 @@ public class UserSubscriptionService {
             Integer totalMonths = paidDurationMonths + bonusMonths;
             
             // Build campaign label if campaign_id is present and bonus_months > 0
-            String campaignLabel = null;
-            if (subscription.getCampaignId() != null && bonusMonths > 0) {
-                Long offerId = campaignOfferRepository.findByCampaignIdAndBaseDurationMonths(subscription.getCampaignId(), paidDurationMonths)
-                        .map(CampaignOffer::getId)
-                        .orElse(null);
-                if (offerId != null) {
-                    campaignLabel = translationService.getTranslatedValue("CAMPAIGNOFFER", offerId.toString(), "label", lang);
-                }
-            }
+            String campaignLabel = resolveCampaignLabel(subscription.getCampaignId(), paidDurationMonths, bonusMonths, lang);
             
             LocalDate nextPaymentDueAt = subscription.getPaidUntil() != null ? subscription.getPaidUntil().toLocalDate() : (subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null);
             LocalDate serviceEndAt = subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null;
@@ -400,16 +393,7 @@ public class UserSubscriptionService {
         Integer paidDurationMonths = subscription.getPaidDurationMonths() != null ? subscription.getPaidDurationMonths() : durationMonths;
         Integer totalMonths = (paidDurationMonths != null ? paidDurationMonths : 0) + bonusMonths;
         
-        // Build campaign label if campaign_id is present and bonus_months > 0
-        String campaignLabel = null;
-        if (subscription.getCampaignId() != null && bonusMonths > 0) {
-            Long offerId = campaignOfferRepository.findByCampaignIdAndBaseDurationMonths(subscription.getCampaignId(), paidDurationMonths)
-                    .map(CampaignOffer::getId)
-                    .orElse(null);
-            if (offerId != null) {
-                campaignLabel = translationService.getTranslatedValue("CAMPAIGNOFFER", offerId.toString(), "label", lang);
-            }
-        }
+        String campaignLabel = resolveCampaignLabel(subscription.getCampaignId(), paidDurationMonths, bonusMonths, lang);
         
         LocalDate nextPaymentDueAt = subscription.getPaidUntil() != null ? subscription.getPaidUntil().toLocalDate() : (subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null);
         LocalDate serviceEndAt = subscription.getEndAt() != null ? subscription.getEndAt().toLocalDate() : null;
@@ -429,6 +413,16 @@ public class UserSubscriptionService {
                 .build();
     }
 
+    private String resolveCampaignLabel(Long campaignId, Integer paidDurationMonths, Integer bonusMonths, String lang) {
+        if (campaignId == null || bonusMonths == null || bonusMonths <= 0 || paidDurationMonths == null) {
+            return null;
+        }
+        return campaignOfferRepository.findByCampaignIdAndBaseDurationMonths(campaignId, paidDurationMonths)
+                .map(CampaignOffer::getId)
+                .map(offerId -> translationService.getTranslatedValue("CAMPAIGNOFFER", offerId.toString(), "label", lang))
+                .orElse(null);
+    }
+
     private az.fitnest.order.dto.CampaignConfirmationBannerDto buildConfirmationBanner(Subscription subscription, String lang) {
         if (subscription != null && subscription.getBonusMonths() != null && subscription.getBonusMonths() > 0
                 && subscription.getCampaignId() != null && subscription.getCampaignBannerDismissedAt() == null) {
@@ -436,7 +430,12 @@ public class UserSubscriptionService {
             String confirmTitle = translationService.getTranslatedValue("CAMPAIGN", idStr, "confirmTitle", lang);
             if (confirmTitle == null || confirmTitle.isBlank()) confirmTitle = subscription.getBonusMonths() + " ay hədiyyə";
             String confirmBody = translationService.getTranslatedValue("CAMPAIGN", idStr, "confirmBody", lang);
-            if (confirmBody == null || confirmBody.isBlank()) confirmBody = "Oktyabr kampaniyasından abunəliyiniz " + subscription.getBonusMonths() + " ay uzadılacaq";
+            if (confirmBody == null || confirmBody.isBlank()) confirmBody = "Kampaniya üzrə abunəlik müddətinə " + subscription.getBonusMonths() + " ay əlavə edildi";
+            // Templates carry a {bonusMonths} placeholder (AZ/EN/RU) — always resolve it
+            // so mobile receives ready text (e.g. "1 ay hədiyyə"), never raw braces.
+            String bonusStr = subscription.getBonusMonths().toString();
+            confirmTitle = confirmTitle.replace("{bonusMonths}", bonusStr);
+            confirmBody = confirmBody.replace("{bonusMonths}", bonusStr);
             String campaignStatus = "EXPIRED";
             if (subscription.getCampaignId() != null && campaignRepository != null) {
                 Optional<az.fitnest.order.model.entity.Campaign> campaignOpt = campaignRepository.findById(subscription.getCampaignId());
@@ -742,7 +741,15 @@ public class UserSubscriptionService {
         LocalDateTime paidUntil = now.plusMonths(option.getDurationMonths());
         LocalDateTime endAt = now.plusMonths(option.getDurationMonths() + decision.getBonusMonths());
 
-        Integer entryLimit = option.getEntryLimit() != null ? option.getEntryLimit() : pkg.getEntryLimit();
+        Integer baseLimit = option.getEntryLimit() != null ? option.getEntryLimit() : pkg.getEntryLimit();
+        // October campaign: bonus months add visits at the same monthly rate
+        // (e.g. 3-month plan with 36 visits + 1 bonus month = 48 total).
+        Integer entryLimit = baseLimit;
+        if (baseLimit != null && option.getDurationMonths() != null && option.getDurationMonths() > 0
+                && decision.getBonusMonths() > 0) {
+            int monthlyRate = baseLimit / option.getDurationMonths();
+            entryLimit = baseLimit + monthlyRate * decision.getBonusMonths();
+        }
         Integer freezeDays = 0;
 
         Subscription subscription = new Subscription();
@@ -886,19 +893,29 @@ public class UserSubscriptionService {
 
     @Transactional
     public void removeAllSubscriptionsOfUser(Long userId) {
-        List<Subscription> allSubs = subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "ACTIVE");
-        allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "FINISHED"));
-        allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "FROZEN"));
-        allSubs.addAll(subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, "PENDING"));
-        for (Subscription sub : allSubs) {
-            if (!"CANCELLED".equals(sub.getStatus()) && !"EXPIRED".equals(sub.getStatus())) {
-                freezeFinalizeService.terminateActive(sub.getSubscriptionId(), "REVOKE");
-                sub.setStatus("CANCELLED");
-                sub.setFrozenAt(null);
-                sub.setUnfreezesAt(null);
-                subscriptionRepository.save(sub);
-                subscriptionEventPublisher.publishSubscriptionEvent(userId, "CANCELLED", sub.getSubscriptionId());
+        // Collect candidate IDs with cheap reads first, then lock + mutate each row.
+        // Row-level locking serializes concurrent writers (the auto-finish cron runs every
+        // second, admins may double-submit), so the version check at flush cannot go stale.
+        List<Long> ids = new ArrayList<>();
+        for (String status : List.of("ACTIVE", "FINISHED", "FROZEN", "PENDING")) {
+            subscriptionRepository.findByUserIdAndStatusOrderByStartAtDesc(userId, status)
+                    .stream().map(Subscription::getSubscriptionId).forEach(ids::add);
+        }
+        for (Long id : ids) {
+            Optional<Subscription> locked = subscriptionRepository.findByIdForUpdate(id);
+            if (locked.isEmpty()) {
+                continue;
             }
+            Subscription sub = locked.get();
+            if ("CANCELLED".equals(sub.getStatus()) || "EXPIRED".equals(sub.getStatus())) {
+                continue;
+            }
+            freezeFinalizeService.terminateActive(sub.getSubscriptionId(), "REVOKE");
+            sub.setStatus("CANCELLED");
+            sub.setFrozenAt(null);
+            sub.setUnfreezesAt(null);
+            subscriptionRepository.save(sub);
+            subscriptionEventPublisher.publishSubscriptionEvent(userId, "CANCELLED", sub.getSubscriptionId());
         }
     }
 

@@ -18,6 +18,10 @@ server:
     mime-types: application/json,text/plain,text/css,application/javascript,application/openapi+json,application/vnd.api+json,text/html,application/xml,application/vnd.oai.openapi+json
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 8MB
+      max-request-size: 9MB
   threads:
     virtual:
       enabled: true
@@ -212,3 +216,22 @@ grpc:
     notifications-backend:
       address: ${NOTIFICATIONS_BACKEND_GRPC_ADDRESS:dns:///notifications-backend:9090}
       negotiation-type: plaintext
+
+# Promo code campaign module
+promo:
+  # HMAC key for phone hashing (PII protection). In production inject via Vault.
+  hmac:
+    key: ${PROMO_HMAC_KEY:fitnest-promo-hmac-change-me}
+  # AES-256 key (32 chars) for encrypting phone numbers for admin masked display/export
+  encryption:
+    key: ${PROMO_ENCRYPTION_KEY:fitnest-promo-enc-change-me!!}
+  scheduler:
+    # Status scheduler runs every minute by default
+    interval-ms: ${PROMO_SCHEDULER_INTERVAL_MS:60000}
+  kafka:
+    topic:
+      user-phone-verified: ${PROMO_KAFKA_TOPIC_USER_PHONE_VERIFIED:user.phone.verified}
+    group-id: ${PROMO_KAFKA_GROUP_ID:order-backend-promo}
+  rate-limit:
+    quote-per-minute: ${PROMO_RATE_LIMIT_QUOTE:30}
+    failed-validations-per-hour: ${PROMO_RATE_LIMIT_FAILED:10}

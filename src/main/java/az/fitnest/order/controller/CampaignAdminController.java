@@ -122,7 +122,7 @@ public class CampaignAdminController {
             CampaignOffer savedOffer = campaignOfferRepository.save(offer);
 
             if (oReq.getLabel() != null && !oReq.getLabel().isBlank()) {
-                translationService.autoTranslateAndSave("CAMPAIGNOFFER", savedOffer.getId().toString(), "label", oReq.getLabel());
+                translationService.saveTranslation("CAMPAIGNOFFER", savedOffer.getId().toString(), "AZ", "label", oReq.getLabel());
             }
         }
 
@@ -146,7 +146,7 @@ public class CampaignAdminController {
             CampaignTerm savedTerm = campaignTermRepository.save(term);
 
             if (tReq.getText() != null && !tReq.getText().isBlank()) {
-                translationService.autoTranslateAndSave("CAMPAIGNTERM", savedTerm.getId().toString(), "text", tReq.getText());
+                translationService.saveTranslation("CAMPAIGNTERM", savedTerm.getId().toString(), "AZ", "text", tReq.getText());
             }
         }
 
@@ -156,13 +156,13 @@ public class CampaignAdminController {
     private void saveTranslations(Long campaignId, AdminCampaignRequest request) {
         String idStr = campaignId.toString();
         if (request.getTitle() != null && !request.getTitle().isBlank()) {
-            translationService.autoTranslateAndSave("CAMPAIGN", idStr, "title", request.getTitle());
+            translationService.saveTranslation("CAMPAIGN", idStr, "AZ", "title", request.getTitle());
         }
         if (request.getDescription() != null && !request.getDescription().isBlank()) {
-            translationService.autoTranslateAndSave("CAMPAIGN", idStr, "description", request.getDescription());
+            translationService.saveTranslation("CAMPAIGN", idStr, "AZ", "description", request.getDescription());
         }
         if (request.getCtaLabel() != null && !request.getCtaLabel().isBlank()) {
-            translationService.autoTranslateAndSave("CAMPAIGN", idStr, "ctaLabel", request.getCtaLabel());
+            translationService.saveTranslation("CAMPAIGN", idStr, "AZ", "ctaLabel", request.getCtaLabel());
         }
     }
 }
