@@ -47,8 +47,10 @@ public class PromoMobileController {
     @Operation(summary = "Codes user can use")
     public ResponseEntity<MobilePromoActiveResponse> active(
             @RequestParam(required = false) String planId,
+            @RequestParam(name = "packageId", required = false) String packageId,
             @RequestHeader(name = "Accept-Language", defaultValue = "az") String lang) {
-        List<MobilePromoActiveItemResponse> items = eligibilityService.activeCodes(planId, lang);
+        String effectivePlanId = (planId != null && !planId.isBlank()) ? planId : packageId;
+        List<MobilePromoActiveItemResponse> items = eligibilityService.activeCodes(effectivePlanId, lang);
         return ResponseEntity.ok(MobilePromoActiveResponse.builder().items(items).build());
     }
 }
