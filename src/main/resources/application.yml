@@ -104,7 +104,9 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka-service:9092}
     consumer:
       group-id: order-backend
-      auto-offset-reset: earliest
+      # New consumer groups start at the tail: replaying history would re-run
+      # destructive handlers (USER_HARD_DELETED) and stale payment failures.
+      auto-offset-reset: latest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     producer:
