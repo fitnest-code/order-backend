@@ -68,8 +68,7 @@ public class PromoGrantService {
         if (grant.getStatus() == PromoGrantStatus.REDEEMED) {
             throw new PromoReservationException("error.promo_already_used");
         }
-        if (grant.getStatus() == PromoGrantStatus.RESERVED && grant.getReservedOrderId() != null
-                && !grant.getReservedOrderId().equals(orderId)) {
+        if (!isReclaimable(grant, orderId)) {
             throw new PromoReservationException("error.promo_reserved");
         }
         if (grant.getStatus() != PromoGrantStatus.GRANTED && grant.getStatus() != PromoGrantStatus.RESERVED) {
@@ -82,6 +81,27 @@ public class PromoGrantService {
         campaignRepository.findById(campaignId).ifPresent(c ->
                 eventPublisher.grantReserved(campaignId, c.getCode(), c.getPartnerId(), userId, grant.getPhoneHash(), orderId));
         return saved;
+    }
+
+    /**
+     * A RESERVED grant may be taken over by a new order when the previous holder is
+     * gone: same order (idempotent retry), no holder recorded, or the reservation
+     * window has elapsed. The expiry job runs once a minute, so without this a user
+     * would stay locked out of their own unused code between runs.
+     */
+    private static boolean isReclaimable(PromoGrant grant, String orderId) {
+        if (grant.getStatus() != PromoGrantStatus.RESERVED) {
+            return true;
+        }
+        String holder = grant.getReservedOrderId();
+        if (holder == null || holder.isBlank()) {
+            return true;
+        }
+        if (orderId != null && holder.equals(orderId)) {
+            return true;
+        }
+        OffsetDateTime reservedUntil = grant.getReservedUntil();
+        return reservedUntil == null || !reservedUntil.isAfter(OffsetDateTime.now());
     }
 
     /**
