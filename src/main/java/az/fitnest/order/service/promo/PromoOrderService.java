@@ -31,7 +31,7 @@ import java.util.UUID;
 @Slf4j
 public class PromoOrderService {
 
-    public static final int RESERVATION_MINUTES = 30;
+    public static final int RESERVATION_MINUTES = 10;
 
     private final PromoGrantRepository grantRepository;
     private final PromoCampaignRepository campaignRepository;

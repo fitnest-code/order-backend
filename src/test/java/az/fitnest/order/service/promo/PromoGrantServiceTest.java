@@ -170,6 +170,71 @@ class PromoGrantServiceTest {
 
         verify(grantRepository).releaseExpiredReservations(any());
     }
+
+    /** A declined payment must not lock the code: an expired reservation is taken over. */
+    @Test
+    void reserve_expiredReservation_isReclaimable() {
+        PromoCampaign campaign = new PromoCampaign();
+        campaign.setId(campaignId);
+        campaign.setCode("Bakcell");
+        when(campaignRepository.findById(campaignId)).thenReturn(Optional.of(campaign));
+        grant.setStatus(PromoGrantStatus.RESERVED);
+        grant.setReservedOrderId("ord_old");
+        grant.setReservedUntil(OffsetDateTime.now().minusMinutes(1));
+        when(grantRepository.findByCampaignIdAndUserIdWithLock(campaignId, 10L)).thenReturn(Optional.of(grant));
+        when(grantRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        PromoGrant result = grantService.reserve(campaignId, 10L, "ord_new", OffsetDateTime.now().plusMinutes(10));
+
+        assertEquals(PromoGrantStatus.RESERVED, result.getStatus());
+        assertEquals("ord_new", result.getReservedOrderId());
+        assertTrue(result.getReservedUntil().isAfter(OffsetDateTime.now()));
+        verify(eventPublisher).grantReserved(campaignId, "Bakcell", null, 10L, "hash123", "ord_new");
+    }
+
+    /** A reservation without a window or holder can no longer be attributed to a live order. */
+    @Test
+    void reserve_reservationWithoutWindow_isReclaimable() {
+        grant.setStatus(PromoGrantStatus.RESERVED);
+        grant.setReservedOrderId("ord_old");
+        grant.setReservedUntil(null);
+        when(grantRepository.findByCampaignIdAndUserIdWithLock(campaignId, 10L)).thenReturn(Optional.of(grant));
+        when(grantRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        PromoGrant result = grantService.reserve(campaignId, 10L, "ord_new", OffsetDateTime.now().plusMinutes(10));
+
+        assertEquals("ord_new", result.getReservedOrderId());
+    }
+
+    /** AC-11: a live reservation still blocks a parallel order. */
+    @Test
+    void reserve_liveReservationForAnotherOrder_throwsReserved() {
+        grant.setStatus(PromoGrantStatus.RESERVED);
+        grant.setReservedOrderId("ord_live");
+        grant.setReservedUntil(OffsetDateTime.now().plusMinutes(5));
+        when(grantRepository.findByCampaignIdAndUserIdWithLock(campaignId, 10L)).thenReturn(Optional.of(grant));
+
+        PromoReservationException ex = assertThrows(PromoReservationException.class,
+                () -> grantService.reserve(campaignId, 10L, "ord_new", OffsetDateTime.now().plusMinutes(10)));
+
+        assertEquals("error.promo_reserved", ex.getErrorCode());
+        verify(grantRepository, never()).save(any());
+    }
+
+    /** Retrying the same order refreshes its own reservation instead of failing. */
+    @Test
+    void reserve_sameOrder_isIdempotent() {
+        grant.setStatus(PromoGrantStatus.RESERVED);
+        grant.setReservedOrderId("ord_1");
+        grant.setReservedUntil(OffsetDateTime.now().plusMinutes(5));
+        when(grantRepository.findByCampaignIdAndUserIdWithLock(campaignId, 10L)).thenReturn(Optional.of(grant));
+        when(grantRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        PromoGrant result = grantService.reserve(campaignId, 10L, "ord_1", OffsetDateTime.now().plusMinutes(10));
+
+        assertEquals(PromoGrantStatus.RESERVED, result.getStatus());
+        assertEquals("ord_1", result.getReservedOrderId());
+    }
 }
 
 /**

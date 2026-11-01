@@ -97,10 +97,6 @@ public class PromoQuoteService {
                 throw e;
             }
 
-            if (grant.getStatus() == PromoGrantStatus.RESERVED) {
-                throw new BadRequestException("error.promo_reserved");
-            }
-
             BigDecimal discount = PromoPricing.calculateDiscount(campaign, base);
 
             String label = translationRepository.findByCampaignId(campaign.getId()).stream()

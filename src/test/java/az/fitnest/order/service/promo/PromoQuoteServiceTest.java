@@ -116,6 +116,24 @@ class PromoQuoteServiceTest {
         return quoteService.quote(PACKAGE_ID, OPTION_ID, promoCode, false, "CARD", null, null);
     }
 
+    /**
+     * A grant already reserved by one of the user's checkout attempts must still quote:
+     * the quote cannot tell a live parallel order from the user's own failed attempt,
+     * and the order path keeps the exclusivity check.
+     */
+    @Test
+    void quote_ReservedGrant_StillAppliesDiscount() {
+        granted.setStatus(PromoGrantStatus.RESERVED);
+        when(campaignRepository.findByCodeNormalized("BAKCELL20")).thenReturn(Optional.of(percentCampaign));
+        when(grantService.assertGrantUsable(percentCampaign.getId(), USER_ID, PACKAGE_ID)).thenReturn(granted);
+        when(translationRepository.findByCampaignId(any())).thenReturn(List.of());
+
+        PromoQuoteResponse r = quote("Bakcell20");
+
+        assertEquals(0, r.getPromo().getDiscountAmount().compareTo(new BigDecimal("10.00")));
+        assertEquals(0, r.getFinalAmount().compareTo(new BigDecimal("40.00")));
+    }
+
     /** AC-4: 3-month Bronze 50 AZN with Bakcell20 -> discount 10.00, final 40.00 */
     @Test
     void quote_PercentDiscount_Applies20Percent() {
