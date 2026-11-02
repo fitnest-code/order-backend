@@ -99,8 +99,9 @@ public class PromoQuoteService {
 
             BigDecimal discount = PromoPricing.calculateDiscount(campaign, base);
 
+            PromoLocale userLocale = resolveLocale(UserContext.getCurrentLanguage());
             String label = translationRepository.findByCampaignId(campaign.getId()).stream()
-                    .filter(t -> t.getLocale() == PromoLocale.az)
+                    .filter(t -> t.getLocale() == userLocale)
                     .findFirst()
                     .map(t -> t.getCouponLabel() != null ? t.getCouponLabel()
                             : (t.getCardLabel() != null ? t.getCardLabel() : "endirim"))
@@ -170,6 +171,17 @@ public class PromoQuoteService {
     public PromoQuoteResponse quote(String planId, String promoCode, boolean useFitCoin,
                                     String paymentType, BigDecimal ignoredBasePrice) {
         return quote(planId, null, promoCode, useFitCoin, paymentType, null, null);
+    }
+
+    private static PromoLocale resolveLocale(String language) {
+        if (language == null || language.isBlank()) {
+            return PromoLocale.az;
+        }
+        try {
+            return PromoLocale.valueOf(language.trim().toLowerCase());
+        } catch (IllegalArgumentException e) {
+            return PromoLocale.az;
+        }
     }
 
     private void validatePaymentRules(PromoCampaign campaign, boolean useFitCoin, String paymentType,
