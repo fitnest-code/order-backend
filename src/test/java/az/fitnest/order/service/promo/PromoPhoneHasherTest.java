@@ -56,4 +56,26 @@ class PromoPhoneHasherTest {
         assertNull(hasher.normalizePhone("abc"));
         assertNull(hasher.normalizePhone(null));
     }
+
+    @Test
+    void matchesAllowedPrefix_acceptsBakcellPrefixesOnly() {
+        String[] bakcell = {"55", "99"};
+        assertTrue(hasher.matchesAllowedPrefix("+994554123318", bakcell));
+        assertTrue(hasher.matchesAllowedPrefix("+994994123456", bakcell));
+        assertFalse(hasher.matchesAllowedPrefix("+994504123318", bakcell));
+        assertFalse(hasher.matchesAllowedPrefix("+994104123318", bakcell));
+    }
+
+    @Test
+    void matchesAllowedPrefix_normalizesStoredPrefixFormats() {
+        assertTrue(hasher.matchesAllowedPrefix("+994554123318", new String[]{"055"}));
+        assertTrue(hasher.matchesAllowedPrefix("+994554123318", new String[]{"+994 55"}));
+        assertTrue(hasher.matchesAllowedPrefix("+994554123318", new String[]{"99455"}));
+    }
+
+    @Test
+    void matchesAllowedPrefix_emptyListMeansUnrestricted() {
+        assertTrue(hasher.matchesAllowedPrefix("+994504123318", new String[0]));
+        assertTrue(hasher.matchesAllowedPrefix("+994504123318", null));
+    }
 }

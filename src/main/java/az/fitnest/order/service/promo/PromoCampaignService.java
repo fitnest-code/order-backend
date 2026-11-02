@@ -36,6 +36,7 @@ public class PromoCampaignService {
     private final PromoAudienceUploadRepository uploadRepository;
     private final PromoPhoneHasher phoneHasher;
     private final PromoAuditLogService auditLogService;
+    private final PromoGrantBackfillService backfillService;
 
     @Transactional
     public AdminPromoCampaignResponse create(AdminPromoCampaignRequest request, Long adminId) {
@@ -291,6 +292,9 @@ public class PromoCampaignService {
             campaign.setStatus(PromoCampaignStatus.ACTIVE);
         }
         campaignRepository.save(campaign);
+        if (campaign.getStatus() == PromoCampaignStatus.ACTIVE) {
+            backfillService.backfillAsync(id);
+        }
         auditLogService.log(adminId, "PUBLISH", "PROMO_CAMPAIGN", id,
                 null, Map.of("status", campaign.getStatus().name()), null, null);
         log.info("Published promo campaign {} by admin {}", id, adminId);
@@ -337,6 +341,7 @@ public class PromoCampaignService {
         }
         campaign.setStatus(PromoCampaignStatus.ACTIVE);
         campaignRepository.save(campaign);
+        backfillService.backfillAsync(id);
         auditLogService.log(adminId, "RESUME", "PROMO_CAMPAIGN", id,
                 Map.of("status", "PAUSED"), Map.of("status", "ACTIVE"), null, null);
         return getDetail(id);

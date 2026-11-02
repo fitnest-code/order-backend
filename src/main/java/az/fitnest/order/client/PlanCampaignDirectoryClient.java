@@ -43,6 +43,23 @@ public class PlanCampaignDirectoryClient {
         }
     }
 
+    /**
+     * Pages through registered accounts whose mobile starts with the given
+     * two-digit national prefix. Used by promo audience backfills.
+     */
+    public DirectoryUserPage listUsersByPrefix(String prefix, int page, int size) {
+        String url = baseUrl + "/api/v1/internal/users/by-prefix?prefix={prefix}&page={page}&size={size}";
+        DirectoryUserPage body = http.getForObject(url, DirectoryUserPage.class, prefix, page, size);
+        if (body == null) {
+            throw new IllegalStateException("User directory returned an empty page for prefix " + prefix);
+        }
+        return body;
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record DirectoryUser(Long userId, String mobile) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record DirectoryUserPage(List<DirectoryUser> users, int page, int size,
+                                    long totalElements, int totalPages, boolean hasNext) {}
 }
