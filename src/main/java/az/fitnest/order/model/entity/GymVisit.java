@@ -11,7 +11,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "gym_visits", indexes = {
         @Index(name = "idx_gym_visits_sub_period", columnList = "subscription_id,period_start"),
-        @Index(name = "idx_gym_visits_user_gym_period", columnList = "user_id,gym_id,period_start")
+        @Index(name = "idx_gym_visits_user_gym_period", columnList = "user_id,gym_id,period_start"),
+        @Index(name = "idx_gym_visits_user_scanned", columnList = "user_id,checked_in_at")
 })
 @Getter
 @Setter
@@ -29,6 +30,10 @@ public class GymVisit {
 
     @Column(name = "gym_id", nullable = false)
     private Long gymId;
+
+    /** Gym name snapshot at check-in, so a later rename does not rewrite history. */
+    @Column(name = "gym_name", length = 120)
+    private String gymName;
 
     @Column(name = "subscription_id", nullable = false)
     private Long subscriptionId;

@@ -18,10 +18,12 @@ import az.fitnest.order.model.enums.HomeGymEndReason;
 import az.fitnest.order.model.enums.HomeGymSource;
 import az.fitnest.order.model.enums.HomeGymStatus;
 import az.fitnest.order.model.enums.VisitEntryType;
+import az.fitnest.order.model.enums.VisitRejectCode;
 import az.fitnest.order.repository.GymVisitRepository;
 import az.fitnest.order.repository.HomeGymConfirmationTokenRepository;
 import az.fitnest.order.repository.SubscriptionHomeGymRepository;
 import az.fitnest.order.repository.SubscriptionRepository;
+import az.fitnest.order.service.visithistory.VisitAttemptRecorder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,6 +51,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -75,6 +78,7 @@ class HomeGymCheckInDecisionTest {
     @Mock private HomeGymPeriodCalculator periodCalculator;
     @Mock private SubscriptionEventPublisher eventPublisher;
     @Mock private HomeGymLimits homeGymLimits;
+    @Mock private VisitAttemptRecorder attemptRecorder;
 
     @InjectMocks private HomeGymCheckInService service;
 
@@ -130,6 +134,8 @@ class HomeGymCheckInDecisionTest {
         assertEquals(3, result.homeVisitsThisPeriod());
         verify(confirmationTokenRepository).save(any(HomeGymConfirmationToken.class));
         verify(gymVisitRepository, never()).save(any(GymVisit.class));
+        // H-09: a cancelled warning is not a rejection; nothing may reach the history.
+        verifyNoInteractions(attemptRecorder);
     }
 
     @Test
@@ -246,6 +252,8 @@ class HomeGymCheckInDecisionTest {
         assertEquals(5, result.homeVisitsThisPeriod());
         verify(gymVisitRepository, never()).save(any(GymVisit.class));
         verify(eventPublisher, never()).publishSubscriptionEvent(anyLong(), any(), anyLong());
+        verify(attemptRecorder).record(any(), any(), any(), any(), any(),
+                eq(VisitRejectCode.DAILY_LIMIT_REACHED), any(), any());
     }
 
     @Test
@@ -266,6 +274,8 @@ class HomeGymCheckInDecisionTest {
         assertEquals(offset(PERIOD_ENDS), result.renewsAt());
         assertEquals(30, result.homeVisitsThisPeriod());
         verify(gymVisitRepository, never()).save(any(GymVisit.class));
+        verify(attemptRecorder).record(any(), any(), any(), any(), any(),
+                eq(VisitRejectCode.HOME_MONTHLY_LIMIT_REACHED), any(), any());
     }
 
     @Test

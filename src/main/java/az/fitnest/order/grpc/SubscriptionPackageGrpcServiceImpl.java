@@ -52,7 +52,8 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
                             emptyToNull(request.getPricePackage()),
                             java.math.BigDecimal.valueOf(request.getSinglePrice()),
                             java.math.BigDecimal.valueOf(request.getUnlimitedPrice()),
-                            emptyToNull(request.getQrScanId()));
+                            emptyToNull(request.getQrScanId()),
+                            emptyToNull(request.getGymName()));
             az.fitnest.order.dto.homegym.HomeGymCheckInResult result = homeGymCheckInService.checkIn(context);
 
             az.fitnest.order.grpc.CheckInResponse.Builder response = az.fitnest.order.grpc.CheckInResponse.newBuilder()

@@ -16,10 +16,12 @@ import az.fitnest.order.model.enums.EntryMode;
 import az.fitnest.order.model.enums.HomeGymEndReason;
 import az.fitnest.order.model.enums.HomeGymStatus;
 import az.fitnest.order.model.enums.VisitEntryType;
+import az.fitnest.order.model.enums.VisitRejectCode;
 import az.fitnest.order.repository.GymVisitRepository;
 import az.fitnest.order.repository.HomeGymConfirmationTokenRepository;
 import az.fitnest.order.repository.SubscriptionHomeGymRepository;
 import az.fitnest.order.repository.SubscriptionRepository;
+import az.fitnest.order.service.visithistory.VisitAttemptRecorder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -54,6 +56,7 @@ public class HomeGymCheckInService {
     private final HomeGymPeriodCalculator periodCalculator;
     private final SubscriptionEventPublisher eventPublisher;
     private final HomeGymLimits homeGymLimits;
+    private final VisitAttemptRecorder attemptRecorder;
 
     @Transactional
     public HomeGymCheckInResult checkIn(HomeGymCheckInContext context) {
@@ -73,12 +76,15 @@ public class HomeGymCheckInService {
 
         Subscription locked = lockCurrentSubscription(userId);
         if (locked == null) {
+            recordReject(null, gymId, context, VisitRejectCode.SUBSCRIPTION_EXPIRED, now);
             return rejected(CheckInDecision.NO_ACTIVE_SUBSCRIPTION, config);
         }
         if ("FROZEN".equals(locked.getStatus())) {
+            recordReject(locked, gymId, context, VisitRejectCode.SUBSCRIPTION_FROZEN, now);
             return rejected(CheckInDecision.SUBSCRIPTION_FROZEN, config);
         }
         if (locked.getEndAt() != null && locked.getEndAt().isBefore(now)) {
+            recordReject(locked, gymId, context, VisitRejectCode.SUBSCRIPTION_EXPIRED, now);
             return rejected(CheckInDecision.NO_ACTIVE_SUBSCRIPTION, config);
         }
 
@@ -168,10 +174,12 @@ public class HomeGymCheckInService {
             long homeVisitsToday = gymVisitRepository.countCountableBySubscriptionAndGymAndTypeBetween(
                     subscription.getSubscriptionId(), gymId, VisitEntryType.HOME_UNLIMITED, dayStart, dayEnd);
             if (homeVisitsToday >= config.homeGymDailyLimit()) {
+                recordReject(subscription, active.getGymId(), context, VisitRejectCode.DAILY_LIMIT_REACHED, now);
                 return dailyLimitReached(subscription, active, homeVisits, standardVisitsUsed, limit,
                         periodStart, now);
             }
             if (homeVisits >= config.homeGymMonthlyLimit()) {
+                recordReject(subscription, active.getGymId(), context, VisitRejectCode.HOME_MONTHLY_LIMIT_REACHED, now);
                 return monthlyLimitReached(subscription, active, homeVisits, standardVisitsUsed, limit,
                         periodStart);
             }
@@ -185,9 +193,11 @@ public class HomeGymCheckInService {
         // 2. Another gym with an active home gym: R5/R6.
         if (active != null) {
             if (homeVisits >= config.otherGymsLockThreshold()) {
+                recordReject(subscription, gymId, context, VisitRejectCode.OTHER_GYMS_LOCKED, now);
                 return otherGymsLocked(subscription, gymId, active, homeVisits, standardVisitsUsed, limit, periodStart);
             }
             if (totalVisits >= limit) {
+                recordReject(subscription, gymId, context, VisitRejectCode.STANDARD_LIMIT_REACHED, now);
                 return limitExceeded(subscription, gymId, active, limit, standardVisitsUsed, homeVisits,
                         periodStart, now);
             }
@@ -202,6 +212,7 @@ public class HomeGymCheckInService {
                 return confirmationRequired(subscription, gymId, active, homeVisits, standardVisitsUsed, limit, now);
             }
             if (totalVisits >= limit) {
+                recordReject(subscription, gymId, context, VisitRejectCode.STANDARD_LIMIT_REACHED, now);
                 return limitExceeded(subscription, gymId, active, limit, standardVisitsUsed, homeVisits,
                         periodStart, now);
             }
@@ -238,6 +249,7 @@ public class HomeGymCheckInService {
 
         // 3. Standard mode / no home gym yet.
         if (totalVisits >= limit) {
+            recordReject(subscription, gymId, context, VisitRejectCode.STANDARD_LIMIT_REACHED, now);
             return limitExceeded(subscription, gymId, null, limit, standardVisitsUsed, homeVisits, periodStart, now);
         }
 
@@ -473,12 +485,20 @@ public class HomeGymCheckInService {
     // Persistence helpers
     // ------------------------------------------------------------------
 
+    /** Records a rejected QR attempt for the history; never affects the decision. */
+    private void recordReject(Subscription subscription, Long gymId, HomeGymCheckInContext context,
+                              VisitRejectCode rejectCode, LocalDateTime now) {
+        attemptRecorder.record(subscription, context.userId(), gymId, context.gymName(), null,
+                rejectCode, context.qrScanId(), now);
+    }
+
     private GymVisit recordVisit(Subscription subscription, Long gymId, Long homeGymId, LocalDate periodStart,
                                  LocalDateTime now, VisitEntryType entryType, HomeGymCheckInContext context,
                                  boolean countsTowardsLimit) {
         GymVisit visit = GymVisit.builder()
                 .userId(subscription.getUserId())
                 .gymId(gymId)
+                .gymName(context.gymName())
                 .subscriptionId(subscription.getSubscriptionId())
                 .checkedInAt(now)
                 .entryType(entryType)

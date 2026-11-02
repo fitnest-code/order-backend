@@ -125,4 +125,108 @@ public interface GymVisitRepository extends JpaRepository<GymVisit, Long> {
                     "ORDER BY v.periodStart")
     List<LocalDate> findDistinctPeriodsBySubscriptionId(
             @org.springframework.data.repository.query.Param("subscriptionId") Long subscriptionId);
+
+    // ------------------------------------------------------------------
+    // Visit history (QR history API)
+    // ------------------------------------------------------------------
+
+    /**
+     * One page of successful visits. {@code mode} is {@code ALL}, {@code HOME_GYM} or
+     * {@code STANDARD}; {@code HOME_GYM_PENDING} entries are stored as STANDARD.
+     * The cursor tuple is (scannedAt, kind, id) descending; VISIT sorts before ATTEMPT
+     * on equal timestamps, matching the in-memory merge in the history service.
+     */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT v FROM GymVisit v
+            WHERE v.userId = :userId
+              AND v.checkedInAt >= :from AND v.checkedInAt < :to
+              AND (:mode = 'ALL'
+                   OR (:mode = 'HOME_GYM'
+                       AND v.entryType = az.fitnest.order.model.enums.VisitEntryType.HOME_UNLIMITED)
+                   OR (:mode = 'STANDARD'
+                       AND v.entryType = az.fitnest.order.model.enums.VisitEntryType.STANDARD))
+              AND (:gymId IS NULL OR v.gymId = :gymId)
+              AND (:cursorTs IS NULL
+                   OR v.checkedInAt < :cursorTs
+                   OR (v.checkedInAt = :cursorTs
+                       AND :cursorKind = 'VISIT'
+                       AND v.id < :cursorId))
+            ORDER BY v.checkedInAt DESC, v.id DESC
+            """)
+    List<GymVisit> findHistory(
+            @org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("from") LocalDateTime from,
+            @org.springframework.data.repository.query.Param("to") LocalDateTime to,
+            @org.springframework.data.repository.query.Param("mode") String mode,
+            @org.springframework.data.repository.query.Param("gymId") Long gymId,
+            @org.springframework.data.repository.query.Param("cursorTs") LocalDateTime cursorTs,
+            @org.springframework.data.repository.query.Param("cursorKind") String cursorKind,
+            @org.springframework.data.repository.query.Param("cursorId") Long cursorId,
+            Pageable pageable);
+
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT COUNT(v) FROM GymVisit v
+            WHERE v.userId = :userId
+              AND v.checkedInAt >= :from AND v.checkedInAt < :to
+              AND (:mode = 'ALL'
+                   OR (:mode = 'HOME_GYM'
+                       AND v.entryType = az.fitnest.order.model.enums.VisitEntryType.HOME_UNLIMITED)
+                   OR (:mode = 'STANDARD'
+                       AND v.entryType = az.fitnest.order.model.enums.VisitEntryType.STANDARD))
+            """)
+    long countHistory(
+            @org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("from") LocalDateTime from,
+            @org.springframework.data.repository.query.Param("to") LocalDateTime to,
+            @org.springframework.data.repository.query.Param("mode") String mode);
+
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT v.gymId, COUNT(v) FROM GymVisit v
+            WHERE v.userId = :userId
+              AND v.checkedInAt >= :from AND v.checkedInAt < :to
+              AND (:mode = 'ALL'
+                   OR (:mode = 'HOME_GYM'
+                       AND v.entryType = az.fitnest.order.model.enums.VisitEntryType.HOME_UNLIMITED)
+                   OR (:mode = 'STANDARD'
+                       AND v.entryType = az.fitnest.order.model.enums.VisitEntryType.STANDARD))
+            GROUP BY v.gymId
+            """)
+    List<Object[]> countHistoryByGym(
+            @org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("from") LocalDateTime from,
+            @org.springframework.data.repository.query.Param("to") LocalDateTime to,
+            @org.springframework.data.repository.query.Param("mode") String mode);
+
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT v.gymId, v.gymName, v.checkedInAt FROM GymVisit v
+            WHERE v.userId = :userId AND v.gymId IN :gymIds AND v.gymName IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM GymVisit v2
+                  WHERE v2.userId = v.userId AND v2.gymId = v.gymId
+                    AND v2.gymName IS NOT NULL
+                    AND (v2.checkedInAt > v.checkedInAt
+                         OR (v2.checkedInAt = v.checkedInAt AND v2.id > v.id)))
+            """)
+    List<Object[]> findLatestGymNames(
+            @org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("gymIds") java.util.Collection<Long> gymIds);
+
+    /**
+     * Countable visits of one subscription month in chronological order. Used to derive
+     * {@code counterAfter} for a page without an N+1 query per row.
+     */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT v FROM GymVisit v
+            WHERE v.subscriptionId = :subscriptionId AND v.periodStart = :periodStart
+              AND (v.countsTowardsLimit IS NULL OR v.countsTowardsLimit = TRUE)
+            ORDER BY v.checkedInAt ASC, v.id ASC
+            """)
+    List<GymVisit> findCountableForCounter(
+            @org.springframework.data.repository.query.Param("subscriptionId") Long subscriptionId,
+            @org.springframework.data.repository.query.Param("periodStart") LocalDate periodStart);
+
+    java.util.Optional<GymVisit> findFirstByUserIdOrderByCheckedInAtAsc(Long userId);
+
+    java.util.Optional<GymVisit> findFirstBySubscriptionIdAndGymIdAndEntryTypeAndGymNameIsNotNullOrderByCheckedInAtDesc(
+            Long subscriptionId, Long gymId, VisitEntryType entryType);
 }

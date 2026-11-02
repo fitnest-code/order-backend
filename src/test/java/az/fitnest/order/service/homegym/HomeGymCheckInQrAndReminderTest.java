@@ -14,6 +14,7 @@ import az.fitnest.order.repository.GymVisitRepository;
 import az.fitnest.order.repository.HomeGymConfirmationTokenRepository;
 import az.fitnest.order.repository.SubscriptionHomeGymRepository;
 import az.fitnest.order.repository.SubscriptionRepository;
+import az.fitnest.order.service.visithistory.VisitAttemptRecorder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,6 +51,7 @@ class HomeGymCheckInQrAndReminderTest {
     @Mock private HomeGymPeriodCalculator periodCalculator;
     @Mock private SubscriptionEventPublisher eventPublisher;
     @Mock private HomeGymLimits homeGymLimits;
+    @Mock private VisitAttemptRecorder attemptRecorder;
 
     @InjectMocks private HomeGymCheckInService service;
 
