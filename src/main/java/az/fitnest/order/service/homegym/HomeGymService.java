@@ -16,6 +16,7 @@ import az.fitnest.order.exception.ResourceNotFoundException;
 import az.fitnest.order.model.entity.GymVisit;
 import az.fitnest.order.model.entity.Subscription;
 import az.fitnest.order.model.entity.SubscriptionHomeGym;
+import az.fitnest.order.model.entity.SubscriptionPackage;
 import az.fitnest.order.model.enums.EntryMode;
 import az.fitnest.order.model.enums.HomeGymEndReason;
 import az.fitnest.order.model.enums.HomeGymSource;
@@ -40,8 +41,14 @@ import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -79,33 +86,26 @@ public class HomeGymService {
             return new HomeGymContext(subscriptionId, userId, null, null, null, null, 0, 0, null, null, false);
         }
         reconcileEntryMode(subscription);
-        HomeGymPeriodCalculator period = periodCalculator;
-        LocalDate periodStart = period.periodStart(subscription.getStartAt());
+        LocalDate periodStart = periodCalculator.periodStart(subscription.getStartAt());
         SubscriptionHomeGym active = homeGymRepository
                 .findFirstBySubscriptionIdAndStatusOrderBySelectedAtDesc(subscriptionId, HomeGymStatus.ACTIVE)
                 .orElse(null);
-        long homeVisits = active == null ? 0
-                : gymVisitRepository.countCountableBySubscriptionAndPeriodAndTypeAndGym(
-                        subscriptionId, periodStart, VisitEntryType.HOME_UNLIMITED, active.getGymId());
-        long standardVisits = gymVisitRepository.countCountableBySubscriptionAndPeriodAndType(
-                subscriptionId, periodStart, VisitEntryType.STANDARD);
-        if (EntryMode.STANDARD == subscription.getEntryMode()) {
-            standardVisits += gymVisitRepository.countCountableBySubscriptionAndPeriodAndType(
-                    subscriptionId, periodStart, VisitEntryType.HOME_UNLIMITED);
-        }
+        EntryMode mode = subscription.getEntryMode() != null
+                ? subscription.getEntryMode() : EntryMode.HOME_GYM_PENDING;
+        VisitCounts visits = countVisits(subscriptionId, periodStart, active, mode);
         boolean activeSubscription = "ACTIVE".equals(subscription.getStatus())
-                && !period.isExpired(subscription.getEndAt());
+                && !periodCalculator.isExpired(subscription.getEndAt());
         return new HomeGymContext(
                 subscription.getSubscriptionId(),
                 subscription.getUserId(),
                 subscription.getPackageId(),
                 subscription.getStatus(),
-                subscription.getEntryMode() != null ? subscription.getEntryMode().name() : EntryMode.HOME_GYM_PENDING.name(),
+                mode.name(),
                 active != null ? active.getGymId() : null,
-                homeVisits,
-                standardVisits,
-                period.toOffset(period.periodEndsAt(subscription.getStartAt())),
-                period.toOffset(subscription.getEndAt()),
+                visits.homeVisits(),
+                visits.standardVisits(),
+                periodCalculator.toOffset(periodCalculator.periodEndsAt(subscription.getStartAt())),
+                periodCalculator.toOffset(subscription.getEndAt()),
                 activeSubscription);
     }
 
@@ -119,7 +119,7 @@ public class HomeGymService {
                 PageRequest.of(safePage - 1, safeSize));
         List<HomeGymVisitResponse> items = new ArrayList<>();
         // Resolve each gym name once per page instead of once per visit.
-        java.util.Map<Long, String> gymNames = new java.util.HashMap<>();
+        Map<Long, String> gymNames = new HashMap<>();
         for (GymVisit visit : visitPage.getContent()) {
             String gymName = gymNames.computeIfAbsent(visit.getGymId(),
                     id -> catalogClient.getHomeGymInfo(id, subscription.getPackageId()).name());
@@ -140,7 +140,7 @@ public class HomeGymService {
         List<SubscriptionHomeGym> rows = homeGymRepository
                 .findBySubscriptionIdOrderBySelectedAtDesc(subscriptionId);
         List<HomeGymHistoryItem> items = new ArrayList<>();
-        java.util.Map<Long, String> gymNames = new java.util.HashMap<>();
+        Map<Long, String> gymNames = new HashMap<>();
         for (SubscriptionHomeGym row : rows) {
             String gymName = gymNames.computeIfAbsent(row.getGymId(),
                     id -> safeGymName(id, null));
@@ -364,8 +364,8 @@ public class HomeGymService {
     }
 
     @Transactional
-    public void onGymHomeDisabled(Long gymId, Long campaignId, java.util.Map<String, String> title,
-                                  java.util.Map<String, String> body, java.util.List<Long> recipients) {
+    public void onGymHomeDisabled(Long gymId, Long campaignId, Map<String, String> title,
+                                  Map<String, String> body, List<Long> recipients) {
         List<Long> subscriptionIds = homeGymRepository.findActiveSubscriptionIdsByGymId(gymId);
         for (Long subscriptionId : subscriptionIds) {
             Subscription subscription = subscriptionRepository.findById(subscriptionId).orElse(null);
@@ -506,7 +506,7 @@ public class HomeGymService {
             return null;
         }
         return packageRepository.findById(packageId)
-                .map(az.fitnest.order.model.entity.SubscriptionPackage::getName)
+                .map(SubscriptionPackage::getName)
                 .orElse(null);
     }
 
@@ -573,15 +573,15 @@ public class HomeGymService {
     }
 
     @Transactional(readOnly = true)
-    public List<java.util.Map<String, Object>> getGymSubscribers(Long gymId) {
-        List<java.util.Map<String, Object>> result = new ArrayList<>();
+    public List<Map<String, Object>> getGymSubscribers(Long gymId) {
+        List<Map<String, Object>> result = new ArrayList<>();
         for (Long subscriptionId : homeGymRepository.findActiveSubscriptionIdsByGymId(gymId)) {
             subscriptionRepository.findById(subscriptionId).ifPresent(subscription -> {
                 SubscriptionHomeGym active = homeGymRepository
                         .findFirstBySubscriptionIdAndStatusOrderBySelectedAtDesc(
                                 subscriptionId, HomeGymStatus.ACTIVE)
                         .orElse(null);
-                java.util.Map<String, Object> item = new java.util.LinkedHashMap<>();
+                Map<String, Object> item = new LinkedHashMap<>();
                 item.put("userId", subscription.getUserId());
                 item.put("subscriptionId", subscription.getSubscriptionId());
                 item.put("gymId", gymId);
@@ -599,15 +599,14 @@ public class HomeGymService {
 
     @Transactional(readOnly = true)
     public List<Long> resolveSubscriberUserIds(Long gymId) {
-        List<Long> result = new ArrayList<>();
+        Set<Long> result = new LinkedHashSet<>();
         for (Long subscriptionId : homeGymRepository.findActiveSubscriptionIdsByGymId(gymId)) {
             subscriptionRepository.findById(subscriptionId)
                     .map(Subscription::getUserId)
-                    .filter(java.util.Objects::nonNull)
-                    .filter(userId -> !result.contains(userId))
+                    .filter(Objects::nonNull)
                     .ifPresent(result::add);
         }
-        return result;
+        return List.copyOf(result);
     }
 
     // ---------------------------------------------------------------------
@@ -648,28 +647,28 @@ public class HomeGymService {
         if (subscription.getEntryMode() == null) {
             subscription.setEntryMode(EntryMode.HOME_GYM_PENDING);
         }
+        // One query for every status ever recorded, instead of one query per status.
+        List<HomeGymStatus> statuses = homeGymRepository
+                .findDistinctStatusesBySubscriptionId(subscription.getSubscriptionId());
+        boolean hasActive = statuses.contains(HomeGymStatus.ACTIVE);
+        EntryMode repaired;
         if (subscription.getEntryMode() != EntryMode.HOME_GYM) {
             // An ACTIVE row is the source of truth; repair a partially applied selection
             // so GET /home-gym never reports a home gym in STANDARD/PENDING mode.
-            if (homeGymRepository.existsBySubscriptionIdAndStatus(
-                    subscription.getSubscriptionId(), HomeGymStatus.ACTIVE)) {
-                subscription.setEntryMode(EntryMode.HOME_GYM);
-                subscriptionRepository.save(subscription);
+            if (!hasActive) {
+                return;
             }
-            return;
+            repaired = EntryMode.HOME_GYM;
+        } else {
+            if (hasActive) {
+                return;
+            }
+            boolean everSelected = statuses.stream()
+                    .anyMatch(status -> status != null && status != HomeGymStatus.ACTIVE);
+            repaired = everSelected ? EntryMode.STANDARD : EntryMode.HOME_GYM_PENDING;
         }
-        boolean hasActive = homeGymRepository.existsBySubscriptionIdAndStatus(
-                subscription.getSubscriptionId(), HomeGymStatus.ACTIVE);
-        if (!hasActive) {
-            boolean everSelected = homeGymRepository.existsBySubscriptionIdAndStatus(
-                    subscription.getSubscriptionId(), HomeGymStatus.ENDED)
-                    || homeGymRepository.existsBySubscriptionIdAndStatus(
-                    subscription.getSubscriptionId(), HomeGymStatus.CHANGED)
-                    || homeGymRepository.existsBySubscriptionIdAndStatus(
-                    subscription.getSubscriptionId(), HomeGymStatus.REMOVED_BY_SWITCH);
-            subscription.setEntryMode(everSelected ? EntryMode.STANDARD : EntryMode.HOME_GYM_PENDING);
-            subscriptionRepository.save(subscription);
-        }
+        subscription.setEntryMode(repaired);
+        subscriptionRepository.save(subscription);
     }
 
     private HomeGymResponse buildResponse(Subscription subscription) {
@@ -677,7 +676,7 @@ public class HomeGymService {
         LocalDate periodStart = periodCalculator.periodStart(subscription.getStartAt(), now.toLocalDate());
         LocalDateTime periodEnds = periodCalculator.periodEndsAt(subscription.getStartAt(), periodStart);
         HomeGymLimits.Snapshot config = homeGymLimits.snapshot();
-        int limit = resolveLimit(subscription);
+        int limit = config.effectiveMonthlyLimit(subscription.getTotalLimit());
         EntryMode mode = subscription.getEntryMode() != null
                 ? subscription.getEntryMode() : EntryMode.HOME_GYM_PENDING;
 
@@ -686,16 +685,9 @@ public class HomeGymService {
                         subscription.getSubscriptionId(), HomeGymStatus.ACTIVE)
                 .orElse(null);
 
-        long homeVisits = active == null ? 0
-                : gymVisitRepository.countCountableBySubscriptionAndPeriodAndTypeAndGym(
-                        subscription.getSubscriptionId(), periodStart,
-                        VisitEntryType.HOME_UNLIMITED, active.getGymId());
-        long standardVisits = gymVisitRepository.countCountableBySubscriptionAndPeriodAndType(
-                subscription.getSubscriptionId(), periodStart, VisitEntryType.STANDARD);
-        if (mode == EntryMode.STANDARD) {
-            standardVisits += gymVisitRepository.countCountableBySubscriptionAndPeriodAndType(
-                    subscription.getSubscriptionId(), periodStart, VisitEntryType.HOME_UNLIMITED);
-        }
+        VisitCounts visits = countVisits(subscription.getSubscriptionId(), periodStart, active, mode);
+        long homeVisits = visits.homeVisits();
+        long standardVisits = visits.standardVisits();
 
         HomeGymResponse.HomeGymInfo info = null;
         if (active != null) {
@@ -722,8 +714,9 @@ public class HomeGymService {
                 && homeVisits >= config.otherGymsLockThreshold();
         // R4: the home gym can only be changed while it has no visits at all in this
         // subscription month, including standard visits made before it was selected.
+        // The HOME_UNLIMITED count is already known, so only the STANDARD part is queried.
         long visitsToCurrent = active == null ? 0
-                : countVisitsAtGym(subscription.getSubscriptionId(), periodStart, active.getGymId());
+                : countVisitsAtGym(subscription.getSubscriptionId(), periodStart, active.getGymId(), homeVisits);
         boolean canChange = active != null && visitsToCurrent == 0;
         String blockedReason = active != null && visitsToCurrent > 0 ? "HOME_GYM_HAS_VISITS" : null;
         int used = (int) standardVisits;
@@ -793,18 +786,35 @@ public class HomeGymService {
                 suggested);
     }
 
-    public int resolveLimit(Subscription subscription) {
-        if (subscription != null && subscription.getTotalLimit() != null && subscription.getTotalLimit() > 0) {
-            return subscription.getTotalLimit();
-        }
-        return homeGymLimits.standardMonthlyLimit();
-    }
-
     private long countVisitsAtGym(Long subscriptionId, LocalDate periodStart, Long gymId) {
         return gymVisitRepository.countCountableBySubscriptionAndPeriodAndTypeAndGym(
                 subscriptionId, periodStart, VisitEntryType.HOME_UNLIMITED, gymId)
                 + gymVisitRepository.countCountableBySubscriptionAndPeriodAndTypeAndGym(
                 subscriptionId, periodStart, VisitEntryType.STANDARD, gymId);
+    }
+
+    /** Variant for callers that already loaded the HOME_UNLIMITED count of {@code gymId}. */
+    private long countVisitsAtGym(Long subscriptionId, LocalDate periodStart, Long gymId, long homeVisits) {
+        return homeVisits + gymVisitRepository.countCountableBySubscriptionAndPeriodAndTypeAndGym(
+                subscriptionId, periodStart, VisitEntryType.STANDARD, gymId);
+    }
+
+    /** Visits of the current subscription month, shared by the two read models. */
+    private VisitCounts countVisits(Long subscriptionId, LocalDate periodStart,
+                                    SubscriptionHomeGym active, EntryMode mode) {
+        long homeVisits = active == null ? 0
+                : gymVisitRepository.countCountableBySubscriptionAndPeriodAndTypeAndGym(
+                        subscriptionId, periodStart, VisitEntryType.HOME_UNLIMITED, active.getGymId());
+        long standardVisits = gymVisitRepository.countCountableBySubscriptionAndPeriodAndType(
+                subscriptionId, periodStart, VisitEntryType.STANDARD);
+        if (mode == EntryMode.STANDARD) {
+            standardVisits += gymVisitRepository.countCountableBySubscriptionAndPeriodAndType(
+                    subscriptionId, periodStart, VisitEntryType.HOME_UNLIMITED);
+        }
+        return new VisitCounts(homeVisits, standardVisits);
+    }
+
+    private record VisitCounts(long homeVisits, long standardVisits) {
     }
 
     private String safeGymName(Long gymId, Long packageId) {

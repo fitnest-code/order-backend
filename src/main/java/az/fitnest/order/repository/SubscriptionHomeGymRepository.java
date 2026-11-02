@@ -46,6 +46,10 @@ public interface SubscriptionHomeGymRepository extends JpaRepository<Subscriptio
 
     boolean existsBySubscriptionId(Long subscriptionId);
 
+    /** Statuses ever recorded for one subscription: one round-trip instead of one per status. */
+    @Query("SELECT DISTINCT h.status FROM SubscriptionHomeGym h WHERE h.subscriptionId = :subscriptionId")
+    List<HomeGymStatus> findDistinctStatusesBySubscriptionId(@Param("subscriptionId") Long subscriptionId);
+
     long countByGymIdAndStatus(Long gymId, HomeGymStatus status);
 
     List<SubscriptionHomeGym> findByStatusAndEndReasonIsNull(HomeGymStatus status);

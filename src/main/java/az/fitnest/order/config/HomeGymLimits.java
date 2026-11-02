@@ -95,5 +95,15 @@ public class HomeGymLimits {
             int homeGymDailyLimit,
             int standardMonthlyLimit,
             int otherGymsLockThreshold) {
+
+        /**
+         * Monthly visit allowance of one subscription: the value snapshotted at purchase wins,
+         * otherwise the configured STANDARD limit (R7). Reads only this snapshot, so a single
+         * request never mixes two configurations.
+         */
+        public int effectiveMonthlyLimit(Integer subscriptionTotalLimit) {
+            return subscriptionTotalLimit != null && subscriptionTotalLimit > 0
+                    ? subscriptionTotalLimit : standardMonthlyLimit;
+        }
     }
 }

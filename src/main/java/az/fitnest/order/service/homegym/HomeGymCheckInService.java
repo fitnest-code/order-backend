@@ -68,23 +68,23 @@ public class HomeGymCheckInService {
         // T-16: the mobile app generates a UUID v4 for every QR read and reuses it on
         // retries. Anything else is a client bug and must not reach the dedup index.
         if (context.qrScanId() != null && !isCanonicalUuid(context.qrScanId())) {
-            return rejected(CheckInDecision.INVALID_QR_SCAN_ID, "home_gym.invalid_qr_scan_id");
+            return rejected(CheckInDecision.INVALID_QR_SCAN_ID, config);
         }
 
         Subscription locked = lockCurrentSubscription(userId);
         if (locked == null) {
-            return rejected(CheckInDecision.NO_ACTIVE_SUBSCRIPTION, "home_gym.no_active_subscription");
+            return rejected(CheckInDecision.NO_ACTIVE_SUBSCRIPTION, config);
         }
         if ("FROZEN".equals(locked.getStatus())) {
-            return rejected(CheckInDecision.SUBSCRIPTION_FROZEN, "error.subscription_frozen");
+            return rejected(CheckInDecision.SUBSCRIPTION_FROZEN, config);
         }
         if (locked.getEndAt() != null && locked.getEndAt().isBefore(now)) {
-            return rejected(CheckInDecision.NO_ACTIVE_SUBSCRIPTION, "home_gym.no_active_subscription");
+            return rejected(CheckInDecision.NO_ACTIVE_SUBSCRIPTION, config);
         }
 
         Subscription subscription = locked;
         LocalDate periodStart = periodCalculator.periodStart(subscription.getStartAt(), now.toLocalDate());
-        int limit = resolveLimit(subscription);
+        int limit = config.effectiveMonthlyLimit(subscription.getTotalLimit());
 
         SubscriptionHomeGym active = homeGymRepository.findActiveForUpdate(subscription.getSubscriptionId())
                 .orElse(null);
@@ -119,7 +119,7 @@ public class HomeGymCheckInService {
             if (duplicate != null) {
                 // T-16: an id may only be replayed for the gym it was first used at.
                 if (!duplicate.getGymId().equals(gymId)) {
-                    return rejected(CheckInDecision.QR_SCAN_CONFLICT, "home_gym.qr_scan_conflict");
+                    return rejected(CheckInDecision.QR_SCAN_CONFLICT, config);
                 }
                 VisitEntryType duplicateType = duplicate.getEntryType() != null
                         ? duplicate.getEntryType() : VisitEntryType.STANDARD;
@@ -249,14 +249,7 @@ public class HomeGymCheckInService {
 
         boolean offer = mode == EntryMode.HOME_GYM_PENDING
                 && totalVisits == 0
-                && !homeGymRepository.existsBySubscriptionIdAndStatus(subscription.getSubscriptionId(),
-                HomeGymStatus.ACTIVE)
-                && !homeGymRepository.existsBySubscriptionIdAndStatus(subscription.getSubscriptionId(),
-                HomeGymStatus.ENDED)
-                && !homeGymRepository.existsBySubscriptionIdAndStatus(subscription.getSubscriptionId(),
-                HomeGymStatus.REMOVED_BY_SWITCH)
-                && !homeGymRepository.existsBySubscriptionIdAndStatus(subscription.getSubscriptionId(),
-                HomeGymStatus.CHANGED);
+                && !homeGymRepository.existsBySubscriptionId(subscription.getSubscriptionId());
 
         return entered(offer ? CheckInDecision.ENTERED_OFFER_HOME_GYM : CheckInDecision.ENTERED_STANDARD,
                 VisitEntryType.STANDARD, visit, null, standardVisitsUsed + 1, limit, homeVisits, mode);
@@ -289,9 +282,10 @@ public class HomeGymCheckInService {
                 null);
     }
 
-    private HomeGymCheckInResult rejected(CheckInDecision decision, String messageKey) {
-        return new HomeGymCheckInResult(false, decision, messageKey, null, null, null, null,
-                0, homeGymLimits.standardMonthlyLimit(), 0, null, null, null, null, null, null, null);
+    /** Rejections carry no visit; the message key is the one {@link #messageKey} defines. */
+    private HomeGymCheckInResult rejected(CheckInDecision decision, HomeGymLimits.Snapshot config) {
+        return new HomeGymCheckInResult(false, decision, messageKey(decision), null, null, null, null,
+                0, config.standardMonthlyLimit(), 0, null, null, null, null, null, null, null);
     }
 
     private HomeGymCheckInResult otherGymsLocked(Subscription subscription, Long gymId,
@@ -563,13 +557,6 @@ public class HomeGymCheckInService {
             return a.getStartAt().compareTo(b.getStartAt());
         }
         return 0;
-    }
-
-    private int resolveLimit(Subscription subscription) {
-        if (subscription.getTotalLimit() != null && subscription.getTotalLimit() > 0) {
-            return subscription.getTotalLimit();
-        }
-        return homeGymLimits.standardMonthlyLimit();
     }
 
     private String safeGymName(Long gymId, Long packageId) {

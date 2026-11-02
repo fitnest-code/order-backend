@@ -6,7 +6,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.YearMonth;
 
 /**
@@ -108,10 +107,6 @@ public class HomeGymPeriodCalculator {
         return value.atZone(BAKU).toOffsetDateTime();
     }
 
-    public OffsetDateTime nowOffset() {
-        return OffsetDateTime.now(BAKU);
-    }
-
     public boolean isExpired(LocalDateTime endAt) {
         return endAt != null && endAt.isBefore(now());
     }
@@ -119,22 +114,5 @@ public class HomeGymPeriodCalculator {
     private LocalDate clampToMonth(int dayOfMonth, int year, int month) {
         LocalDate first = LocalDate.of(year, month, 1);
         return first.withDayOfMonth(Math.min(dayOfMonth, first.lengthOfMonth()));
-    }
-
-    /** Convenience for tests/integration: parse an ISO offset or Baku local timestamp. */
-    public LocalDateTime parse(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return OffsetDateTime.parse(value).atZoneSameInstant(BAKU).toLocalDateTime();
-        } catch (Exception ignored) {
-            return LocalDateTime.parse(value);
-        }
-    }
-
-    /** Fixed +04:00 offset helper for services that need a stable offset. */
-    public ZoneOffset bakuOffset() {
-        return BAKU.getRules().getOffset(now());
     }
 }
