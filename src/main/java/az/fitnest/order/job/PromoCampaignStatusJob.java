@@ -3,6 +3,7 @@ package az.fitnest.order.job;
 import az.fitnest.order.model.entity.promo.PromoCampaign;
 import az.fitnest.order.model.entity.promo.PromoCampaignStatus;
 import az.fitnest.order.repository.promo.PromoCampaignRepository;
+import az.fitnest.order.service.promo.PromoGrantBackfillService;
 import az.fitnest.order.service.promo.PromoGrantService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ public class PromoCampaignStatusJob {
 
     private final PromoCampaignRepository campaignRepository;
     private final PromoGrantService grantService;
+    private final PromoGrantBackfillService backfillService;
     private final JdbcTemplate jdbcTemplate;
 
     /**
@@ -37,6 +39,7 @@ public class PromoCampaignStatusJob {
         for (PromoCampaign c : scheduled) {
             c.setStatus(PromoCampaignStatus.ACTIVE);
             campaignRepository.save(c);
+            backfillService.backfillAsync(c.getId());
             log.info("Promo campaign {} activated by scheduler", c.getId());
         }
 

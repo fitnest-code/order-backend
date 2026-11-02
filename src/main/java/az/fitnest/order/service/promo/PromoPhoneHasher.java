@@ -76,6 +76,35 @@ public class PromoPhoneHasher {
         return cleaned;
     }
 
+    /**
+     * True when the normalised number matches one of the campaign's allowed
+     * prefixes. Prefixes may be stored as "55", "055", "99455" or "+994 55".
+     * An empty prefix list means the campaign is not prefix-restricted.
+     */
+    public boolean matchesAllowedPrefix(String normalizedPhone, String[] allowedPrefixes) {
+        if (normalizedPhone == null || !normalizedPhone.matches("^\\+994\\d{9}$")) {
+            return false;
+        }
+        if (allowedPrefixes == null || allowedPrefixes.length == 0) {
+            return true;
+        }
+
+        String nationalNumber = normalizedPhone.substring(4); // drop +994
+        for (String allowed : allowedPrefixes) {
+            if (allowed == null) continue;
+            String digits = allowed.replaceAll("\\D", "");
+            if (digits.startsWith("994") && digits.length() > 3) {
+                digits = digits.substring(3);
+            } else if (digits.startsWith("0") && digits.length() > 1) {
+                digits = digits.substring(1);
+            }
+            if (!digits.isEmpty() && nationalNumber.startsWith(digits)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean isValidAzerbaijanMobile(String normalizedPhone, String[] allowedPrefixes) {
         if (normalizedPhone == null || !normalizedPhone.matches("^\\+994\\d{9}$")) {
             return false;

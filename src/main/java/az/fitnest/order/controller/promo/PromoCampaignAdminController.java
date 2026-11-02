@@ -5,6 +5,7 @@ import az.fitnest.order.exception.BadRequestException;
 import az.fitnest.order.exception.ForbiddenException;
 import az.fitnest.order.service.promo.PromoAuditLogService;
 import az.fitnest.order.service.promo.PromoCampaignService;
+import az.fitnest.order.service.promo.PromoGrantBackfillService;
 import az.fitnest.order.service.promo.PromoGrantService;
 import az.fitnest.order.service.promo.PromoNumbersQueryService;
 import az.fitnest.order.service.promo.PromoPartnerService;
@@ -37,6 +38,7 @@ public class PromoCampaignAdminController {
     private final PromoNumbersQueryService numbersQueryService;
     private final PromoAuditLogService auditLogService;
     private final PromoGrantService grantService;
+    private final PromoGrantBackfillService backfillService;
 
     @GetMapping("/summary")
     @Operation(summary = "KPI summary for A1 campaign list")
@@ -116,6 +118,19 @@ public class PromoCampaignAdminController {
                 "userId", grant.getUserId(),
                 "status", grant.getStatus().name(),
                 "popupStatus", grant.getPopupStatus().name()));
+    }
+
+    @PostMapping("/{id}/backfill")
+    @Operation(summary = "Create grants for existing users matching the campaign prefixes")
+    public ResponseEntity<PromoGrantBackfillService.BackfillResult> backfill(@PathVariable UUID id) {
+        Long adminId = UserContext.getCurrentUserId();
+        PromoGrantBackfillService.BackfillResult result = backfillService.backfill(id);
+        auditLogService.log(adminId, "GRANT_BACKFILL", "PROMO_CAMPAIGN", id, null,
+                Map.of("status", result.status(),
+                        "scanned", result.scanned(),
+                        "created", result.created(),
+                        "skipped", result.skipped()), null, null);
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/{id}/publish-check")

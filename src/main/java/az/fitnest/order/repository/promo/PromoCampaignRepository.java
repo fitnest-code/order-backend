@@ -29,6 +29,11 @@ public interface PromoCampaignRepository extends JpaRepository<PromoCampaign, UU
     @Query("SELECT c FROM PromoCampaign c WHERE c.status IN (:statuses)")
     List<PromoCampaign> findByStatusIn(@Param("statuses") List<PromoCampaignStatus> statuses);
 
+    @Query("SELECT c FROM PromoCampaign c WHERE c.audienceType IN (:audienceTypes) AND c.status IN (:statuses)")
+    List<PromoCampaign> findByAudienceTypeInAndStatusIn(
+            @Param("audienceTypes") List<az.fitnest.order.model.entity.promo.PromoAudienceType> audienceTypes,
+            @Param("statuses") List<PromoCampaignStatus> statuses);
+
     @Query("SELECT c FROM PromoCampaign c WHERE c.status = :status AND c.startsAt <= :now")
     List<PromoCampaign> findScheduledToActivate(@Param("status") PromoCampaignStatus status, @Param("now") OffsetDateTime now);
 
