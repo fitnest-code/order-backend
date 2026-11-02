@@ -1,5 +1,5 @@
 -- ===================================================
---  V19: durable refund marker on the subscription
+--  V105: durable refund marker on the subscription
 -- ===================================================
 --
 -- A refund does not change subscriptions.status (it stays ACTIVE until the paid

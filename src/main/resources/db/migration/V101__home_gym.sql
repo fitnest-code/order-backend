@@ -1,5 +1,5 @@
 -- ===================================================
---  V15: Home Gym (Əsas zal / unlimited access) — spec v2
+--  V101: Home Gym (Əsas zal / unlimited access) — spec v2
 -- ===================================================
 
 -- 1. Subscription entry mode (HOME_GYM_PENDING -> HOME_GYM -> STANDARD)

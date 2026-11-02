@@ -1,5 +1,5 @@
 -- ===================================================
---  V18: home gym — refund end reason and 24h reminder
+--  V104: home gym — refund end reason and 24h reminder
 -- ===================================================
 
 -- 1. Refund gets its own end reason (analytics + push rules, spec "Kənar hallar").

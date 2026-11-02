@@ -1,8 +1,8 @@
 -- ===================================================
---  V20: no retroactive home-gym reminders on rollout
+--  V106: no retroactive home-gym reminders on rollout
 -- ===================================================
 --
--- V15 put every existing subscription into HOME_GYM_PENDING and V18 added
+-- V101 put every existing subscription into HOME_GYM_PENDING and V104 added
 -- home_gym_reminder_sent_at as NULL. Without a backfill the first run of the
 -- reminder job after deployment would push "select your home gym" to the whole
 -- active base at once, although the message is defined as "24h after purchase".
