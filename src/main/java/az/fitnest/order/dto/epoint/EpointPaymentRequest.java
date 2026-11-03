@@ -12,5 +12,7 @@ public record EpointPaymentRequest(
     String description,
     Integer is_installment,
     Integer refund,
-    List<Object> other_attr
+    List<Object> other_attr,
+    Boolean prePriced,
+    Long userId
 ) {}

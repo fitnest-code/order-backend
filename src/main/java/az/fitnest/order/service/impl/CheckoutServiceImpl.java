@@ -70,6 +70,14 @@ public class CheckoutServiceImpl implements CheckoutService {
             throw new az.fitnest.order.exception.ConflictException("error.price_changed");
         }
 
+        // other_attr carries package/option for subscription assignment after pay.
+        // prePriced=true keeps the promo-adjusted payable (payment-backend must not re-price).
+        // userId owns the payment row so GET /me/payments/order/{id} does not 403.
+        String packageRef = null;
+        if (packageId != null && option.getId() != null) {
+            packageRef = "packageId:" + packageId + ",optionId:" + option.getId();
+        }
+
         az.fitnest.order.dto.epoint.EpointPaymentRequest paymentRequest = az.fitnest.order.dto.epoint.EpointPaymentRequest.builder()
                 .order_id(orderId)
                 .amount(payable.doubleValue())
@@ -78,7 +86,9 @@ public class CheckoutServiceImpl implements CheckoutService {
                 .language(language)
                 .is_installment(request.is_installment() != null ? request.is_installment() : 0)
                 .refund(0)
-                .other_attr(java.util.Collections.emptyList())
+                .other_attr(java.util.Collections.singletonList(packageRef))
+                .prePriced(true)
+                .userId(userId)
                 .build();
         az.fitnest.order.dto.epoint.EpointResponse epointResponse = paymentGrpcClient.initiatePayment(paymentRequest);
         if (epointResponse == null || !"success".equalsIgnoreCase(epointResponse.status())) {

@@ -60,6 +60,9 @@ message CreatePaymentRequest {
   int32 is_installment = 6;
   int32 refund = 7;
   repeated string other_attr = 10;
+  bool pre_priced = 11;
+  // Owning FitNest user; required so /me/payments/order/{id} ownership checks succeed.
+  int64 user_id = 12;
 }
 
 message CreatePaymentResponse {
