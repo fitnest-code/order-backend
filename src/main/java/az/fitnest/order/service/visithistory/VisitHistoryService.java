@@ -105,14 +105,23 @@ public class VisitHistoryService {
 
         boolean includeVisits = !VisitHistoryStatus.REJECTED.name().equals(status);
         boolean includeAttempts = !VisitHistoryStatus.SUCCESS.name().equals(status);
+        // Flags, not JDBC nulls. A null gym id or cursor makes Postgres fail the query
+        // with "could not determine data type of parameter" and the endpoint returns 500.
+        boolean filterByGym = request.gymId() != null;
+        Long gymId = filterByGym ? request.gymId() : 0L;
+        boolean hasCursor = cursor.scannedAt() != null;
+        LocalDateTime cursorTs = hasCursor ? cursor.scannedAt() : LocalDateTime.of(1970, 1, 1, 0, 0);
+        String cursorKind = hasCursor ? cursor.kind() : VISIT;
+        Long cursorId = hasCursor ? cursor.id() : 0L;
+        PageRequest pageRequest = PageRequest.of(0, limit + 1);
 
         List<GymVisit> visits = includeVisits
-                ? gymVisitRepository.findHistory(userId, from, to, mode, request.gymId(),
-                cursor.scannedAt(), cursor.kind(), cursor.id(), PageRequest.of(0, limit + 1))
+                ? gymVisitRepository.findHistory(userId, from, to, mode, filterByGym, gymId,
+                hasCursor, cursorTs, cursorKind, cursorId, pageRequest)
                 : List.of();
         List<VisitAttempt> attempts = includeAttempts
-                ? attemptRepository.findHistory(userId, from, to, mode, request.gymId(),
-                cursor.scannedAt(), cursor.kind(), cursor.id(), PageRequest.of(0, limit + 1))
+                ? attemptRepository.findHistory(userId, from, to, mode, filterByGym, gymId,
+                hasCursor, cursorTs, cursorKind, cursorId, pageRequest)
                 : List.of();
 
         List<Entry> merged = new ArrayList<>(visits.size() + attempts.size());

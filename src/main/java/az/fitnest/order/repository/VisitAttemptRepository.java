@@ -40,13 +40,17 @@ public interface VisitAttemptRepository extends JpaRepository<VisitAttempt, Long
                        @Param("qrScanId") String qrScanId,
                        @Param("scannedAt") LocalDateTime scannedAt);
 
+    /**
+     * Same null-parameter rule as {@code GymVisitRepository.findHistory}: flags stay
+     * non-null so PostgreSQL can type every bind.
+     */
     @Query("""
             SELECT a FROM VisitAttempt a
             WHERE a.userId = :userId
               AND a.scannedAt >= :from AND a.scannedAt < :to
               AND (:mode = 'ALL' OR a.mode = :mode)
-              AND (:gymId IS NULL OR a.gymId = :gymId)
-              AND (:cursorTs IS NULL
+              AND (:filterByGym = FALSE OR a.gymId = :gymId)
+              AND (:hasCursor = FALSE
                    OR a.scannedAt < :cursorTs
                    OR (a.scannedAt = :cursorTs
                        AND (:cursorKind = 'VISIT' OR a.id < :cursorId)))
@@ -56,7 +60,9 @@ public interface VisitAttemptRepository extends JpaRepository<VisitAttempt, Long
                                    @Param("from") LocalDateTime from,
                                    @Param("to") LocalDateTime to,
                                    @Param("mode") String mode,
+                                   @Param("filterByGym") boolean filterByGym,
                                    @Param("gymId") Long gymId,
+                                   @Param("hasCursor") boolean hasCursor,
                                    @Param("cursorTs") LocalDateTime cursorTs,
                                    @Param("cursorKind") String cursorKind,
                                    @Param("cursorId") Long cursorId,

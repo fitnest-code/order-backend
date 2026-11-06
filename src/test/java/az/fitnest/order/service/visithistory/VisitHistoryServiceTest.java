@@ -41,9 +41,9 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -123,10 +123,10 @@ class VisitHistoryServiceTest {
         VisitAttempt attempt = attempt(2L, 11L, "Beta", LocalDateTime.of(2026, 11, 2, 9, 0),
                 "TIER_NOT_ALLOWED_AT_THIS_TIME", "STANDARD", subscription);
 
-        when(gymVisitRepository.findHistory(eq(USER), any(), any(), eq("ALL"), isNull(),
-                isNull(), isNull(), isNull(), any(Pageable.class))).thenReturn(List.of(visit));
-        when(attemptRepository.findHistory(eq(USER), any(), any(), eq("ALL"), isNull(),
-                isNull(), isNull(), isNull(), any(Pageable.class))).thenReturn(List.of(attempt));
+        when(gymVisitRepository.findHistory(eq(USER), any(), any(), eq("ALL"), eq(false), eq(0L),
+                eq(false), any(), any(), any(), any(Pageable.class))).thenReturn(List.of(visit));
+        when(attemptRepository.findHistory(eq(USER), any(), any(), eq("ALL"), eq(false), eq(0L),
+                eq(false), any(), any(), any(), any(Pageable.class))).thenReturn(List.of(attempt));
         when(gymVisitRepository.countHistory(eq(USER), any(), any(), eq("ALL"))).thenReturn(1L);
         when(attemptRepository.countHistory(eq(USER), any(), any(), eq("ALL"))).thenReturn(1L);
         when(gymVisitRepository.countHistoryByGym(eq(USER), any(), any(), eq("ALL")))
@@ -231,10 +231,11 @@ class VisitHistoryServiceTest {
         GymVisit oldVisit = visit(9L, 12L, "Gamma", LocalDateTime.of(2024, 10, 15, 8, 0),
                 VisitEntryType.STANDARD, old);
 
-        when(gymVisitRepository.findHistory(eq(USER), any(), any(), eq("ALL"), isNull(),
-                isNull(), isNull(), isNull(), any(Pageable.class))).thenReturn(List.of(oldVisit));
-        when(attemptRepository.findHistory(any(), any(), any(), anyString(), any(),
-                any(), any(), any(), any(Pageable.class))).thenReturn(Collections.emptyList());
+        when(gymVisitRepository.findHistory(eq(USER), any(), any(), eq("ALL"), eq(false), eq(0L),
+                eq(false), any(), any(), any(), any(Pageable.class))).thenReturn(List.of(oldVisit));
+        when(attemptRepository.findHistory(any(), any(), any(), anyString(), anyBoolean(),
+                any(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(Collections.emptyList());
         when(subscriptionRepository.findAllById(any())).thenReturn(List.of(current, old));
         when(packageRepository.findAllById(any()))
                 .thenReturn(List.of(packageRow(3L, "Silver"), packageRow(5L, "Bronze")));
@@ -258,8 +259,8 @@ class VisitHistoryServiceTest {
         when(subscriptionResolver.resolve(USER)).thenReturn(subscription);
         VisitAttempt attempt = attempt(4L, 11L, "Health Fit", LocalDateTime.of(2026, 11, 2, 17, 20),
                 "TIER_NOT_ALLOWED_AT_THIS_TIME", "STANDARD", subscription);
-        when(attemptRepository.findHistory(eq(USER), any(), any(), eq("ALL"), isNull(),
-                isNull(), isNull(), isNull(), any(Pageable.class))).thenReturn(List.of(attempt));
+        when(attemptRepository.findHistory(eq(USER), any(), any(), eq("ALL"), eq(false), eq(0L),
+                eq(false), any(), any(), any(), any(Pageable.class))).thenReturn(List.of(attempt));
         when(packageRepository.findAllById(any())).thenReturn(List.of(packageRow(3L, "Silver")));
 
         VisitHistoryResponse response = service.getHistory(USER, query(
@@ -286,12 +287,11 @@ class VisitHistoryServiceTest {
         GymVisit oldest = visit(1L, 10L, "Alpha", LocalDateTime.of(2026, 11, 1, 8, 0),
                 VisitEntryType.STANDARD, subscription);
 
-        when(gymVisitRepository.findHistory(eq(USER), any(), any(), eq("ALL"), isNull(),
-                nullable(LocalDateTime.class), nullable(String.class), nullable(Long.class),
-                any(Pageable.class)))
-                .thenAnswer(invocation -> invocation.getArgument(5) == null
-                        ? List.of(newest, middle, oldest)
-                        : List.of(oldest));
+        when(gymVisitRepository.findHistory(eq(USER), any(), any(), eq("ALL"), eq(false), eq(0L),
+                anyBoolean(), any(), any(), any(), any(Pageable.class)))
+                .thenAnswer(invocation -> Boolean.TRUE.equals(invocation.getArgument(6))
+                        ? List.of(oldest)
+                        : List.of(newest, middle, oldest));
 
         VisitHistoryResponse first = service.getHistory(USER, query(
                 null, null, null, null, null, null, null, 2));
@@ -316,8 +316,8 @@ class VisitHistoryServiceTest {
         when(subscriptionResolver.resolve(USER)).thenReturn(subscription);
         VisitAttempt attempt = attempt(2L, 11L, "Beta", LocalDateTime.of(2026, 11, 2, 9, 0),
                 "GYM_NOT_IN_PACKAGE", "STANDARD", subscription);
-        when(attemptRepository.findHistory(eq(USER), any(), any(), eq("ALL"), isNull(),
-                isNull(), isNull(), isNull(), any(Pageable.class))).thenReturn(List.of(attempt));
+        when(attemptRepository.findHistory(eq(USER), any(), any(), eq("ALL"), eq(false), eq(0L),
+                eq(false), any(), any(), any(), any(Pageable.class))).thenReturn(List.of(attempt));
         when(gymVisitRepository.countHistory(eq(USER), any(), any(), eq("ALL"))).thenReturn(3L);
         when(attemptRepository.countHistory(eq(USER), any(), any(), eq("ALL"))).thenReturn(1L);
         when(packageRepository.findAllById(any())).thenReturn(List.of(packageRow(3L, "Silver")));
@@ -329,8 +329,8 @@ class VisitHistoryServiceTest {
                 .containsOnly("REJECTED");
         assertThat(response.rangeTotals().success()).isEqualTo(3);
         assertThat(response.rangeTotals().rejected()).isEqualTo(1);
-        verify(gymVisitRepository, never()).findHistory(any(), any(), any(), anyString(), any(),
-                any(), any(), any(), any());
+        verify(gymVisitRepository, never()).findHistory(any(), any(), any(), anyString(), anyBoolean(),
+                any(), anyBoolean(), any(), any(), any(), any());
     }
 
     // ------------------------------------------------------------------
@@ -350,8 +350,8 @@ class VisitHistoryServiceTest {
 
         GymVisit home = visit(6L, 10L, "Alpha", LocalDateTime.of(2026, 11, 1, 18, 0),
                 VisitEntryType.HOME_UNLIMITED, subscription);
-        when(gymVisitRepository.findHistory(eq(USER), any(), any(), eq("HOME_GYM"), isNull(),
-                isNull(), isNull(), isNull(), any(Pageable.class))).thenReturn(List.of(home));
+        when(gymVisitRepository.findHistory(eq(USER), any(), any(), eq("HOME_GYM"), eq(false), eq(0L),
+                eq(false), any(), any(), any(), any(Pageable.class))).thenReturn(List.of(home));
         when(gymVisitRepository.findFirstBySubscriptionIdAndGymIdAndEntryTypeAndGymNameIsNotNullOrderByCheckedInAtDesc(
                 50L, 10L, VisitEntryType.HOME_UNLIMITED)).thenReturn(java.util.Optional.of(home));
         when(gymVisitRepository.countCountableBySubscriptionAndPeriodAndType(
@@ -380,8 +380,8 @@ class VisitHistoryServiceTest {
         service.getHistory(USER, query(null, null, null, null, null, null, null, 500));
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(gymVisitRepository).findHistory(eq(USER), any(), any(), anyString(), any(),
-                any(), any(), any(), captor.capture());
+        verify(gymVisitRepository).findHistory(eq(USER), any(), any(), anyString(), anyBoolean(),
+                any(), anyBoolean(), any(), any(), any(), captor.capture());
         assertThat(captor.getValue().getPageSize()).isEqualTo(51);
     }
 

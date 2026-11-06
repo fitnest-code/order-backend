@@ -135,6 +135,11 @@ public interface GymVisitRepository extends JpaRepository<GymVisit, Long> {
      * {@code STANDARD}; {@code HOME_GYM_PENDING} entries are stored as STANDARD.
      * The cursor tuple is (scannedAt, kind, id) descending; VISIT sorts before ATTEMPT
      * on equal timestamps, matching the in-memory merge in the history service.
+     *
+     * <p>{@code filterByGym} and {@code hasCursor} are never null. PostgreSQL rejects an
+     * untyped NULL parameter ({@code could not determine data type of parameter}), which
+     * turned the default history request into HTTP 500. The unused id and timestamp are
+     * dummies when the matching flag is false.
      */
     @org.springframework.data.jpa.repository.Query("""
             SELECT v FROM GymVisit v
@@ -145,8 +150,8 @@ public interface GymVisitRepository extends JpaRepository<GymVisit, Long> {
                        AND v.entryType = az.fitnest.order.model.enums.VisitEntryType.HOME_UNLIMITED)
                    OR (:mode = 'STANDARD'
                        AND v.entryType = az.fitnest.order.model.enums.VisitEntryType.STANDARD))
-              AND (:gymId IS NULL OR v.gymId = :gymId)
-              AND (:cursorTs IS NULL
+              AND (:filterByGym = FALSE OR v.gymId = :gymId)
+              AND (:hasCursor = FALSE
                    OR v.checkedInAt < :cursorTs
                    OR (v.checkedInAt = :cursorTs
                        AND :cursorKind = 'VISIT'
@@ -158,7 +163,9 @@ public interface GymVisitRepository extends JpaRepository<GymVisit, Long> {
             @org.springframework.data.repository.query.Param("from") LocalDateTime from,
             @org.springframework.data.repository.query.Param("to") LocalDateTime to,
             @org.springframework.data.repository.query.Param("mode") String mode,
+            @org.springframework.data.repository.query.Param("filterByGym") boolean filterByGym,
             @org.springframework.data.repository.query.Param("gymId") Long gymId,
+            @org.springframework.data.repository.query.Param("hasCursor") boolean hasCursor,
             @org.springframework.data.repository.query.Param("cursorTs") LocalDateTime cursorTs,
             @org.springframework.data.repository.query.Param("cursorKind") String cursorKind,
             @org.springframework.data.repository.query.Param("cursorId") Long cursorId,
