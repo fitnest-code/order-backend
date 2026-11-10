@@ -53,4 +53,14 @@ public class Order {
 
     @Column(name = "promo_discount_amount", precision = 10, scale = 2)
     private BigDecimal promoDiscountAmount;
+
+    // Black Friday pricing snapshot (V108); separate from promo_* so refunds/reports can tell them apart.
+    @Column(name = "pricing_campaign_id")
+    private UUID pricingCampaignId;
+
+    @Column(name = "pricing_discount_percent", precision = 5, scale = 2)
+    private BigDecimal pricingDiscountPercent;
+
+    @Column(name = "pricing_discount_amount", precision = 10, scale = 2)
+    private BigDecimal pricingDiscountAmount;
 }
