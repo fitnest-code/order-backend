@@ -12,7 +12,10 @@ import java.util.TimeZone;
 
 @SpringBootApplication
 @EnableKafka
-@EnableJpaRepositories(basePackages = "az.fitnest.order.repository")
+@EnableJpaRepositories(basePackages = {
+        "az.fitnest.order.repository",
+        "az.fitnest.order.pricingcampaign.repository"
+})
 @EnableRedisRepositories(basePackages = {})
 @EnableScheduling
 @org.springframework.scheduling.annotation.EnableAsync
