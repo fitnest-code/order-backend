@@ -14,5 +14,7 @@ public record EpointPaymentRequest(
     Integer refund,
     List<Object> other_attr,
     Boolean prePriced,
-    Long userId
+    Long userId,
+    /** Coin units already subtracted from amount; payment-backend spends them on SUCCESS. */
+    Double coinsUsed
 ) {}

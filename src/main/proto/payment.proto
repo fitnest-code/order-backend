@@ -63,6 +63,8 @@ message CreatePaymentRequest {
   bool pre_priced = 11;
   // Owning FitNest user; required so /me/payments/order/{id} ownership checks succeed.
   int64 user_id = 12;
+  // FitNest Coin units already applied into amount when pre_priced (spent on SUCCESS).
+  double coins_used = 13;
 }
 
 message CreatePaymentResponse {

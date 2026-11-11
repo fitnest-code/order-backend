@@ -43,6 +43,10 @@ public class PaymentGrpcClient {
             grpcRequestBuilder.setUserId(request.userId());
         }
 
+        if (request.coinsUsed() != null && request.coinsUsed() > 0) {
+            grpcRequestBuilder.setCoinsUsed(request.coinsUsed());
+        }
+
         if (request.other_attr() != null) {
             List<String> otherAttrs = request.other_attr().stream()
                     .map(Object::toString)

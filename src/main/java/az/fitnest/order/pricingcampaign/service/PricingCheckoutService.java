@@ -50,20 +50,23 @@ public class PricingCheckoutService {
     public CheckoutCreateResponseV2 create(Long userId, CheckoutCreateRequestV2 req) {
         Quote q = quote(userId, req.packageId(), req.optionId(), Boolean.TRUE.equals(req.useFitCoin()));
         PricingDto pricing = q.pricing();
-        // Charged amount is the campaign price. FitCoin is shown in preview but, as in the v1 checkout,
-        // is not deducted here; payment-backend owns coin spending (prePriced=true: it must not re-price).
-        BigDecimal payable = pricing.finalPrice();
+        // Product rule: preview total == bank charge. FitCoin is applied AFTER campaign discount.
+        BigDecimal payable = q.total();
 
-        if (req.expectedFinalAmount() != null) {
-            BigDecimal expected = req.expectedFinalAmount();
-            if (expected.compareTo(payable) != 0 && expected.compareTo(q.total()) != 0) {
-                throw new ConflictException("error.price_changed");
-            }
+        if (req.expectedFinalAmount() != null && req.expectedFinalAmount().compareTo(payable) != 0) {
+            throw new ConflictException("error.price_changed");
+        }
+        // Epoint (and CreatePayment) require a positive amount; full-coin cover is a separate payment flow.
+        if (payable.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("error.price_changed");
         }
 
         String orderId = "ord_" + UUID.randomUUID().toString().substring(0, 8);
         String packageRef = "packageId:" + q.pkg().getId() + ",optionId:" + q.option().getId()
                 + (pricing.campaignApplied() ? ",campaignId:" + pricing.campaignId() : "");
+
+        Double coinsUsed = q.fitCoin().used() && q.fitCoin().usedCoins() != null
+                ? q.fitCoin().usedCoins().doubleValue() : null;
 
         EpointResponse response = paymentGrpcClient.initiatePayment(EpointPaymentRequest.builder()
                 .order_id(orderId)
@@ -76,6 +79,7 @@ public class PricingCheckoutService {
                 .other_attr(Collections.singletonList(packageRef))
                 .prePriced(true)
                 .userId(userId)
+                .coinsUsed(coinsUsed)
                 .build());
         if (response == null || !"success".equalsIgnoreCase(response.status())) {
             throw new RuntimeException("Payment initiation failed: " + (response != null ? response.message() : "Unknown error"));
