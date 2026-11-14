@@ -105,7 +105,7 @@ public class PromoEligibilityService {
                 .cta(popup != null ? MobilePromoCtaResponse.builder()
                         .label(tr.getCtaLabel())
                         .target(popup.getCtaTarget().name())
-                        .packageId(popup.getPackageId())
+                        .planId(popup.getPlanId())
                         .url(popup.getUrl())
                         .campaignId(campaign.getId())
                         .code(campaign.getCode())
@@ -223,7 +223,7 @@ public class PromoEligibilityService {
                     .cta(popupCfg != null ? MobilePromoCtaResponse.builder()
                             .label(tr != null && tr.getCtaLabel() != null ? tr.getCtaLabel() : null)
                             .target(popupCfg.getCtaTarget().name())
-                            .packageId(popupCfg.getPackageId())
+                            .planId(popupCfg.getPlanId())
                             .url(popupCfg.getUrl())
                             .campaignId(c.getId())
                             .code(c.getCode())
@@ -232,14 +232,6 @@ public class PromoEligibilityService {
                             .heroImageUrl(view.heroUrl(c, lang))
                             .durationSec(popupCfg != null && popupCfg.getDurationSec() != null
                                     ? popupCfg.getDurationSec() : 7)
-                            .cta(MobilePromoCtaResponse.builder()
-                                    .label(tr != null && tr.getCtaLabel() != null ? tr.getCtaLabel() : null)
-                                    .target(PromoCtaTarget.PLANS.name())
-                                    .packageId(null)
-                                    .url(null)
-                                    .campaignId(c.getId())
-                                    .code(c.getCode())
-                                    .build())
                             .build())
                     .build()));
         }

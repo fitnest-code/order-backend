@@ -118,13 +118,13 @@ public class CheckoutServiceImpl implements CheckoutService {
         }
 
         return CheckoutResponse.builder()
-                .orderId(orderId)
+                .order_id(orderId)
                 .status("pending_payment")
                 .amount(payable.doubleValue())
                 .currency(pkg.getCurrency())
                 .payment(CheckoutPaymentInfoDto.builder()
                         .provider("epoint")
-                        .paymentUrl(epointResponse.redirect_url())
+                        .payment_url(epointResponse.redirect_url())
                         .status(epointResponse.status())
                         .build())
                 .build();

@@ -5,7 +5,7 @@ import lombok.Builder;
 @Builder
 public record CheckoutPaymentInfoDto(
     String provider,
-    String paymentIntentClientSecret,
-    String paymentUrl,
+    String payment_intent_client_secret,
+    String payment_url,
     String status
 ) {}

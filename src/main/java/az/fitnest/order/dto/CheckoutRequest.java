@@ -20,8 +20,7 @@ public record CheckoutRequest(
     @JsonAlias({"optionId"})
     Long option_id,
 
-    @Deprecated
-    @Schema(description = "Köhnə sahə (N2) - qəbul edilir, amma nəzərə alınmır. Ödəniş növü paymentType ilə təyin olunur.", example = "0")
+    @Schema(description = "Taksit (0: yox, 1: bəli)", example = "0")
     Integer is_installment,
 
     @Schema(description = "Promokod (yalnız istifadəçiyə ayrılmış kod)", example = "Bakcell20")
