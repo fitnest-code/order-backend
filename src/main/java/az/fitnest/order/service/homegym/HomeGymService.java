@@ -222,44 +222,52 @@ public class HomeGymService {
         }
 
         Long previousGymId = null;
+        boolean alreadySelected = false;
         if (active != null) {
             if (active.getGymId().equals(request.gymId())) {
-                return buildResponse(subscription);
+                // The same gym is already the active home gym. Keep the stored row untouched,
+                // but still acknowledge the selection: screens 1.3/4.2 can send the current
+                // gym again (for example after a renewal or an upgrade that keeps the row),
+                // and the HOME_GYM_SELECTED push must not be silently dropped.
+                alreadySelected = true;
+            } else {
+                long visitsToActive = countVisitsAtGym(subscription.getSubscriptionId(), periodStart,
+                        active.getGymId());
+                if (visitsToActive > 0) {
+                    throw new HomeGymException("HOME_GYM_CHANGE_LOCKED", HttpStatus.CONFLICT,
+                            "error.home_gym.change_locked");
+                }
+                previousGymId = active.getGymId();
+                active.setStatus(HomeGymStatus.CHANGED);
+                active.setEndedAt(now);
+                active.setEndReason(HomeGymEndReason.CHANGE);
+                homeGymRepository.save(active);
             }
-            long visitsToActive = countVisitsAtGym(subscription.getSubscriptionId(), periodStart,
-                    active.getGymId());
-            if (visitsToActive > 0) {
-                throw new HomeGymException("HOME_GYM_CHANGE_LOCKED", HttpStatus.CONFLICT,
-                        "error.home_gym.change_locked");
-            }
-            previousGymId = active.getGymId();
-            active.setStatus(HomeGymStatus.CHANGED);
-            active.setEndedAt(now);
-            active.setEndReason(HomeGymEndReason.CHANGE);
-            homeGymRepository.save(active);
         }
 
-        SubscriptionHomeGym selected = SubscriptionHomeGym.builder()
-                .subscriptionId(subscriptionId)
-                .userId(subscription.getUserId())
-                .gymId(request.gymId())
-                .status(HomeGymStatus.ACTIVE)
-                .source(request.source())
-                .selectedAt(now)
-                .build();
-        homeGymRepository.save(selected);
+        if (!alreadySelected) {
+            SubscriptionHomeGym selected = SubscriptionHomeGym.builder()
+                    .subscriptionId(subscriptionId)
+                    .userId(subscription.getUserId())
+                    .gymId(request.gymId())
+                    .status(HomeGymStatus.ACTIVE)
+                    .source(request.source())
+                    .selectedAt(now)
+                    .build();
+            homeGymRepository.save(selected);
 
-        EntryMode currentMode = subscription.getEntryMode() != null
-                ? subscription.getEntryMode() : EntryMode.HOME_GYM_PENDING;
-        subscription.setEntryMode(EntryMode.HOME_GYM);
-        if (request.source() == HomeGymSource.FIRST_QR && currentMode == EntryMode.HOME_GYM_PENDING) {
-            promoteFirstQrVisit(subscription, request.gymId(), now);
-        } else if (selection != null && request.gymId().equals(selection.soleGymId())) {
-            // R19: every countable visit of the period at the selected gym becomes a home-gym
-            // visit (the limit units are given back, R4/R6/R16 counters stay consistent).
-            convertVisitsToHomeGym(subscription, request.gymId(), periodStart);
+            EntryMode currentMode = subscription.getEntryMode() != null
+                    ? subscription.getEntryMode() : EntryMode.HOME_GYM_PENDING;
+            subscription.setEntryMode(EntryMode.HOME_GYM);
+            if (request.source() == HomeGymSource.FIRST_QR && currentMode == EntryMode.HOME_GYM_PENDING) {
+                promoteFirstQrVisit(subscription, request.gymId(), now);
+            } else if (selection != null && request.gymId().equals(selection.soleGymId())) {
+                // R19: every countable visit of the period at the selected gym becomes a home-gym
+                // visit (the limit units are given back, R4/R6/R16 counters stay consistent).
+                convertVisitsToHomeGym(subscription, request.gymId(), periodStart);
+            }
+            subscriptionRepository.save(subscription);
         }
-        subscriptionRepository.save(subscription);
 
         SubscriptionEvent event = new SubscriptionEvent(
                 subscription.getUserId(),

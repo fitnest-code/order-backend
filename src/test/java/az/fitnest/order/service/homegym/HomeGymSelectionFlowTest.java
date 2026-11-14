@@ -341,7 +341,7 @@ class HomeGymSelectionFlowTest {
     }
 
     @Test
-    void selectingTheActiveGymReturnsTheCurrentStateWithoutANewEvent() {
+    void selectingTheActiveGymKeepsTheStoredRowAndStillPublishesTheSelection() {
         Subscription subscription = subscription();
         subscription.setEntryMode(EntryMode.HOME_GYM);
         when(subscriptionRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(subscription));
@@ -356,8 +356,11 @@ class HomeGymSelectionFlowTest {
         assertEquals(100L, response.homeGym().gymId());
         assertEquals(HomeGymStatus.ACTIVE, active.getStatus());
         verify(homeGymRepository, never()).save(any(SubscriptionHomeGym.class));
-        verifyNoInteractions(eventPublisher);
-        verify(idempotencyRepository, never()).save(any(HomeGymIdempotency.class));
+        // The user still selected a home gym, so the push must go out even when the row is
+        // already active (post-payment/renewal screens resend the current gym).
+        verify(eventPublisher).publishSubscriptionEvent(eq(9L), eq("HOME_GYM_SELECTED"), eq(5L),
+                any(SubscriptionEvent.class));
+        verify(idempotencyRepository).save(any(HomeGymIdempotency.class));
     }
 
     @Test
@@ -390,17 +393,6 @@ class HomeGymSelectionFlowTest {
         activeRow.set(previous);
         when(homeGymRepository.findActiveForUpdate(5L)).thenReturn(Optional.of(previous));
         givenGym(true, true, true);
-
-        HomeGymResponse response = service.selectHomeGym(9L, 5L,
-                new HomeGymSelectRequest(100L, HomeGymSource.SUBSCRIPTION_SCREEN), "key-1", false);
-
-        // Selecting the same gym is a no-op...
-        assertEquals(100L, response.homeGym().gymId());
-        verifyNoInteractions(eventPublisher);
-
-        // ...while a real change closes the old row first.
-        activeRow.set(previous);
-        when(homeGymRepository.findActiveForUpdate(5L)).thenReturn(Optional.of(previous));
         when(catalogClient.getHomeGymInfo(200L, 3L)).thenReturn(
                 new CatalogServiceGrpcClient.HomeGymInfo(true, "NeoGym", true, true, null));
 
