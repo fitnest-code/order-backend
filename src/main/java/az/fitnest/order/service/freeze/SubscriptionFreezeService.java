@@ -35,6 +35,7 @@ public class SubscriptionFreezeService {
     private final ObjectMapper objectMapper;
     private final az.fitnest.order.client.CatalogServiceGrpcClient catalogServiceGrpcClient;
     private final FreezeFinalizeService freezeFinalizeService;
+    private final az.fitnest.order.service.TranslationService translationService;
 
     @Transactional(readOnly = true)
     public FreezeEligibilityResponse getEligibility(Long userId, Long subscriptionId) {
@@ -440,6 +441,18 @@ public class SubscriptionFreezeService {
     }
 
     private FreezeRecordDto mapToDto(SubscriptionFreeze f, String subscriptionName) {
+        String lang = az.fitnest.order.util.UserContext.getCurrentLanguage();
+        String statusLabel = translationService.getTranslatedValue(
+                "FREEZE_STATUS", f.getStatus() != null ? f.getStatus().name() : null, "name", lang);
+        if (statusLabel == null || statusLabel.isBlank()) {
+            statusLabel = switch (f.getStatus()) {
+                case ACTIVE -> "Dondurulub";
+                case COMPLETED -> "Aktivləşdirildi";
+                case ENDED_EARLY -> "Erkən aktivləşdirildi";
+                case TERMINATED -> "Dayandırıldı";
+                case null -> null;
+            };
+        }
         return new FreezeRecordDto(
                 f.getId(),
                 f.getSubscriptionId(),
@@ -455,6 +468,7 @@ public class SubscriptionFreezeService {
                 f.getStatus(),
                 f.getEndedBy(),
                 f.getCreatedAt(),
-                subscriptionName);
+                subscriptionName,
+                statusLabel);
     }
 }

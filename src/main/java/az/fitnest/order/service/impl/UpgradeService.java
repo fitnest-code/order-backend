@@ -26,6 +26,7 @@ public class UpgradeService {
     private final OrderRepository orderRepository;
     private final az.fitnest.order.service.freeze.FreezeEntitlementService freezeEntitlementService;
     private final az.fitnest.order.service.freeze.FreezeFinalizeService freezeFinalizeService;
+    private final az.fitnest.order.service.homegym.HomeGymService homeGymService;
 
     @Transactional(readOnly = true)
     public UpgradeOptionsResponse getUpgradeOptions(Long userId, Integer targetDurationMonths) {
@@ -249,6 +250,7 @@ public class UpgradeService {
 
             freezeFinalizeService.terminateActive(currentSub.getSubscriptionId(), "UPGRADE");
             freezeEntitlementService.onUpgrade(currentSub, targetPackage.getName());
+            homeGymService.onUpgrade(currentSub, targetPackageId, targetPackage.getName());
 
             subDetails = SubscriptionDetailsDto.builder()
                     .subscriptionId(currentSub.getSubscriptionId())

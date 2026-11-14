@@ -77,11 +77,43 @@ message CheckInRequest {
   int64 user_id = 1;
   int64 gym_id = 2;
   bool consume_frozen = 3;
+  // R5 confirmation flow. Empty on the first scan.
+  string confirmation = 4;
+  string confirmation_token = 5;
+  // R14/R15 snapshots resolved by catalog before calling order.
+  int64 time_slot_rule_id = 6;
+  string price_package = 7;
+  double single_price = 8;
+  double unlimited_price = 9;
+  string gym_name = 10;
+  string available_hours = 11;
+  // T-16: client-generated scan id for idempotent QR processing.
+  string qr_scan_id = 12;
 }
 
 message CheckInResponse {
   bool success = 1;
   string message = 2;
+  string decision = 3;
+  string message_key = 4;
+  string entry_type = 5;
+  int64 visit_id = 6;
+  int64 home_gym_id = 7;
+  int64 standard_visits_used = 8;
+  int32 standard_visits_limit = 9;
+  int64 home_visits_this_period = 10;
+  string unlocks_at = 11;
+  string renews_at = 12;
+  string confirmation_type = 13;
+  string confirmation_token = 14;
+  string confirmation_expires_at = 15;
+  string reason = 16;
+  string available_hours = 17;
+  string gym_name = 18;
+  int64 target_gym_id = 19;
+  string home_gym_name = 20;
+  // R21: earliest next home-gym entry (tomorrow 00:00 Asia/Baku) for DAILY_LIMIT_REACHED.
+  string next_home_entry_at = 21;
 }
 
 message CheckOptionInPackageExistsRequest {

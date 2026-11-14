@@ -1,0 +1,22 @@
+package az.fitnest.order.dto.promo;
+
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+
+import java.util.UUID;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class MobilePromoCtaResponse {
+
+    private String label;
+    private String target; // PLANS, PLAN_DETAIL, URL, PROMO_DETAIL (M3 partner screen)
+    private String packageId;
+    private String url;
+    private UUID campaignId;
+    private String code;
+}

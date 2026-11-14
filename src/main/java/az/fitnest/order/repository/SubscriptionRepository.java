@@ -19,6 +19,7 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
             @org.springframework.data.jpa.repository.Query("SELECT s.userId FROM Subscription s")
             java.util.List<Long> findAllUserIds();
     List<Subscription> findByUserIdAndStatus(Long userId, String status);
+    List<Subscription> findByUserId(Long userId);
     List<Subscription> findByUserIdAndStatusIn(Long userId, List<String> statuses);
     boolean existsByUserIdAndStatusIn(Long userId, List<String> statuses);
     List<Subscription> findByStatusInAndEndAtBefore(List<String> statuses, LocalDateTime now);
@@ -41,6 +42,23 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @org.springframework.data.jpa.repository.Query("SELECT s FROM Subscription s WHERE s.subscriptionId = :id")
     Optional<Subscription> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
+
+    /**
+     * Home-gym reminder candidates: active, still pending a selection, purchased at least
+     * 24h ago and never reminded. Cancelled/expired/frozen rows are excluded because their
+     * status is not ACTIVE; refunded rows are excluded by {@code refundedAt} because a
+     * refund keeps the status ACTIVE (V19).
+     */
+    @org.springframework.data.jpa.repository.Query("SELECT s FROM Subscription s " +
+            "WHERE s.status = 'ACTIVE' " +
+            "AND s.entryMode = az.fitnest.order.model.enums.EntryMode.HOME_GYM_PENDING " +
+            "AND s.startAt <= :cutoff " +
+            "AND s.homeGymReminderSentAt IS NULL " +
+            "AND s.refundedAt IS NULL " +
+            "AND (s.endAt IS NULL OR s.endAt > :now)")
+    List<Subscription> findHomeGymReminderCandidates(
+            @org.springframework.data.repository.query.Param("cutoff") LocalDateTime cutoff,
+            @org.springframework.data.repository.query.Param("now") LocalDateTime now);
 
     void deleteByUserId(Long userId);
 }

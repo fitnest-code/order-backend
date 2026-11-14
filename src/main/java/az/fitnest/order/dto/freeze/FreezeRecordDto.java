@@ -19,5 +19,6 @@ public record FreezeRecordDto(
         FreezeStatus status,
         String endedBy,
         LocalDateTime createdAt,
-        String subscriptionName
+        String subscriptionName,
+        String statusLabel
 ) {}

@@ -40,3 +40,28 @@ message HasActiveReservationsResponse {
   bool has_active_reservations = 1;
 }
 
+// Home-gym (spec R1/R14/R18): catalog resolves name, package access, admin toggle
+// and package-specific available hours for order-backend.
+message GetHomeGymInfoRequest {
+  int64 gym_id = 1;
+  int64 package_id = 2;
+}
+
+message GetHomeGymInfoResponse {
+  bool found = 1;
+  string name = 2;
+  bool supports_package = 3;
+  bool home_eligible = 4;
+  // e.g. "00:01–16:59"; empty when the package can access the gym all day.
+  string available_hours = 5;
+}
+
+// Home-gym reminder: the package has at least one gym the subscriber can pick (R1).
+message HasEligibleHomeGymRequest {
+  int64 package_id = 1;
+}
+
+message HasEligibleHomeGymResponse {
+  bool eligible = 1;
+}
+

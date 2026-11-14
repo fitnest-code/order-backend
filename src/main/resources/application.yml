@@ -104,7 +104,9 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka-service:9092}
     consumer:
       group-id: order-backend
-      auto-offset-reset: earliest
+      # New consumer groups start at the tail: replaying history would re-run
+      # destructive handlers (USER_HARD_DELETED) and stale payment failures.
+      auto-offset-reset: latest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     producer:
@@ -147,6 +149,16 @@ catalog:
 payment:
   backend:
     url: ${PAYMENT_BACKEND_URL:http://payment-backend:8080}
+
+# Home-gym visit limits. The QR decision engine and GET /api/v1/home-gym/rules read these
+# values through az.fitnest.order.config.HomeGymLimits, so text and enforcement always agree.
+home_gym:
+  monthly_limit: ${HOME_GYM_MONTHLY_LIMIT:30}
+  daily_limit: ${HOME_GYM_DAILY_LIMIT:1}
+  other_gyms_lock_threshold: ${HOME_GYM_OTHER_GYMS_LOCK_THRESHOLD:12}
+
+standard:
+  monthly_limit: ${STANDARD_MONTHLY_LIMIT:12}
 
 management:
   endpoints:
@@ -206,3 +218,22 @@ grpc:
     notifications-backend:
       address: ${NOTIFICATIONS_BACKEND_GRPC_ADDRESS:dns:///notifications-backend:9090}
       negotiation-type: plaintext
+
+# Promo code campaign module
+promo:
+  # HMAC key for phone hashing (PII protection). In production inject via Vault.
+  hmac:
+    key: ${PROMO_HMAC_KEY:fitnest-promo-hmac-change-me}
+  # AES-256 key (32 chars) for encrypting phone numbers for admin masked display/export
+  encryption:
+    key: ${PROMO_ENCRYPTION_KEY:fitnest-promo-enc-change-me!!}
+  scheduler:
+    # Status scheduler runs every minute by default
+    interval-ms: ${PROMO_SCHEDULER_INTERVAL_MS:60000}
+  kafka:
+    topic:
+      user-phone-verified: ${PROMO_KAFKA_TOPIC_USER_PHONE_VERIFIED:user.phone.verified}
+    group-id: ${PROMO_KAFKA_GROUP_ID:order-backend-promo}
+  rate-limit:
+    quote-per-minute: ${PROMO_RATE_LIMIT_QUOTE:30}
+    failed-validations-per-hour: ${PROMO_RATE_LIMIT_FAILED:10}

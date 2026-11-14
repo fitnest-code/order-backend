@@ -11,6 +11,7 @@ service NotificationsService {
   rpc SendHtmlEmail (SendHtmlEmailRequest) returns (SendEmailResponse);
   rpc SendSimpleEmail (SendSimpleEmailRequest) returns (SendEmailResponse);
   rpc SendPushNotification (SendPushNotificationRequest) returns (SendPushNotificationResponse);
+  rpc BroadcastLocalizedPushNotification (BroadcastLocalizedPushRequest) returns (BroadcastLocalizedPushResponse);
   rpc GetNotifications (GetNotificationsRequest) returns (GetNotificationsResponse);
   rpc SetUserNotificationPreference (SetUserNotificationPreferenceRequest) returns (SetUserNotificationPreferenceResponse);
   rpc GetDevicesByUserId (GetDevicesByUserIdRequest) returns (GetDevicesByUserIdResponse);
@@ -45,6 +46,23 @@ message SendPushNotificationResponse {
   bool success = 1;
   string error_message = 2;
   int32 target_devices = 3;
+}
+
+message LocalizedPushContent {
+  string language = 1;
+  string title = 2;
+  string body = 3;
+}
+
+message BroadcastLocalizedPushRequest {
+  repeated LocalizedPushContent contents = 1;
+  map<string, string> data = 2;
+}
+
+message BroadcastLocalizedPushResponse {
+  bool success = 1;
+  string error_message = 2;
+  int32 target_users = 3;
 }
 
 message SendSMSRequest {

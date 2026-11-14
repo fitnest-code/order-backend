@@ -18,6 +18,7 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
     private final UserSubscriptionService subscriptionService;
     private final az.fitnest.order.service.freeze.FreezeFinalizeService freezeFinalizeService;
+    private final az.fitnest.order.service.homegym.HomeGymService homeGymService;
     private final az.fitnest.order.repository.SubscriptionRepository subscriptionRepository;
     private final az.fitnest.order.repository.SubscriptionFreezeRepository subscriptionFreezeRepository;
 
@@ -242,6 +243,43 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
     }
 
     @Override
+    public void getHomeGymContext(az.fitnest.order.grpc.GetHomeGymContextRequest request,
+                                  StreamObserver<az.fitnest.order.grpc.GetHomeGymContextResponse> responseObserver) {
+        try {
+            az.fitnest.order.dto.homegym.HomeGymContext context =
+                    homeGymService.getContext(request.getUserId(), request.getSubscriptionId());
+            boolean found = context != null && context.subscriptionId() != null
+                    && context.subscriptionStatus() != null;
+            az.fitnest.order.grpc.GetHomeGymContextResponse.Builder response =
+                    az.fitnest.order.grpc.GetHomeGymContextResponse.newBuilder()
+                            .setFound(found);
+            if (found) {
+                response.setSubscriptionId(context.subscriptionId())
+                        .setUserId(context.userId() != null ? context.userId() : 0L)
+                        .setPackageId(context.packageId() != null ? context.packageId() : 0L)
+                        .setSubscriptionStatus(context.subscriptionStatus())
+                        .setEntryMode(context.entryMode() != null ? context.entryMode() : "")
+                        .setHomeGymId(context.homeGymId() != null ? context.homeGymId() : 0L)
+                        .setHomeVisitsThisPeriod(context.homeVisitsThisPeriod())
+                        .setStandardVisitsThisPeriod(context.standardVisitsThisPeriod())
+                        .setPeriodEndsAt(context.periodEndsAt() != null
+                                ? context.periodEndsAt().toString() : "")
+                        .setValidUntil(context.validUntil() != null ? context.validUntil().toString() : "")
+                        .setActive(context.active());
+            }
+            responseObserver.onNext(response.build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            log.error("[gRPC] Failed to get home-gym context for subscription {}",
+                    request.getSubscriptionId(), e);
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to get home-gym context: " + e.getMessage())
+                    .withCause(e)
+                    .asRuntimeException());
+        }
+    }
+
+    @Override
     public void terminateActiveFreeze(az.fitnest.order.grpc.TerminateActiveFreezeRequest request, StreamObserver<az.fitnest.order.grpc.TerminateActiveFreezeResponse> responseObserver) {
         try {
             String reason = request.getReason() != null && !request.getReason().isBlank()
@@ -251,6 +289,8 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
                 freezeFinalizeService.terminateActive(request.getSubscriptionId(), reason);
                 if ("PAYMENT_REFUND_CANCEL".equalsIgnoreCase(reason)) {
                     subscriptionService.revokeCampaignBonusForRefund(request.getSubscriptionId(), null);
+                    // Spec "Kənar hallar": refund ends the home gym and refreshes gym settlement.
+                    homeGymService.onRefund(request.getSubscriptionId());
                 }
             } else if (request.getUserId() > 0) {
                 Long userId = request.getUserId();
@@ -264,6 +304,7 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
                         .forEach(sub -> freezeFinalizeService.terminateActive(sub.getSubscriptionId(), reason));
                 if ("PAYMENT_REFUND_CANCEL".equalsIgnoreCase(reason)) {
                     subscriptionService.revokeCampaignBonusForRefund(null, userId);
+                    homeGymService.onRefundForUser(userId);
                 }
             } else {
                 responseObserver.onError(io.grpc.Status.INVALID_ARGUMENT

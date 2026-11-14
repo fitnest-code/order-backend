@@ -36,7 +36,16 @@ public class PaymentGrpcClient {
                 .setDescription(request.description() != null ? request.description() : "")
                 .setLanguage(request.language() != null ? request.language() : "az")
                 .setIsInstallment(request.is_installment() != null ? request.is_installment() : 0)
-                .setRefund(request.refund() != null ? request.refund() : 0);
+                .setRefund(request.refund() != null ? request.refund() : 0)
+                .setPrePriced(request.prePriced() != null && request.prePriced());
+
+        if (request.userId() != null && request.userId() > 0) {
+            grpcRequestBuilder.setUserId(request.userId());
+        }
+
+        if (request.coinsUsed() != null && request.coinsUsed() > 0) {
+            grpcRequestBuilder.setCoinsUsed(request.coinsUsed());
+        }
 
         if (request.other_attr() != null) {
             List<String> otherAttrs = request.other_attr().stream()

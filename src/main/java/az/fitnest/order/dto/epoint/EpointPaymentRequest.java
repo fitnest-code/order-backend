@@ -12,5 +12,9 @@ public record EpointPaymentRequest(
     String description,
     Integer is_installment,
     Integer refund,
-    List<Object> other_attr
+    List<Object> other_attr,
+    Boolean prePriced,
+    Long userId,
+    /** Coin units already subtracted from amount; payment-backend spends them on SUCCESS. */
+    Double coinsUsed
 ) {}

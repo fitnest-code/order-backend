@@ -19,6 +19,28 @@ service UserSubscriptionService {
   rpc RestoreSession(RestoreSessionRequest) returns (RestoreSessionResponse);
   rpc ConsumeFrozenSession(ConsumeFrozenSessionRequest) returns (ConsumeFrozenSessionResponse);
   rpc TerminateActiveFreeze(TerminateActiveFreezeRequest) returns (TerminateActiveFreezeResponse);
+  rpc GetHomeGymContext(GetHomeGymContextRequest) returns (GetHomeGymContextResponse);
+}
+
+// Home-gym context used by catalog to rank/price gyms for a subscription (R1/R14).
+message GetHomeGymContextRequest {
+  int64 user_id = 1;
+  int64 subscription_id = 2;
+}
+
+message GetHomeGymContextResponse {
+  bool found = 1;
+  int64 subscription_id = 2;
+  int64 user_id = 3;
+  int64 package_id = 4;
+  string subscription_status = 5;
+  string entry_mode = 6;
+  int64 home_gym_id = 7;
+  int64 home_visits_this_period = 8;
+  int64 standard_visits_this_period = 9;
+  string period_ends_at = 10;
+  string valid_until = 11;
+  bool active = 12;
 }
 
 message TerminateActiveFreezeRequest {
