@@ -20,5 +20,7 @@ public record EpointPaymentRequest(
     /** epoint | abb | bob; null/empty means epoint (payment-backend default). */
     String provider,
     /** TamKart/BolKart term in months; ignored by Epoint. */
-    Integer installmentMonths
+    Integer installmentMonths,
+    /** Epoint saved-card id; only sent with provider=saved_card. */
+    String cardId
 ) {}

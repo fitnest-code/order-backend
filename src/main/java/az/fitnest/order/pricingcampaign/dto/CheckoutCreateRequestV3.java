@@ -17,9 +17,11 @@ public record CheckoutCreateRequestV3(
         Integer is_installment,
         /** Total the user saw; mismatch yields 409 error.price_changed. */
         BigDecimal expectedFinalAmount,
-        /** CARD (default) | INSTALLMENT | APPLE_PAY | GOOGLE_PAY | SAVED_CARD. SAVED_CARD is not wired. */
+        /** CARD (default) | INSTALLMENT | APPLE_PAY | GOOGLE_PAY | SAVED_CARD (Epoint saved card; needs cardId). */
         @JsonAlias("payment_type") String paymentType,
         /** TAMKART (ABB) | BOLKART (BOB); required when paymentType=INSTALLMENT. */
         @JsonAlias("installment_provider") String installmentProvider,
         /** Installment term in months; required when paymentType=INSTALLMENT. */
-        @JsonAlias("installment_months") Integer installmentMonths) {}
+        @JsonAlias("installment_months") Integer installmentMonths,
+        /** Epoint saved-card id from the card list; required when paymentType=SAVED_CARD, ignored otherwise. */
+        @JsonAlias("card_id") String cardId) {}

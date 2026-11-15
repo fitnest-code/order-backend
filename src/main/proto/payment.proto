@@ -69,6 +69,8 @@ message CreatePaymentRequest {
   string provider = 14;
   // Installment term for abb/bob; ignored by epoint (which uses is_installment).
   int32 installment_months = 15;
+  // Epoint saved-card id; required when provider=saved_card (BF v3 SAVED_CARD, charged pre-priced).
+  string card_id = 16;
 }
 
 message CreatePaymentResponse {

@@ -70,7 +70,11 @@ class PricingCheckoutServiceV3RoutingTest {
     }
 
     private static CheckoutCreateRequestV3 req(String type, String provider, Integer months, Integer isInstallment) {
-        return new CheckoutCreateRequestV3(4L, 102L, false, isInstallment, BF_TOTAL, type, provider, months);
+        return new CheckoutCreateRequestV3(4L, 102L, false, isInstallment, BF_TOTAL, type, provider, months, null);
+    }
+
+    private static CheckoutCreateRequestV3 savedCardReq(String cardId) {
+        return new CheckoutCreateRequestV3(4L, 102L, false, null, BF_TOTAL, "SAVED_CARD", null, null, cardId);
     }
 
     private EpointPaymentRequest captured() {
@@ -151,6 +155,45 @@ class PricingCheckoutServiceV3RoutingTest {
         assertEquals("success", res.payment().status());
     }
 
+    @Test
+    void savedCardChargesBfAmountWithCardIdAndNoRedirectOnImmediateSuccess() {
+        when(paymentGrpcClient.initiatePayment(any())).thenReturn(
+                EpointResponse.builder().status("success").transaction("te001").redirect_url("").build());
+
+        CheckoutCreateResponseV2 res = service.createV3(1L, savedCardReq(" card-9 "));
+        EpointPaymentRequest sent = captured();
+        assertEquals("saved_card", res.payment().provider());
+        assertEquals("saved_card", sent.provider());
+        assertEquals("card-9", sent.cardId());
+        assertEquals(0, sent.is_installment());
+        assertEquals(BF_TOTAL.doubleValue(), sent.amount(), "must charge the BF total, not list price");
+        assertTrue(sent.order_id().startsWith("ord_"));
+        assertEquals(sent.order_id(), res.orderId());
+        assertTrue(sent.other_attr().get(0).toString().contains("campaignId:"));
+        assertNull(res.payment().paymentUrl());
+        assertNull(res.payment().paymentIntentClientSecret());
+        assertEquals("success", res.payment().status());
+    }
+
+    @Test
+    void savedCardSurfaces3dsRedirect() {
+        when(paymentGrpcClient.initiatePayment(any())).thenReturn(
+                EpointResponse.builder().status("new").redirect_url("https://epoint/3ds").build());
+
+        CheckoutCreateResponseV2 res = service.createV3(1L, savedCardReq("card-9"));
+        assertEquals("https://epoint/3ds", res.payment().paymentUrl());
+        assertEquals("new", res.payment().status());
+    }
+
+    @Test
+    void savedCardBankFailureAbortsOrder() {
+        when(paymentGrpcClient.initiatePayment(any())).thenReturn(
+                EpointResponse.builder().status("failed").message("declined").build());
+
+        assertThrows(RuntimeException.class, () -> service.createV3(1L, savedCardReq("card-9")));
+        verifyNoInteractions(orderRepository);
+    }
+
     /** Regression guard for the "never edit published endpoints" rule: v2 stays Epoint-only, no new gRPC fields. */
     @Test
     void v2CreateStaysEpointOnly() {
@@ -169,6 +212,7 @@ class PricingCheckoutServiceV3RoutingTest {
         assertThrows(BadRequestException.class, () -> service.createV3(1L, req("INSTALLMENT", null, 6, null)));
         assertThrows(BadRequestException.class, () -> service.createV3(1L, req("INSTALLMENT", "FOO", 6, null)));
         assertThrows(BadRequestException.class, () -> service.createV3(1L, req("SAVED_CARD", null, null, null)));
+        assertThrows(BadRequestException.class, () -> service.createV3(1L, savedCardReq("  ")));
         assertThrows(BadRequestException.class, () -> service.createV3(1L, req("BITCOIN", null, null, null)));
         verifyNoInteractions(paymentGrpcClient);
     }

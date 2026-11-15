@@ -110,6 +110,7 @@ public class PricingCheckoutService {
                     // null keeps the v2 gRPC request byte-identical to before; payment-backend defaults to epoint.
                     .provider(route.sendProvider() ? route.provider().wire : null)
                     .installmentMonths(route.months())
+                    .cardId(route.cardId())
                     .build());
         } catch (StatusRuntimeException e) {
             // Payment-backend rejects unsupported months / package refs with INVALID_ARGUMENT.
@@ -118,7 +119,7 @@ public class PricingCheckoutService {
             }
             throw e;
         }
-        if (response == null || !"success".equalsIgnoreCase(response.status())) {
+        if (response == null || !chargeAccepted(route, response)) {
             throw new RuntimeException("Payment initiation failed: " + (response != null ? response.message() : "Unknown error"));
         }
 
@@ -144,6 +145,13 @@ public class PricingCheckoutService {
             paymentInfo = CheckoutPaymentInfoDto.builder().provider(route.provider().wire)
                     .paymentIntentClientSecret(response.transaction()).paymentUrl(null)
                     .status(response.status()).build();
+        } else if (route.provider() == Provider.SAVED_CARD) {
+            // Saved card charges server-side: immediate success has no URL; a bank 3DS challenge returns
+            // redirect_url. Blank -> null so mobile can branch on paymentUrl == null, then poll by orderId.
+            String url = response.redirect_url() == null || response.redirect_url().isBlank()
+                    ? null : response.redirect_url();
+            paymentInfo = CheckoutPaymentInfoDto.builder().provider(route.provider().wire)
+                    .paymentUrl(url).status(response.status()).build();
         } else {
             paymentInfo = CheckoutPaymentInfoDto.builder().provider(route.provider().wire)
                     .paymentUrl(response.redirect_url()).status(response.status()).build();
@@ -152,21 +160,42 @@ public class PricingCheckoutService {
                 paymentInfo, pricing.campaignApplied(), pricing.campaignId());
     }
 
+    /**
+     * Every rail except SAVED_CARD only accepts a literal "success" at initiation (the user still has to pay in a
+     * redirect/wallet). A saved-card charge happens inside initiation, so besides "success" the bank may answer
+     * with a 3DS challenge (redirect_url / "new"); only explicit failures abort the order.
+     */
+    private static boolean chargeAccepted(Route route, EpointResponse response) {
+        if ("success".equalsIgnoreCase(response.status())) {
+            return true;
+        }
+        if (route.provider() != Provider.SAVED_CARD || response.status() == null) {
+            return false;
+        }
+        String s = response.status().toLowerCase();
+        return !(s.equals("error") || s.equals("failed") || s.equals("server_error") || s.equals("declined"));
+    }
+
     private enum Provider {
-        EPOINT("epoint"), ABB("abb"), BOB("bob"), APPLE_PAY("apple_pay"), GOOGLE_PAY("google_pay");
+        EPOINT("epoint"), ABB("abb"), BOB("bob"), APPLE_PAY("apple_pay"), GOOGLE_PAY("google_pay"),
+        SAVED_CARD("saved_card");
         final String wire;
         Provider(String wire) { this.wire = wire; }
     }
 
     /** sendProvider=false only for legacy v2, which never set a provider on the gRPC request. */
-    private record Route(Provider provider, Integer months, boolean sendProvider) {}
+    private record Route(Provider provider, Integer months, boolean sendProvider, String cardId) {
+        Route(Provider provider, Integer months, boolean sendProvider) {
+            this(provider, months, sendProvider, null);
+        }
+    }
 
     private static final Route V2_EPOINT_ROUTE = new Route(Provider.EPOINT, null, false);
 
     /**
      * Maps paymentType/installmentProvider to a payment rail. CARD/omitted stays on Epoint; APPLE_PAY / GOOGLE_PAY are
-     * native Epoint token flows. SAVED_CARD is not wired on the BF path yet and fails loudly instead of
-     * silently falling back to a card charge the user did not choose.
+     * native Epoint token flows. SAVED_CARD charges the user's Epoint card list entry with the BF total; a
+     * missing cardId fails loudly instead of silently falling back to a card charge the user did not choose.
      */
     private static Route resolveRoute(CheckoutCreateRequestV3 req) {
         String type = req.paymentType() == null || req.paymentType().isBlank()
@@ -190,7 +219,10 @@ public class PricingCheckoutService {
             case "GOOGLE_PAY":
                 return new Route(Provider.GOOGLE_PAY, null, true);
             case "SAVED_CARD":
-                throw new BadRequestException("error.payment_type_not_supported_for_black_friday");
+                if (req.cardId() == null || req.cardId().isBlank()) {
+                    throw new BadRequestException("error.card_id_required");
+                }
+                return new Route(Provider.SAVED_CARD, null, true, req.cardId().trim());
             default:
                 throw new BadRequestException("error.payment_type_invalid");
         }
