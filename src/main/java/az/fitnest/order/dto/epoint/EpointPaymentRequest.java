@@ -16,5 +16,9 @@ public record EpointPaymentRequest(
     Boolean prePriced,
     Long userId,
     /** Coin units already subtracted from amount; payment-backend spends them on SUCCESS. */
-    Double coinsUsed
+    Double coinsUsed,
+    /** epoint | abb | bob; null/empty means epoint (payment-backend default). */
+    String provider,
+    /** TamKart/BolKart term in months; ignored by Epoint. */
+    Integer installmentMonths
 ) {}
