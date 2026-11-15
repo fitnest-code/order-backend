@@ -139,11 +139,12 @@ public class PricingCheckoutService {
 
         CheckoutPaymentInfoDto paymentInfo;
         if (route.provider() == Provider.APPLE_PAY || route.provider() == Provider.GOOGLE_PAY) {
-            // Native wallets have no web redirect; mobile needs the Epoint paymentId (gRPC transaction_id)
-            // to call POST /api/v2/payment/{apple-pay|google-pay}/submit. Calling the legacy */create
-            // endpoints instead would re-quote at list price and lose the BF discount.
+            // Both wallets run on a pre-priced Epoint widget (payment-backend returns the widget URL as
+            // redirect_url): iOS opens it in a WKWebView, so paymentUrl is required. Native create/submit
+            // is not used for BF because the legacy */create endpoints re-quote at list price and lose the
+            // discount. Transaction id stays in paymentIntentClientSecret only as a debugging aid.
             paymentInfo = CheckoutPaymentInfoDto.builder().provider(route.provider().wire)
-                    .paymentIntentClientSecret(response.transaction()).paymentUrl(null)
+                    .paymentIntentClientSecret(response.transaction()).paymentUrl(response.redirect_url())
                     .status(response.status()).build();
         } else if (route.provider() == Provider.SAVED_CARD) {
             // Saved card charges server-side: immediate success has no URL; a bank 3DS challenge returns

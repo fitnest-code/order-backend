@@ -118,9 +118,10 @@ class PricingCheckoutServiceV3RoutingTest {
     }
 
     @Test
-    void applePayRoutesNativelyWithEpointPaymentIdAndBfAmount() {
+    void applePayReturnsEpointWidgetUrlAndBfAmount() {
         when(paymentGrpcClient.initiatePayment(any())).thenReturn(
-                EpointResponse.builder().status("success").transaction("epoint-pay-123").build());
+                EpointResponse.builder().status("success").transaction("epoint-pay-123")
+                        .redirect_url("https://epoint.az/widget/123456").build());
 
         CheckoutCreateResponseV2 res = service.createV3(1L, req("apple_pay", null, null, 1));
         EpointPaymentRequest sent = captured();
@@ -132,14 +133,16 @@ class PricingCheckoutServiceV3RoutingTest {
         assertEquals(sent.order_id(), res.orderId());
         assertTrue(sent.other_attr().get(0).toString().contains("campaignId:"));
         assertEquals("epoint-pay-123", res.payment().paymentIntentClientSecret());
-        assertNull(res.payment().paymentUrl());
+        assertNotNull(res.payment().paymentUrl(), "iOS opens the Epoint widget in a WKWebView");
+        assertEquals("https://epoint.az/widget/123456", res.payment().paymentUrl());
         assertEquals("success", res.payment().status());
     }
 
     @Test
-    void googlePayRoutesNativelyWithEpointPaymentIdAndBfAmount() {
+    void googlePayReturnsEpointWidgetUrlAndBfAmount() {
         when(paymentGrpcClient.initiatePayment(any())).thenReturn(
-                EpointResponse.builder().status("success").transaction("epoint-pay-456").build());
+                EpointResponse.builder().status("success").transaction("epoint-pay-456")
+                        .redirect_url("https://epoint.az/widget/654321").build());
 
         CheckoutCreateResponseV2 res = service.createV3(1L, req("google_pay", null, null, 1));
         EpointPaymentRequest sent = captured();
@@ -151,7 +154,8 @@ class PricingCheckoutServiceV3RoutingTest {
         assertEquals(sent.order_id(), res.orderId());
         assertTrue(sent.other_attr().get(0).toString().contains("campaignId:"));
         assertEquals("epoint-pay-456", res.payment().paymentIntentClientSecret());
-        assertNull(res.payment().paymentUrl());
+        assertNotNull(res.payment().paymentUrl());
+        assertEquals("https://epoint.az/widget/654321", res.payment().paymentUrl());
         assertEquals("success", res.payment().status());
     }
 
