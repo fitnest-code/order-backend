@@ -39,6 +39,13 @@ public class PaymentGrpcClient {
                 .setRefund(request.refund() != null ? request.refund() : 0)
                 .setPrePriced(request.prePriced() != null && request.prePriced());
 
+        if (request.provider() != null && !request.provider().isBlank()) {
+            grpcRequestBuilder.setProvider(request.provider());
+        }
+        if (request.installmentMonths() != null && request.installmentMonths() > 0) {
+            grpcRequestBuilder.setInstallmentMonths(request.installmentMonths());
+        }
+
         if (request.userId() != null && request.userId() > 0) {
             grpcRequestBuilder.setUserId(request.userId());
         }

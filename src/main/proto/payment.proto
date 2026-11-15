@@ -65,6 +65,10 @@ message CreatePaymentRequest {
   int64 user_id = 12;
   // FitNest Coin units already applied into amount when pre_priced (spent on SUCCESS).
   double coins_used = 13;
+  // Payment rail: epoint|abb|bob (empty = epoint). abb=TamKart, bob=BolKart installments.
+  string provider = 14;
+  // Installment term for abb/bob; ignored by epoint (which uses is_installment).
+  int32 installment_months = 15;
 }
 
 message CreatePaymentResponse {
