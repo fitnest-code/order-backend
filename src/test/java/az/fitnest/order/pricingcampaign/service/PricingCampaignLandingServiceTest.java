@@ -134,6 +134,20 @@ class PricingCampaignLandingServiceTest {
     }
 
     @Test
+    void missingDbCopyUsesBuiltInAzText() {
+        when(packageRepository.findByIsActiveTrueOrdered()).thenReturn(List.of(pkg(1L, "Gold", opt(21L, 3, "300"))));
+        when(landingRepository.findByCampaignIdAndLocale(eq(campaign.getId()), anyString()))
+                .thenReturn(Optional.empty());
+
+        CampaignLandingDto dto = service.findActiveLanding(null, "AZ").orElseThrow();
+
+        assertEquals("Qara Cümə", dto.header().title());
+        assertEquals("Planını seç", dto.cta().title());
+        assertEquals(5, dto.terms().size());
+        assertEquals("3 aylıq al - 20 % endirim", dto.options().get(0).label());
+    }
+
+    @Test
     void usedUserStillGetsPayloadWithFlag() {
         when(packageRepository.findByIsActiveTrueOrdered()).thenReturn(List.of(pkg(1L, "Gold", opt(21L, 3, "300"))));
         when(landingRepository.findByCampaignIdAndLocale(eq(campaign.getId()), anyString()))

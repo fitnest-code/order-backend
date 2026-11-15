@@ -30,6 +30,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Builds the ready-to-bind Black Friday intro screen so mobile does not stitch /active + v4 packages
@@ -62,24 +63,28 @@ public class PricingCampaignLandingService {
 
     private CampaignLandingDto build(PricingCampaign c, Long userId, String locale) {
         ActivePricingCampaignDto state = campaignService.describe(c, userId);
-        Optional<PricingCampaignLandingI18n> copy = findCopy(c, locale);
-        String resolvedLocale = copy.map(PricingCampaignLandingI18n::getLocale).orElse(locale);
+        // DB rows are preferred (ops-editable). If Flyway/seed never ran — DEV once had an empty
+        // Hibernate-created table — fall back to built-in design copy so mobile never gets header:{}.
+        PricingCampaignLandingI18n copy = findCopy(c, locale).orElseGet(() -> {
+            log.warn("pricing_campaign_landing_i18n missing for campaign={} locale={}; using built-in copy",
+                    c.getCode(), locale);
+            return builtInCopy(c.getId(), locale);
+        });
+        String resolvedLocale = copy.getLocale();
         Map<String, String> vars = Map.of(
                 "maxPercent", String.valueOf(c.getMaxPercent()),
                 "startsAt", formatDate(c.getStartsAt()),
                 "endsAt", formatDate(c.getEndsAt()),
                 "endsAtTime", c.getEndsAt().atZoneSameInstant(BAKU).format(TIME));
 
-        Header header = copy.map(i -> new Header(render(i.getTitle(), vars), render(i.getHeadline(), vars),
-                render(i.getSubtitle(), vars))).orElse(new Header(null, null, null));
-        List<String> terms = copy.map(i -> parseTerms(i.getTermsJson()).stream()
-                .map(t -> render(t, vars)).toList()).orElse(List.of());
-        Cta cta = new Cta(copy.map(i -> render(i.getCtaTitle(), vars)).orElse(null));
+        Header header = new Header(render(copy.getTitle(), vars), render(copy.getHeadline(), vars),
+                render(copy.getSubtitle(), vars));
+        List<String> terms = parseTerms(copy.getTermsJson()).stream().map(t -> render(t, vars)).toList();
+        Cta cta = new Cta(render(copy.getCtaTitle(), vars));
 
         return new CampaignLandingDto(c.getId(), c.getCode(), resolvedLocale, c.getStartsAt(), c.getEndsAt(),
                 c.getMaxPercent(), state.eligible(), state.usedByUser(), header,
-                buildOptions(c, copy.map(PricingCampaignLandingI18n::getOptionLabelTemplate).orElse(null),
-                        vars, locale),
+                buildOptions(c, copy.getOptionLabelTemplate(), vars, locale),
                 terms, cta);
     }
 
@@ -88,6 +93,54 @@ public class PricingCampaignLandingService {
         Optional<PricingCampaignLandingI18n> exact = landingRepository.findByCampaignIdAndLocale(c.getId(), locale);
         if (exact.isPresent() || FALLBACK_LOCALE.equals(locale)) return exact;
         return landingRepository.findByCampaignIdAndLocale(c.getId(), FALLBACK_LOCALE);
+    }
+
+    /** Design-aligned defaults when the i18n table has no row (seed skipped / Hibernate-only schema). */
+    static PricingCampaignLandingI18n builtInCopy(UUID campaignId, String locale) {
+        String loc = normalizeLocale(locale);
+        PricingCampaignLandingI18n i = new PricingCampaignLandingI18n();
+        i.setCampaignId(campaignId);
+        i.setLocale(loc);
+        switch (loc) {
+            case "en" -> {
+                i.setTitle("Black Friday");
+                i.setHeadline("Up to {maxPercent}% off!");
+                i.setSubtitle("Get 3, 6 and 12 month memberships at the Black Friday price.");
+                i.setOptionLabelTemplate("Get {months} months - {percent} % off");
+                i.setCtaTitle("Choose your plan");
+                i.setTermsJson("[\"Campaign is valid {startsAt}–{endsAt} ({endsAt} {endsAtTime}, Baku time).\","
+                        + "\"1-month subscriptions are not included.\","
+                        + "\"Each user can use the offer once.\","
+                        + "\"FitCoin is applied to the discounted amount.\","
+                        + "\"The discount is applied automatically at payment.\"]");
+            }
+            case "ru" -> {
+                i.setTitle("Чёрная пятница");
+                i.setHeadline("Скидки до {maxPercent}%!");
+                i.setSubtitle("Приобретайте абонементы на 3, 6 и 12 месяцев по цене Чёрной пятницы.");
+                i.setOptionLabelTemplate("Купить на {months} мес. - скидка {percent} %");
+                i.setCtaTitle("Выбрать план");
+                i.setTermsJson("[\"Акция действует {startsAt}–{endsAt} ({endsAt} {endsAtTime}, время Баку).\","
+                        + "\"Месячная подписка в акцию не входит.\","
+                        + "\"Каждый пользователь может воспользоваться один раз.\","
+                        + "\"FitCoin применяется к сумме со скидкой.\","
+                        + "\"Скидка применяется автоматически при оплате.\"]");
+            }
+            default -> {
+                i.setLocale(FALLBACK_LOCALE);
+                i.setTitle("Qara Cümə");
+                i.setHeadline("{maxPercent}%-dək endirim!");
+                i.setSubtitle("3, 6 və 12 aylıq abunəlikləri Qara Cümə qiyməti ilə al.");
+                i.setOptionLabelTemplate("{months} aylıq al - {percent} % endirim");
+                i.setCtaTitle("Planını seç");
+                i.setTermsJson("[\"Kampaniya {startsAt}–{endsAt} ({endsAt} {endsAtTime}, Bakı vaxtı) keçərlidir.\","
+                        + "\"1 aylıq abunəlik kampaniyaya daxil deyil.\","
+                        + "\"Hər istifadəçi 1 dəfə yararlana bilər.\","
+                        + "\"FitCoin endirimli məbləğə tətbiq olunur.\","
+                        + "\"Endirim ödəniş zamanı avtomatik tətbiq olunur.\"]");
+            }
+        }
+        return i;
     }
 
     private List<Option> buildOptions(PricingCampaign c, String labelTemplate, Map<String, String> vars,
