@@ -52,6 +52,15 @@ public class PricingCampaignService {
         return findActiveCampaign().map(c -> toDto(c, userId, hasActiveOrFrozenSub(userId)));
     }
 
+    /**
+     * Same per-user DTO as /active for an already-resolved campaign; lets the landing screen reuse
+     * eligible/usedByUser without resolving the campaign twice.
+     */
+    @Transactional(readOnly = true)
+    public ActivePricingCampaignDto describe(PricingCampaign campaign, Long userId) {
+        return toDto(campaign, userId, hasActiveOrFrozenSub(userId));
+    }
+
     /** Campaign whose discount may actually be applied to this user right now (active, eligible, not yet used). */
     @Transactional(readOnly = true)
     public Optional<PricingCampaign> applicableCampaign(Long userId) {
