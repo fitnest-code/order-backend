@@ -46,6 +46,10 @@ public class PaymentGrpcClient {
             grpcRequestBuilder.setInstallmentMonths(request.installmentMonths());
         }
 
+        if (request.cardId() != null && !request.cardId().isBlank()) {
+            grpcRequestBuilder.setCardId(request.cardId());
+        }
+
         if (request.userId() != null && request.userId() > 0) {
             grpcRequestBuilder.setUserId(request.userId());
         }
