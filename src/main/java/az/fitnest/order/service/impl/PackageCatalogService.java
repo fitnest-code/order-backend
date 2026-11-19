@@ -15,6 +15,9 @@ import az.fitnest.order.exception.ResourceNotFoundException;
 import az.fitnest.order.model.entity.PackageOption;
 import az.fitnest.order.model.entity.PlanBenefit;
 import az.fitnest.order.model.entity.SubscriptionPackage;
+import az.fitnest.order.pricingcampaign.dto.PricingDto;
+import az.fitnest.order.pricingcampaign.entity.PricingCampaign;
+import az.fitnest.order.pricingcampaign.service.PricingCampaignService;
 import az.fitnest.order.repository.SubscriptionPackageRepository;
 import az.fitnest.order.service.CampaignEligibilityService;
 import az.fitnest.order.service.TranslationService;
@@ -47,6 +50,34 @@ public class PackageCatalogService {
     private final TranslationService translationService;
     private final CatalogServiceGrpcClient catalogServiceGrpcClient;
     private final az.fitnest.order.service.CampaignEligibilityService campaignEligibilityService;
+    // Black Friday lives in the v4/checkout pricing stack; v1 /subscription-packages (used by mobile gym
+    // detail) must show the same discounted price the user will actually be charged.
+    private final PricingCampaignService pricingCampaignService;
+
+    /** Legacy price fields plus the display extras derived from them, shared by option and package DTOs. */
+    private record PriceView(PackagePriceDto price, String badge, BigDecimal strikeThroughTotal,
+                             BigDecimal savingsAmount, BigDecimal monthlyEquivalent, boolean campaignApplied) {}
+
+    /**
+     * Resolved once per catalog call and passed to the mappers (avoids a campaign/eligibility query per option).
+     * Anonymous callers get null on purpose: eligibility is per user and the anonymous response is cached
+     * ("subscription-packages-public") without campaign state in its key, so it must stay campaign-free.
+     */
+    private PricingCampaign resolveCampaign() {
+        Long userId = currentUserIdOrNull();
+        if (userId == null) {
+            return null;
+        }
+        return pricingCampaignService.applicableCampaign(userId).orElse(null);
+    }
+
+    private static Long currentUserIdOrNull() {
+        try {
+            return UserContext.getCurrentUserId();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
 
     @Transactional(readOnly = true)
     public PackageListResponse getAllPackages(boolean activeOnly) {
@@ -54,13 +85,14 @@ public class PackageCatalogService {
                 packageRepository.findByIsActiveTrueOrdered() :
                 packageRepository.findAllOrdered();
 
+        PricingCampaign campaign = resolveCampaign();
         List<SubscriptionPackageDto> dtos = new ArrayList<>();
         for (SubscriptionPackage pkg : packages) {
             if (pkg.getOptions() == null || pkg.getOptions().isEmpty()) {
-                dtos.add(mapToDto(pkg, null));
+                dtos.add(mapToDto(pkg, null, campaign));
             } else {
                 for (PackageOption option : pkg.getOptions()) {
-                    dtos.add(mapToDto(pkg, option));
+                    dtos.add(mapToDto(pkg, option, campaign));
                 }
             }
         }
@@ -74,7 +106,9 @@ public class PackageCatalogService {
     @Cacheable(
             value = "subscription-packages-public",
             key = "{#order, T(az.fitnest.order.util.UserContext).getCurrentLanguage(), T(java.time.LocalDate).now(T(java.time.ZoneId).of('Asia/Baku'))}",
-            unless = "T(az.fitnest.order.util.UserContext).getCurrentUserId() != null"
+            // condition (not unless): `unless` only skips the PUT, so an authenticated user could still be
+            // served an anonymous cached entry and miss their Black Friday prices.
+            condition = "T(az.fitnest.order.util.UserContext).getCurrentUserId() == null"
     )
     public PackagePlanListResponse getUniquePlans(String order) {
         List<SubscriptionPackage> packages = packageRepository.findAllOrdered();
@@ -84,8 +118,9 @@ public class PackageCatalogService {
             Collections.reverse(packages);
         }
 
+        PricingCampaign campaign = resolveCampaign();
         List<SubscriptionPackageResponse> dtos = packages.stream()
-                .map(p -> mapToPackageResponse(p, order))
+                .map(p -> mapToPackageResponse(p, order, campaign))
                 .collect(Collectors.toList());
 
         return PackagePlanListResponse.builder()
@@ -130,15 +165,16 @@ public class PackageCatalogService {
     public SubscriptionPackageResponse getPlanById(Long packageId) {
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
-        return mapToPackageResponse(pkg, "asc");
+        return mapToPackageResponse(pkg, "asc", resolveCampaign());
     }
 
     @Transactional(readOnly = true)
     public List<PackageOptionDto> getOptionsByPlanId(Long packageId) {
         SubscriptionPackage pkg = packageRepository.findById(packageId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found"));
+        PricingCampaign campaign = resolveCampaign();
         return pkg.getOptions().stream()
-                .map(o -> mapToOptionDto(pkg, o))
+                .map(o -> mapToOptionDto(pkg, o, campaign))
                 .collect(Collectors.toList());
     }
 
@@ -152,22 +188,23 @@ public class PackageCatalogService {
                 .findFirst()
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.option_not_found"));
 
-        return mapToDto(pkg, option);
+        return mapToDto(pkg, option, resolveCampaign());
     }
 
     @Transactional(readOnly = true)
     public SubscriptionPackageDto getPackageByOptionId(Long optionId) {
+        PricingCampaign campaign = resolveCampaign();
         for (SubscriptionPackage pkg : packageRepository.findAllOrdered()) {
             for (PackageOption option : pkg.getOptions()) {
                 if (option.getId().equals(optionId)) {
-                    return mapToDto(pkg, option);
+                    return mapToDto(pkg, option, campaign);
                 }
             }
         }
         throw new az.fitnest.order.exception.ResourceNotFoundException("error.plan_not_found");
     }
 
-    private SubscriptionPackageResponse mapToPackageResponse(SubscriptionPackage pkg, String order) {
+    private SubscriptionPackageResponse mapToPackageResponse(SubscriptionPackage pkg, String order, PricingCampaign campaign) {
         String lang = UserContext.getCurrentLanguage();
         String localizedName = translationService.getTranslatedValue("SUBSCRIPTIONPACKAGE", pkg.getId().toString(), "name", lang);
         if (localizedName == null || localizedName.isEmpty()) localizedName = pkg.getName();
@@ -175,7 +212,7 @@ public class PackageCatalogService {
         boolean isDesc = "desc".equalsIgnoreCase(order);
 
         List<PackageOptionDto> options = pkg.getOptions().stream()
-                .map(o -> mapToOptionDto(pkg, o))
+                .map(o -> mapToOptionDto(pkg, o, campaign))
                 .sorted((o1, o2) -> {
                     int cmp = Integer.compare(o1.durationMonths(), o2.durationMonths());
                     return isDesc ? -cmp : cmp;
@@ -190,20 +227,58 @@ public class PackageCatalogService {
                 .build();
     }
 
-    private PackageOptionDto mapToOptionDto(SubscriptionPackage pkg, PackageOption option) {
-        String lang = UserContext.getCurrentLanguage();
+    /**
+     * Price math for one option. With an applicable Black Friday campaign the price comes from
+     * {@link PricingCampaignService#computePricing} (list = priceStandard, final = campaign price) and the
+     * legacy {@code priceDiscounted} is ignored, same rule as v4 and checkout; otherwise legacy behavior.
+     */
+    private PriceView priceView(SubscriptionPackage pkg, PackageOption option, PricingCampaign campaign) {
         BigDecimal base = option.getPriceStandard();
+        Integer months = option.getDurationMonths();
+
+        if (campaign != null && base != null && months != null && months > 0) {
+            PricingDto pricing = pricingCampaignService.computePricing(base, months, campaign);
+            if (pricing.campaignApplied()) {
+                BigDecimal fin = pricing.finalPrice();
+                return new PriceView(
+                        PackagePriceDto.builder()
+                                .base(pricing.listPrice())
+                                .discount(fin)
+                                .effective(fin)
+                                .currency(pkg.getCurrency())
+                                .build(),
+                        "discount",
+                        pricing.listPrice(),
+                        pricing.savedAmount(),
+                        pricing.monthlyPrice(),
+                        true);
+            }
+        }
+
         BigDecimal discount = option.getPriceDiscounted();
         BigDecimal effective = discount != null ? discount : base;
+        boolean discounted = discount != null && base != null && discount.compareTo(base) < 0;
+        BigDecimal savings = (discounted && base.subtract(discount).signum() > 0) ? base.subtract(discount) : null;
+        BigDecimal monthly = (effective != null && months != null && months > 0)
+                ? effective.divide(BigDecimal.valueOf(months), 2, java.math.RoundingMode.HALF_UP)
+                : null;
+        return new PriceView(
+                PackagePriceDto.builder()
+                        .base(base)
+                        .discount(discount)
+                        .effective(effective)
+                        .currency(pkg.getCurrency())
+                        .build(),
+                discounted ? "discount" : null,
+                discounted ? base : null,
+                savings,
+                monthly,
+                false);
+    }
 
-        PackagePriceDto priceDto = PackagePriceDto.builder()
-                .base(base)
-                .discount(discount)
-                .effective(effective)
-                .currency(pkg.getCurrency())
-                .build();
-
-        String badge = (discount != null && base != null && discount.compareTo(base) < 0) ? "discount" : null;
+    private PackageOptionDto mapToOptionDto(SubscriptionPackage pkg, PackageOption option, PricingCampaign campaign) {
+        String lang = UserContext.getCurrentLanguage();
+        PriceView view = priceView(pkg, option, campaign);
 
         List<PackageBenefitDto> benefits = pkg.getBenefits() != null ?
                 pkg.getBenefits().stream()
@@ -217,26 +292,17 @@ public class PackageCatalogService {
                         .collect(Collectors.toList()) :
                 List.of();
 
-        Long userId = null;
-        try {
-            userId = UserContext.getCurrentUserId();
-        } catch (Exception ignored) {}
+        Long userId = currentUserIdOrNull();
 
         az.fitnest.order.dto.BonusDecision decision = campaignEligibilityService.resolve(
                 userId, pkg.getId(), option.getDurationMonths(), az.fitnest.order.dto.PurchaseKind.NEW_PURCHASE, null);
-
-        BigDecimal strikeThroughTotal = (discount != null && base != null && discount.compareTo(base) < 0) ? base : null;
-        BigDecimal savingsAmount = (discount != null && base != null && base.subtract(discount).compareTo(BigDecimal.ZERO) > 0) ? base.subtract(discount) : null;
-        BigDecimal monthlyEquivalent = (effective != null && option.getDurationMonths() != null && option.getDurationMonths() > 0)
-                ? effective.divide(BigDecimal.valueOf(option.getDurationMonths()), 2, java.math.RoundingMode.HALF_UP)
-                : null;
 
         return PackageOptionDto.builder()
                 .optionId(option.getId())
                 .durationMonths(option.getDurationMonths())
                 .durationLabel(getDurationLabel(option.getDurationMonths(), lang))
-                .price(priceDto)
-                .badge(decision.isApplied() ? "campaign" : badge)
+                .price(view.price())
+                .badge(decision.isApplied() ? "campaign" : view.badge())
                 .visitLimit(option.getEntryLimit() != null ? option.getEntryLimit() : (pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0))
                 .freezeDays(0)
                 .benefits(benefits)
@@ -244,13 +310,13 @@ public class PackageCatalogService {
                 .totalMonths(decision.getTotalMonths())
                 .campaignId(decision.getCampaignId())
                 .campaignLabel(decision.getCampaignLabel())
-                .strikeThroughTotal(strikeThroughTotal)
-                .savingsAmount(savingsAmount)
-                .monthlyEquivalent(monthlyEquivalent)
+                .strikeThroughTotal(view.strikeThroughTotal())
+                .savingsAmount(view.savingsAmount())
+                .monthlyEquivalent(view.monthlyEquivalent())
                 .build();
     }
 
-    private SubscriptionPackageDto mapToDto(SubscriptionPackage pkg, PackageOption option) {
+    private SubscriptionPackageDto mapToDto(SubscriptionPackage pkg, PackageOption option, PricingCampaign campaign) {
         String lang = UserContext.getCurrentLanguage();
         String localizedPkgName = translationService.getTranslatedValue("SUBSCRIPTIONPACKAGE", pkg.getId().toString(), "name", lang);
         if (localizedPkgName == null || localizedPkgName.isEmpty()) localizedPkgName = pkg.getName();
@@ -268,20 +334,9 @@ public class PackageCatalogService {
             optionId = option.getId();
             durationMonths = option.getDurationMonths();
             durationLabel = getDurationLabel(durationMonths, lang);
-            BigDecimal base = option.getPriceStandard();
-            BigDecimal discount = option.getPriceDiscounted();
-            BigDecimal effective = discount != null ? discount : base;
-
-            priceDto = PackagePriceDto.builder()
-                    .base(base)
-                    .discount(discount)
-                    .effective(effective)
-                    .currency(pkg.getCurrency())
-                    .build();
-
-            if (discount != null && base != null && discount.compareTo(base) < 0) {
-                badge = "discount";
-            }
+            PriceView view = priceView(pkg, option, campaign);
+            priceDto = view.price();
+            badge = view.badge();
 
             visitLimit = option.getEntryLimit() != null ? option.getEntryLimit() : (pkg.getEntryLimit() != null ? pkg.getEntryLimit() : 0);
             freezeDays = 0;
