@@ -68,6 +68,16 @@ public class PricingCheckoutService {
                 req.expectedFinalAmount(), route);
     }
 
+    /**
+     * v4: v3 rails plus Kapital Bank (card + Taksit). Kept as a new method so v3 contract stays frozen.
+     */
+    @Transactional
+    public CheckoutCreateResponseV2 createV4(Long userId, CheckoutCreateRequestV4 req) {
+        Route route = resolveRouteV4(req);
+        return createInternal(userId, req.packageId(), req.optionId(), req.useFitCoin(), req.is_installment(),
+                req.expectedFinalAmount(), route);
+    }
+
     private CheckoutCreateResponseV2 createInternal(Long userId, Long packageId, Long optionId, Boolean useFitCoin,
                                                     Integer isInstallment, BigDecimal expectedFinalAmount, Route route) {
         Quote q = quote(userId, packageId, optionId, Boolean.TRUE.equals(useFitCoin));
@@ -178,8 +188,8 @@ public class PricingCheckoutService {
     }
 
     private enum Provider {
-        EPOINT("epoint"), ABB("abb"), BOB("bob"), APPLE_PAY("apple_pay"), GOOGLE_PAY("google_pay"),
-        SAVED_CARD("saved_card");
+        EPOINT("epoint"), ABB("abb"), BOB("bob"), KAPITAL("kapital"),
+        APPLE_PAY("apple_pay"), GOOGLE_PAY("google_pay"), SAVED_CARD("saved_card");
         final String wire;
         Provider(String wire) { this.wire = wire; }
     }
@@ -213,6 +223,44 @@ public class PricingCheckoutService {
                 return switch (p) {
                     case "TAMKART" -> new Route(Provider.ABB, months, true);
                     case "BOLKART" -> new Route(Provider.BOB, months, true);
+                    default -> throw new BadRequestException("error.installment_provider_invalid");
+                };
+            case "APPLE_PAY":
+                return new Route(Provider.APPLE_PAY, null, true);
+            case "GOOGLE_PAY":
+                return new Route(Provider.GOOGLE_PAY, null, true);
+            case "SAVED_CARD":
+                if (req.cardId() == null || req.cardId().isBlank()) {
+                    throw new BadRequestException("error.card_id_required");
+                }
+                return new Route(Provider.SAVED_CARD, null, true, req.cardId().trim());
+            default:
+                throw new BadRequestException("error.payment_type_invalid");
+        }
+    }
+
+    /**
+     * v4 rails: everything in {@link #resolveRoute} plus Kapital Bank.
+     * paymentType=KAPITAL → card HPP; INSTALLMENT + installmentProvider=KAPITAL → Taksit (3/6/12).
+     */
+    private static Route resolveRouteV4(CheckoutCreateRequestV4 req) {
+        String type = req.paymentType() == null || req.paymentType().isBlank()
+                ? "CARD" : req.paymentType().trim().toUpperCase();
+        switch (type) {
+            case "CARD":
+                return new Route(Provider.EPOINT, null, true);
+            case "KAPITAL":
+                return new Route(Provider.KAPITAL, null, true);
+            case "INSTALLMENT":
+                String p = req.installmentProvider() == null ? "" : req.installmentProvider().trim().toUpperCase();
+                Integer months = req.installmentMonths();
+                if (months == null || months <= 0) {
+                    throw new BadRequestException("error.installment_months_required");
+                }
+                return switch (p) {
+                    case "TAMKART" -> new Route(Provider.ABB, months, true);
+                    case "BOLKART" -> new Route(Provider.BOB, months, true);
+                    case "KAPITAL" -> new Route(Provider.KAPITAL, months, true);
                     default -> throw new BadRequestException("error.installment_provider_invalid");
                 };
             case "APPLE_PAY":
