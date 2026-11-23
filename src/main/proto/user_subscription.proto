@@ -92,6 +92,9 @@ message AssignSubscriptionToUserRequest {
   int64 plan_id = 2;
   int64 option_id = 3;
   bool auto_payment_enabled = 4;
+  string purchase_payment_provider = 5;
+  string purchase_payment_order_id = 6;
+  int32 purchase_bnpl_term = 7; // 0 = unset
 }
 
 message AssignSubscriptionToUserResponse {
