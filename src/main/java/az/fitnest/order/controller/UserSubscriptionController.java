@@ -3,6 +3,7 @@ package az.fitnest.order.controller;
 import az.fitnest.order.dto.ActiveSubscriptionResponse;
 import az.fitnest.order.dto.ActiveSubscriptionResponseV2;
 import az.fitnest.order.dto.ActiveSubscriptionResponseV3;
+import az.fitnest.order.dto.ActiveSubscriptionResponseV4;
 import az.fitnest.order.service.impl.UserSubscriptionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -60,6 +61,19 @@ public class UserSubscriptionController {
     public ResponseEntity<ActiveSubscriptionResponseV3> getActiveSubscriptionV3() {
         Long userId = az.fitnest.order.util.UserContext.getCurrentUserId();
         return ResponseEntity.ok(subscriptionService.getActiveSubscriptionV3(userId));
+    }
+
+    @Operation(summary = "Aktiv abunəliyi əldə edin (v4)",
+            description = "V3 cavabı + satınalma ödəniş provayderi, BNPL sifarişi və avtomatik yenilənmə göstəricisi.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Aktiv abunəlik əldə edildi",
+                    content = @Content(schema = @Schema(implementation = ActiveSubscriptionResponseV4.class))),
+            @ApiResponse(responseCode = "401", description = "İcazə verilmədi")
+    })
+    @GetMapping("/api/v4/me/subscriptions/active")
+    public ResponseEntity<ActiveSubscriptionResponseV4> getActiveSubscriptionV4() {
+        Long userId = az.fitnest.order.util.UserContext.getCurrentUserId();
+        return ResponseEntity.ok(subscriptionService.getActiveSubscriptionV4(userId));
     }
 
     @Operation(summary = "Abunəliyi dondur",

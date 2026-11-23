@@ -8,6 +8,9 @@ import java.time.LocalDateTime;
 @Builder
 @Schema(description = "İstifadəçinin cari abunəlik detalları (Admin üçün)")
 public record AdminUserSubscriptionResponse(
+    @Schema(description = "Abunəlik ID-si", example = "250")
+    Long subscriptionId,
+
     @Schema(description = "Paket ID-si", example = "1")
     Long packageId,
 
@@ -36,5 +39,35 @@ public record AdminUserSubscriptionResponse(
     Integer totalEntryLimit,
 
     @Schema(description = "İstifadəçinin qalan giriş limiti", example = "10")
-    Integer userRemainingLimit
+    Integer userRemainingLimit,
+
+    @Schema(description = "Abunəlik statusu", example = "ACTIVE")
+    String status,
+
+    @Schema(description = "Hazırda dondurulubmu")
+    Boolean currentlyFrozen,
+
+    @Schema(description = "Aktiv freeze ID (dondurulubsa)")
+    Long activeFreezeId,
+
+    @Schema(description = "Dondurulma başlama tarixi")
+    LocalDateTime frozenAt,
+
+    @Schema(description = "Planlaşdırılmış açılma tarixi")
+    LocalDateTime unfreezesAt,
+
+    @Schema(description = "Ümumi freeze gün hüququ")
+    Integer totalFreezeDays,
+
+    @Schema(description = "İstifadə olunmuş freeze günləri")
+    Integer consumedFreezeDays,
+
+    @Schema(description = "Rezerv olunmuş freeze günləri")
+    Integer reservedFreezeDays,
+
+    @Schema(description = "Qalan (seçilə bilən) freeze günləri")
+    Integer availableFreezeDays,
+
+    @Schema(description = "Yeni freeze başlatmaq olar mı")
+    Boolean canFreeze
 ) {}

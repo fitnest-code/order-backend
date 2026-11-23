@@ -99,4 +99,47 @@ public class SubscriptionAdminController {
             @Valid @RequestBody az.fitnest.order.dto.UpdateEntryLimitRequest request) {
         return ResponseEntity.ok(ApiResponse.success(userSubscriptionService.updateEntryLimit(userId, request)));
     }
+
+    @Operation(
+            summary = "İstifadəçi abunəliyini dondur",
+            description = "Admin seçilmiş gün sayı ilə cari aktiv abunəliyi dondurur. "
+                    + "Gün sayı abunəliyin qalan freeze hüququndan çox ola bilməz."
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Abunəlik donduruldu",
+                    content = @Content(schema = @Schema(implementation = az.fitnest.order.dto.AdminUserSubscriptionResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Yanlış sorğu / freeze mümkün deyil"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Limit aşımı və ya konflikt"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Aktiv abunəlik tapılmadı")
+    })
+    @PostMapping("/users/{userId}/freeze")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<az.fitnest.order.dto.AdminUserSubscriptionResponse>> freezeUserSubscription(
+            @PathVariable Long userId,
+            @Valid @RequestBody az.fitnest.order.dto.AdminFreezeRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                userSubscriptionService.freezeUserSubscription(userId, request.days())));
+    }
+
+    @Operation(
+            summary = "İstifadəçi abunəliyinin dondurulmasını bitir",
+            description = "Admin aktiv freeze-i erkən bitirir (resume)."
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Abunəlik yenidən aktivləşdirildi",
+                    content = @Content(schema = @Schema(implementation = az.fitnest.order.dto.AdminUserSubscriptionResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Dondurulmuş abunəlik tapılmadı")
+    })
+    @PostMapping("/users/{userId}/unfreeze")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<az.fitnest.order.dto.AdminUserSubscriptionResponse>> unfreezeUserSubscription(
+            @PathVariable Long userId) {
+        return ResponseEntity.ok(ApiResponse.success(userSubscriptionService.unfreezeUserSubscription(userId)));
+    }
 }

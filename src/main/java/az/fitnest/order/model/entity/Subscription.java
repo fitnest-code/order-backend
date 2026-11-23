@@ -125,6 +125,15 @@ public class Subscription {
     @Column(name = "refunded_at")
     private LocalDateTime refundedAt;
 
+    @Column(name = "purchase_payment_provider", length = 32)
+    private String purchasePaymentProvider;
+
+    @Column(name = "purchase_payment_order_id", length = 128)
+    private String purchasePaymentOrderId;
+
+    @Column(name = "purchase_bnpl_term")
+    private Integer purchaseBnplTerm;
+
     // Field access: Hibernate increments this directly — never mask null in a getter.
     @Version
     @Column(name = "version", nullable = false)

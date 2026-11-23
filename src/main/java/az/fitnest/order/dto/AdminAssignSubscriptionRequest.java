@@ -22,5 +22,14 @@ public record AdminAssignSubscriptionRequest(
     Boolean autoPaymentEnabled,
 
     @JsonProperty("apply_campaign")
-    Boolean applyCampaign
+    Boolean applyCampaign,
+
+    @JsonProperty("purchase_payment_provider")
+    String purchasePaymentProvider,
+
+    @JsonProperty("purchase_payment_order_id")
+    String purchasePaymentOrderId,
+
+    @JsonProperty("purchase_bnpl_term")
+    Integer purchaseBnplTerm
 ) {}

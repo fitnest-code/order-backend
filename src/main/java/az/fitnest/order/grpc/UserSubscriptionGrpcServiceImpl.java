@@ -140,13 +140,22 @@ public class UserSubscriptionGrpcServiceImpl extends az.fitnest.order.grpc.UserS
     public void assignSubscriptionToUser(az.fitnest.order.grpc.AssignSubscriptionToUserRequest request, StreamObserver<az.fitnest.order.grpc.AssignSubscriptionToUserResponse> responseObserver) {
         log.info("[gRPC] Received AssignSubscriptionToUser request: userId={}, planId={}, optionId={}", request.getUserId(), request.getPlanId(), request.getOptionId());
         try {
-            var assignRequest = az.fitnest.order.dto.AdminAssignSubscriptionRequest.builder()
+            var assignRequestBuilder = az.fitnest.order.dto.AdminAssignSubscriptionRequest.builder()
                 .userId(request.getUserId())
                 .planId(request.getPlanId())
                 .optionId(request.getOptionId())
                 .autoPaymentEnabled(request.getAutoPaymentEnabled())
-                .applyCampaign(true)
-                .build();
+                .applyCampaign(true);
+            if (!request.getPurchasePaymentProvider().isBlank()) {
+                assignRequestBuilder.purchasePaymentProvider(request.getPurchasePaymentProvider());
+            }
+            if (!request.getPurchasePaymentOrderId().isBlank()) {
+                assignRequestBuilder.purchasePaymentOrderId(request.getPurchasePaymentOrderId());
+            }
+            if (request.getPurchaseBnplTerm() > 0) {
+                assignRequestBuilder.purchaseBnplTerm(request.getPurchaseBnplTerm());
+            }
+            var assignRequest = assignRequestBuilder.build();
             var result = subscriptionService.assignSubscriptionToUser(assignRequest);
             az.fitnest.order.grpc.AssignSubscriptionToUserResponse response = az.fitnest.order.grpc.AssignSubscriptionToUserResponse.newBuilder()
                 .setSubscriptionId(result.subscriptionId())
