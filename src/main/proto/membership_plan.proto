@@ -89,6 +89,8 @@ message CheckInRequest {
   string available_hours = 11;
   // T-16: client-generated scan id for idempotent QR processing.
   string qr_scan_id = 12;
+  // Catalog category scanned (mobile v5). Optional: 0 / unset = unknown (legacy clients).
+  optional int64 category_id = 13;
 }
 
 message CheckInResponse {

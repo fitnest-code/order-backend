@@ -19,7 +19,24 @@ public record HomeGymCheckInContext(
         BigDecimal singlePrice,
         BigDecimal unlimitedPrice,
         String qrScanId,
-        String gymName) {
+        String gymName,
+        Long categoryId) {
+
+    /** Backwards-compatible constructor for callers that do not carry a category. */
+    public HomeGymCheckInContext(Long userId,
+                                 Long gymId,
+                                 boolean consumeFrozen,
+                                 String confirmation,
+                                 String confirmationToken,
+                                 Long timeSlotRuleId,
+                                 String pricePackage,
+                                 BigDecimal singlePrice,
+                                 BigDecimal unlimitedPrice,
+                                 String qrScanId,
+                                 String gymName) {
+        this(userId, gymId, consumeFrozen, confirmation, confirmationToken, timeSlotRuleId,
+                pricePackage, singlePrice, unlimitedPrice, qrScanId, gymName, null);
+    }
 
     /** Backwards-compatible constructor for callers that do not carry a gym name. */
     public HomeGymCheckInContext(Long userId,
@@ -33,6 +50,6 @@ public record HomeGymCheckInContext(
                                  BigDecimal unlimitedPrice,
                                  String qrScanId) {
         this(userId, gymId, consumeFrozen, confirmation, confirmationToken, timeSlotRuleId,
-                pricePackage, singlePrice, unlimitedPrice, qrScanId, null);
+                pricePackage, singlePrice, unlimitedPrice, qrScanId, null, null);
     }
 }

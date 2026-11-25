@@ -76,4 +76,8 @@ public class GymVisit {
     /** T-16: client-generated scan id, used to collapse retried QR scans into one visit. */
     @Column(name = "qr_scan_id", length = 120)
     private String qrScanId;
+
+    /** Catalog category scanned at check-in (parity with gym_entrance_history.category_id); null for legacy scans. */
+    @Column(name = "category_id")
+    private Long categoryId;
 }

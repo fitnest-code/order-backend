@@ -69,7 +69,8 @@ public record VisitHistoryResponse(
             String mode,
             String status,
             CounterAfter counterAfter,
-            RejectReason rejectReason) {
+            RejectReason rejectReason,
+            Long categoryId) {
     }
 
     public record CounterAfter(

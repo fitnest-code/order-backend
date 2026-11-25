@@ -9,5 +9,6 @@ public record HomeGymVisitResponse(
         String gymName,
         OffsetDateTime checkedInAt,
         String entryType,
-        BigDecimal singlePrice) {
+        BigDecimal singlePrice,
+        Long categoryId) {
 }
