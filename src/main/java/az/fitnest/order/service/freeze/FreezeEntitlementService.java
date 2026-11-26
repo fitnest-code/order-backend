@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.Optional;
 
 /**
@@ -16,6 +18,8 @@ import java.util.Optional;
  *
  * Entitlement is created when a subscription is assigned or renewed.
  * Balances are adjusted atomically during freeze commit and finalize.
+ * Multi-month subscriptions receive a fresh allowance each calendar month;
+ * unused days do not roll over.
  *
  * Thread safety: all write methods use pessimistic SELECT FOR UPDATE to
  * prevent concurrent balance corruption. The @Version on the entity
@@ -69,6 +73,7 @@ public class FreezeEntitlementService {
                 .consumedDays(0)
                 .reservedDays(0)
                 .policyVersion(policyVersion)
+                .allowanceMonth(currentAllowanceMonth())
                 .build();
 
         SubscriptionFreezeEntitlement saved = entitlementRepository.save(entitlement);
@@ -97,7 +102,8 @@ public class FreezeEntitlementService {
             }
             int totalDays = tierPolicyProvider.getAllowedDays(packageName);
             if (totalDays <= 0) {
-                totalDays = 2; // Default to 2 days for active subscriptions if package not found
+                // Unknown package falls back to the Bronze allowance (BRD v1.2).
+                totalDays = FreezeTierPolicyProvider.BRONZE_DAYS;
             }
             SubscriptionFreezeEntitlement entitlement = SubscriptionFreezeEntitlement.builder()
                     .subscriptionId(subscriptionId)
@@ -106,6 +112,7 @@ public class FreezeEntitlementService {
                     .consumedDays(sub.getFrozenDaysUsed() != null ? sub.getFrozenDaysUsed() : 0)
                     .reservedDays(0)
                     .policyVersion(tierPolicyProvider.getPolicyVersion())
+                    .allowanceMonth(currentAllowanceMonth())
                     .build();
             log.info("Lazy-provisioned entitlement for subId={}: packageName={}, totalDays={}", subscriptionId, packageName, totalDays);
             return Optional.of(entitlementRepository.save(entitlement));
@@ -134,19 +141,21 @@ public class FreezeEntitlementService {
 
     /**
      * Finalises balance on COMPLETED or ENDED_EARLY.
-     * usedDays are moved to consumedDays; returnedDays are released from reservedDays.
+     * usedDays are moved to consumedDays only when the freeze belongs to the
+     * current allowance month; returnedDays are released from reservedDays.
      */
     @Transactional
-    public void finaliseConsumed(Long subscriptionId, int usedDays, int returnedDays) {
+    public void finaliseConsumed(Long subscriptionId, int usedDays, int returnedDays, LocalDateTime freezeStartAt) {
         SubscriptionFreezeEntitlement entitlement = entitlementRepository
                 .findBySubscriptionIdForUpdate(subscriptionId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException(
                         "error.freeze.no_entitlement"));
 
-        entitlement.finaliseConsumed(usedDays, returnedDays);
+        boolean chargeCurrentMonth = entitlement.belongsToAllowanceMonth(freezeStartAt);
+        entitlement.finaliseConsumed(usedDays, returnedDays, chargeCurrentMonth);
         entitlementRepository.save(entitlement);
-        log.info("Finalised entitlement for subscriptionId={}: used={}, returned={}, available={}",
-                subscriptionId, usedDays, returnedDays, entitlement.getAvailableDays());
+        log.info("Finalised entitlement for subscriptionId={}: used={}, returned={}, chargedCurrentMonth={}, available={}",
+                subscriptionId, usedDays, returnedDays, chargeCurrentMonth, entitlement.getAvailableDays());
     }
 
     /**
@@ -184,36 +193,56 @@ public class FreezeEntitlementService {
                             .userId(newSubscription.getUserId())
                             .consumedDays(0)
                             .reservedDays(0)
+                            .allowanceMonth(currentAllowanceMonth())
                             .policyVersion(tierPolicyProvider.getPolicyVersion())
                             .build();
                 });
 
         entitlement.setTotalDays(newTotal);
         entitlement.setPolicyVersion(tierPolicyProvider.getPolicyVersion());
+        if (entitlement.getAllowanceMonth() == null) {
+            entitlement.setAllowanceMonth(currentAllowanceMonth());
+        }
         entitlementRepository.save(entitlement);
         log.info("Upgraded entitlement for subscriptionId={}: newTotalDays={}", subId, newTotal);
     }
 
+    // ─── Monthly allowance ───────────────────────────────────────────────────
+
     /**
-     * Monthly freeze renewal for multi-month subscriptions.
-     * Adds the monthly tier allowance to the entitlement's totalDays.
-     *
-     * @param subscriptionId the subscription to renew
-     * @param monthlyAllowance the monthly freeze days from tier policy
+     * Starts a fresh, non-cumulative allowance for the given YYYY-MM.
+     * Idempotent: repeated calls for the same month are no-ops.
+     * An active freeze's reserved days are kept until that freeze ends.
      */
     @Transactional
-    public void renewMonthly(Long subscriptionId, int monthlyAllowance) {
-        if (monthlyAllowance <= 0) {
-            return;
+    public boolean resetMonthlyAllowance(Long subscriptionId, int monthlyAllowance, String month) {
+        if (monthlyAllowance <= 0 || month == null || month.isBlank()) {
+            return false;
         }
+
         SubscriptionFreezeEntitlement entitlement = entitlementRepository
                 .findBySubscriptionIdForUpdate(subscriptionId)
                 .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException(
                         "error.freeze.no_entitlement"));
 
-        entitlement.setTotalDays(entitlement.getTotalDays() + monthlyAllowance);
+        if (month.equals(entitlement.getAllowanceMonth())) {
+            return false;
+        }
+
+        // Keep the CHECK invariant if an active freeze reserved more days than the
+        // new allowance (possible with legacy cumulative budgets). The reservation
+        // is released when that freeze ends; the tier cap is enforced at validation.
+        entitlement.setTotalDays(Math.max(monthlyAllowance, entitlement.getReservedDays()));
+        entitlement.setConsumedDays(0);
+        entitlement.setPolicyVersion(tierPolicyProvider.getPolicyVersion());
+        entitlement.setAllowanceMonth(month);
         entitlementRepository.save(entitlement);
-        log.info("Monthly freeze renewal: subscriptionId={}, added {} days, new total={}",
-                subscriptionId, monthlyAllowance, entitlement.getTotalDays());
+        log.info("Reset freeze allowance for subscriptionId={}: month={}, totalDays={}, reservedDaysKept={}",
+                subscriptionId, month, monthlyAllowance, entitlement.getReservedDays());
+        return true;
+    }
+
+    private String currentAllowanceMonth() {
+        return YearMonth.now().toString();
     }
 }
