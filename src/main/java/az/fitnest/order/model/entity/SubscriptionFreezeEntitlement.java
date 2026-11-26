@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 
 @Entity
 @Table(name = "subscription_freeze_entitlements", indexes = {
@@ -38,6 +39,9 @@ public class SubscriptionFreezeEntitlement {
 
     @Column(name = "policy_version", nullable = false, length = 20)
     private String policyVersion;
+
+    @Column(name = "allowance_month", length = 7)
+    private String allowanceMonth;
 
     // Field access: Hibernate increments this directly — never mask null in a getter.
     @Version
@@ -87,8 +91,24 @@ public class SubscriptionFreezeEntitlement {
         this.reservedDays += days;
     }
 
-    public void finaliseConsumed(int usedDays, int returnedDays) {
-        this.reservedDays -= (usedDays + returnedDays);
-        this.consumedDays += usedDays;
+    /**
+     * A freeze started in a previous allowance month must not charge the current
+     * month's budget; its reserved days are still released when it ends.
+     */
+    public void finaliseConsumed(int usedDays, int returnedDays, boolean chargeCurrentMonth) {
+        if (usedDays < 0 || returnedDays < 0) {
+            throw new IllegalArgumentException("usedDays and returnedDays must be non-negative");
+        }
+        this.reservedDays = Math.max(0, this.reservedDays - usedDays - returnedDays);
+        if (chargeCurrentMonth) {
+            this.consumedDays += usedDays;
+        }
+    }
+
+    public boolean belongsToAllowanceMonth(LocalDateTime freezeStartAt) {
+        if (allowanceMonth == null || freezeStartAt == null) {
+            return true; // legacy row — preserve previous behaviour
+        }
+        return allowanceMonth.equals(YearMonth.from(freezeStartAt).toString());
     }
 }

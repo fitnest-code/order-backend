@@ -24,6 +24,7 @@ public class FreezeFinalizeService {
     private final SubscriptionRepository subscriptionRepository;
     private final FreezeAuditEventRepository auditEventRepository;
     private final FreezeOutboxEventRepository outboxEventRepository;
+    private final FreezeEntitlementService entitlementService;
 
     /**
      * REQUIRES_NEW so lazy finalize from read-only getActiveSubscription can commit writes.
@@ -60,14 +61,10 @@ public class FreezeFinalizeService {
 
         freezeRepository.save(lockedFreeze);
 
-        // Adjust entitlement
-        Optional<SubscriptionFreezeEntitlement> entitlementOpt = entitlementRepository.findBySubscriptionIdForUpdate(lockedFreeze.getSubscriptionId());
-        if (entitlementOpt.isPresent()) {
-            SubscriptionFreezeEntitlement entitlement = entitlementOpt.get();
-            entitlement.setReservedDays(Math.max(0, entitlement.getReservedDays() - requestedDays));
-            entitlement.setConsumedDays(entitlement.getConsumedDays() + requestedDays);
-            entitlementRepository.save(entitlement);
-        }
+        // Adjust entitlement. A freeze that began in the previous allowance month
+        // releases its reservation without charging the new month's budget.
+        entitlementService.finaliseConsumed(
+                lockedFreeze.getSubscriptionId(), requestedDays, 0, lockedFreeze.getStartAt());
 
         // Unfreeze subscription
         Optional<Subscription> subOpt = subscriptionRepository.findByIdForUpdate(lockedFreeze.getSubscriptionId());

@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import az.fitnest.order.util.UserContext;
@@ -227,10 +228,14 @@ public class UserSubscriptionService {
             }
             var entitlementOpt = freezeEntitlementService != null ? freezeEntitlementService.getBySubscriptionId(subscription.getSubscriptionId()) : null;
             az.fitnest.order.model.entity.SubscriptionFreezeEntitlement entitlement = entitlementOpt != null ? entitlementOpt.orElse(null) : null;
-            int totalFreezeDays     = entitlement != null ? entitlement.getTotalDays()    : 0;
+            int budgetFreezeDays    = entitlement != null ? entitlement.getTotalDays()    : 0;
             int consumedFreezeDays  = entitlement != null ? entitlement.getConsumedDays() : 0;
             int reservedFreezeDays  = entitlement != null ? entitlement.getReservedDays() : 0;
-            int availableFreezeDays = Math.max(0, totalFreezeDays - consumedFreezeDays - reservedFreezeDays);
+            // Legacy cumulative budgets must not be exposed above the v1.2 tier cap.
+            int tierLimit           = freezeTierPolicyProvider.getAllowedDays(pkg.getName());
+            int totalFreezeDays     = tierLimit > 0 ? tierLimit : budgetFreezeDays;
+            int availableFreezeDays = Math.min(totalFreezeDays,
+                    Math.max(0, budgetFreezeDays - consumedFreezeDays - reservedFreezeDays));
             boolean canFreeze       = "ACTIVE".equalsIgnoreCase(subscription.getStatus()) && availableFreezeDays > 0;
             String rawStatus        = subscription.getStatus();
 
@@ -554,61 +559,53 @@ public class UserSubscriptionService {
 
     @Scheduled(cron = "0 0 0 1 * ?")
     @Transactional
-    public void monthlyFreezeRenewal() {
+    public void monthlyFreezeAllowanceReset() {
         LocalDateTime now = LocalDateTime.now();
-        log.info("Starting monthly freeze renewal job at {}", now);
+        String month = YearMonth.from(now).toString();
+        log.info("Starting monthly freeze allowance reset for {} at {}", month, now);
 
-        // Find all ACTIVE subscriptions that are multi-month (duration > 1 month)
-        List<Subscription> activeSubs = subscriptionRepository.findByStatus("ACTIVE");
-        int renewed = 0;
+        // Multi-month subscriptions get a fresh allowance each calendar month,
+        // including while frozen (the active freeze's reserved days are kept).
+        List<Subscription> activeSubs = subscriptionRepository.findByStatusIn(List.of("ACTIVE", "FROZEN"));
+        int reset = 0;
 
         for (Subscription sub : activeSubs) {
             if (sub.getOptionId() == null) {
                 continue;
             }
 
-            // Get the option to check duration
-            var optionOpt = packageRepository.findById(sub.getPackageId())
-                    .flatMap(pkg -> pkg.getOptions().stream()
-                            .filter(o -> o.getId().equals(sub.getOptionId()))
-                            .findFirst());
-
-            if (optionOpt.isEmpty()) {
+            SubscriptionPackage pkg = packageRepository.findById(sub.getPackageId()).orElse(null);
+            if (pkg == null || pkg.getOptions() == null) {
                 continue;
             }
 
-            PackageOption option = optionOpt.get();
-            int durationMonths = option.getDurationMonths();
-
-            // Only renew for multi-month subscriptions (3, 6, 12 months)
-            if (durationMonths <= 1) {
+            PackageOption option = pkg.getOptions().stream()
+                    .filter(o -> o.getId().equals(sub.getOptionId()))
+                    .findFirst()
+                    .orElse(null);
+            if (option == null || option.getDurationMonths() <= 1) {
                 continue;
             }
 
-            // Check if subscription is still within its valid period
             if (sub.getEndAt() != null && sub.getEndAt().isBefore(now)) {
                 continue;
             }
 
-            // Renew freeze entitlement for this month
             try {
-                String packageName = packageRepository.findById(sub.getPackageId())
-                        .map(SubscriptionPackage::getName)
-                        .orElse("Bronze");
-                int monthlyAllowance = freezeTierPolicyProvider.getAllowedDays(packageName);
-
-                if (monthlyAllowance > 0) {
-                    freezeEntitlementService.renewMonthly(sub.getSubscriptionId(), monthlyAllowance);
-                    renewed++;
-                    log.debug("Renewed freeze entitlement for subscriptionId={}: added {} days",
-                            sub.getSubscriptionId(), monthlyAllowance);
+                int allowance = freezeTierPolicyProvider.getAllowedDays(pkg.getName());
+                if (allowance > 0 && freezeEntitlementService.resetMonthlyAllowance(
+                        sub.getSubscriptionId(), allowance, month)) {
+                    reset++;
+                    log.debug("Reset freeze allowance for subscriptionId={}: month={}, days={}",
+                            sub.getSubscriptionId(), month, allowance);
                 }
             } catch (Exception e) {
-                log.error("Failed to renew freeze for subscription {}: {}", sub.getSubscriptionId(), e.getMessage());
+                log.error("Failed to reset freeze allowance for subscription {}: {}",
+                        sub.getSubscriptionId(), e.getMessage());
             }
         }
 
-        log.info("Monthly freeze renewal completed. Renewed {} subscriptions.", renewed);
+        log.info("Monthly freeze allowance reset for {} completed. Reset {} subscriptions.", month, reset);
     }
 
     @Scheduled(cron = "0 0 1 * * *")
@@ -854,8 +851,13 @@ public class UserSubscriptionService {
                 pkg.getName(), option.getId(), option.getDurationMonths(), saved.getBonusMonths(), request.userId(), saved.getSubscriptionId());
         subscriptionEventPublisher.publishSubscriptionEvent(request.userId(), "ASSIGNED", saved.getSubscriptionId());
 
-        freezeEntitlementService.createForSubscription(
+        var freezeEntitlement = freezeEntitlementService.createForSubscription(
                 saved, pkg.getName(), freezeTierPolicyProvider.getPolicyVersion());
+        if (freezeEntitlement != null) {
+            // Keep the deprecated subscriptions column at 0; expose the real
+            // policy-backed allowance to clients from the entitlement instead.
+            freezeDays = freezeEntitlement.getTotalDays();
+        }
 
         return az.fitnest.order.dto.AdminAssignSubscriptionResponse.builder()
                 .subscriptionId(saved.getSubscriptionId())
@@ -869,7 +871,7 @@ public class UserSubscriptionService {
                 .endAt(saved.getEndAt().toLocalDate())
                 .totalLimit(saved.getTotalLimit())
                 .remainingLimit(saved.getRemainingLimit())
-                .allowedFreezeDays(saved.getAllowedFreezeDays())
+                .allowedFreezeDays(freezeDays)
                 .bonusMonths(saved.getBonusMonths())
                 .campaignApplied(decision.isApplied())
                 .campaignId(saved.getCampaignId())
@@ -1113,10 +1115,13 @@ public class UserSubscriptionService {
         var entitlementOpt = freezeEntitlementService != null
                 ? freezeEntitlementService.getBySubscriptionId(sub.getSubscriptionId())
                 : Optional.<az.fitnest.order.model.entity.SubscriptionFreezeEntitlement>empty();
-        int totalFreezeDays = entitlementOpt.map(az.fitnest.order.model.entity.SubscriptionFreezeEntitlement::getTotalDays).orElse(0);
+        int budgetFreezeDays = entitlementOpt.map(az.fitnest.order.model.entity.SubscriptionFreezeEntitlement::getTotalDays).orElse(0);
         int consumedFreezeDays = entitlementOpt.map(az.fitnest.order.model.entity.SubscriptionFreezeEntitlement::getConsumedDays).orElse(0);
         int reservedFreezeDays = entitlementOpt.map(az.fitnest.order.model.entity.SubscriptionFreezeEntitlement::getReservedDays).orElse(0);
-        int availableFreezeDays = Math.max(0, totalFreezeDays - consumedFreezeDays - reservedFreezeDays);
+        int tierLimit = freezeTierPolicyProvider.getAllowedDays(pkg.getName());
+        int totalFreezeDays = tierLimit > 0 ? tierLimit : budgetFreezeDays;
+        int availableFreezeDays = Math.min(totalFreezeDays,
+                Math.max(0, budgetFreezeDays - consumedFreezeDays - reservedFreezeDays));
 
         var activeFreeze = subscriptionFreezeRepository
                 .findBySubscriptionIdAndStatus(sub.getSubscriptionId(), az.fitnest.order.model.enums.FreezeStatus.ACTIVE);
@@ -1185,6 +1190,9 @@ public class UserSubscriptionService {
         var eligibility = subscriptionFreezeService.getEligibility(userId, sub.getSubscriptionId());
         if (!eligibility.eligible()) {
             throw new az.fitnest.order.exception.BadRequestException(eligibility.reason());
+        }
+        if (days < 1 || days > eligibility.totalDays()) {
+            throw new az.fitnest.order.exception.BadRequestException("error.freeze.invalid_days");
         }
         if (days > eligibility.availableDays()) {
             throw new az.fitnest.order.exception.ConflictException("error.freeze.limit_exceeded");
