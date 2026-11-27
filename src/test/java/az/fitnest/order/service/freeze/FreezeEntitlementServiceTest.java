@@ -80,14 +80,26 @@ class FreezeEntitlementServiceTest {
     }
 
     @Test
-    void lazyProvisionFallsBackToBronzeLimit() {
-        when(subscriptionRepository.findById(SUBSCRIPTION_ID)).thenReturn(Optional.of(subscription()));
+    void lazyProvisionUsesTierLimitForPaidPackage() {
+        when(subscriptionRepository.findById(SUBSCRIPTION_ID)).thenReturn(Optional.of(subscriptionWithPackage(1L)));
+        when(packageRepository.findById(1L)).thenReturn(Optional.of(pkg(1L, "Bronze")));
 
         SubscriptionFreezeEntitlement provisioned = service.getBySubscriptionId(SUBSCRIPTION_ID).orElseThrow();
 
         assertEquals(5, provisioned.getTotalDays());
         assertEquals("v1.2", provisioned.getPolicyVersion());
         assertEquals(YearMonth.now().toString(), provisioned.getAllowanceMonth());
+    }
+
+    @Test
+    void lazyProvisionSkipsTrialAndMissingPackage() {
+        when(subscriptionRepository.findById(SUBSCRIPTION_ID)).thenReturn(Optional.of(subscription()));
+        assertTrue(service.getBySubscriptionId(SUBSCRIPTION_ID).isEmpty());
+
+        when(subscriptionRepository.findById(SUBSCRIPTION_ID)).thenReturn(Optional.of(subscriptionWithPackage(9L)));
+        when(packageRepository.findById(9L)).thenReturn(Optional.of(pkg(9L, "Trial")));
+        assertTrue(service.getBySubscriptionId(SUBSCRIPTION_ID).isEmpty());
+        verify(entitlementRepository, never()).save(any());
     }
 
     @Test
@@ -223,9 +235,10 @@ class FreezeEntitlementServiceTest {
 
     @Test
     void lazyProvisionSeedsConsumedDaysAndIsIdempotent() {
-        Subscription sub = subscription();
+        Subscription sub = subscriptionWithPackage(1L);
         sub.setFrozenDaysUsed(2);
         when(subscriptionRepository.findById(SUBSCRIPTION_ID)).thenReturn(Optional.of(sub));
+        when(packageRepository.findById(1L)).thenReturn(Optional.of(pkg(1L, "Bronze")));
 
         SubscriptionFreezeEntitlement first = service.getBySubscriptionId(SUBSCRIPTION_ID).orElseThrow();
         assertEquals(5, first.getTotalDays());
@@ -265,6 +278,20 @@ class FreezeEntitlementServiceTest {
         sub.setSubscriptionId(SUBSCRIPTION_ID);
         sub.setUserId(USER_ID);
         return sub;
+    }
+
+    private Subscription subscriptionWithPackage(Long packageId) {
+        Subscription sub = subscription();
+        sub.setPackageId(packageId);
+        return sub;
+    }
+
+    private az.fitnest.order.model.entity.SubscriptionPackage pkg(Long id, String name) {
+        az.fitnest.order.model.entity.SubscriptionPackage p =
+                new az.fitnest.order.model.entity.SubscriptionPackage();
+        p.setId(id);
+        p.setName(name);
+        return p;
     }
 
     private SubscriptionFreezeEntitlement entitlement(

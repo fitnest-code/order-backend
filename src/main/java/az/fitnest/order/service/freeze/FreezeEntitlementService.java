@@ -91,31 +91,30 @@ public class FreezeEntitlementService {
             return existing;
         }
 
-        // Lazy-provision for legacy active subscriptions (e.g. Bronze #170)
+        // Lazy-provision only for legacy paid tiers that never got an entitlement row.
+        // Trial / gift / unknown packages stay without entitlement (same as createForSubscription).
         return subscriptionRepository.findById(subscriptionId).flatMap(sub -> {
-            String packageName = "Bronze";
-            if (sub.getPackageId() != null) {
-                var pkgOpt = packageRepository.findById(sub.getPackageId());
-                if (pkgOpt.isPresent() && pkgOpt.get().getName() != null) {
-                    packageName = pkgOpt.get().getName();
+            if (sub.getPackageId() == null) {
+                return Optional.empty();
+            }
+            return packageRepository.findById(sub.getPackageId()).flatMap(pkg -> {
+                int totalDays = tierPolicyProvider.getAllowedDays(pkg.getName());
+                if (totalDays <= 0) {
+                    return Optional.empty();
                 }
-            }
-            int totalDays = tierPolicyProvider.getAllowedDays(packageName);
-            if (totalDays <= 0) {
-                // Unknown package falls back to the Bronze allowance (BRD v1.2).
-                totalDays = FreezeTierPolicyProvider.BRONZE_DAYS;
-            }
-            SubscriptionFreezeEntitlement entitlement = SubscriptionFreezeEntitlement.builder()
-                    .subscriptionId(subscriptionId)
-                    .userId(sub.getUserId())
-                    .totalDays(totalDays)
-                    .consumedDays(sub.getFrozenDaysUsed() != null ? sub.getFrozenDaysUsed() : 0)
-                    .reservedDays(0)
-                    .policyVersion(tierPolicyProvider.getPolicyVersion())
-                    .allowanceMonth(currentAllowanceMonth())
-                    .build();
-            log.info("Lazy-provisioned entitlement for subId={}: packageName={}, totalDays={}", subscriptionId, packageName, totalDays);
-            return Optional.of(entitlementRepository.save(entitlement));
+                SubscriptionFreezeEntitlement entitlement = SubscriptionFreezeEntitlement.builder()
+                        .subscriptionId(subscriptionId)
+                        .userId(sub.getUserId())
+                        .totalDays(totalDays)
+                        .consumedDays(sub.getFrozenDaysUsed() != null ? sub.getFrozenDaysUsed() : 0)
+                        .reservedDays(0)
+                        .policyVersion(tierPolicyProvider.getPolicyVersion())
+                        .allowanceMonth(currentAllowanceMonth())
+                        .build();
+                log.info("Lazy-provisioned entitlement for subId={}: packageName={}, totalDays={}",
+                        subscriptionId, pkg.getName(), totalDays);
+                return Optional.of(entitlementRepository.save(entitlement));
+            });
         });
     }
 
