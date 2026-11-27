@@ -186,7 +186,8 @@ public class VisitHistoryService {
                                 ? VisitHistoryMode.HOME_GYM.name() : VisitHistoryMode.STANDARD.name(),
                         VisitHistoryStatus.SUCCESS.name(),
                         counters.get(visit.getId()),
-                        null));
+                        null,
+                        visit.getCategoryId()));
             } else {
                 VisitAttempt attempt = entry.attempt();
                 String rejectCode = attempt.getRejectCode();
@@ -201,7 +202,8 @@ public class VisitHistoryService {
                         attempt.getMode(),
                         VisitHistoryStatus.REJECTED.name(),
                         null,
-                        new VisitHistoryResponse.RejectReason(rejectCode, rejectText(rejectCode))));
+                        new VisitHistoryResponse.RejectReason(rejectCode, rejectText(rejectCode)),
+                        null));
             }
         }
 

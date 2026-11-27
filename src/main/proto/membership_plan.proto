@@ -89,6 +89,8 @@ message CheckInRequest {
   string available_hours = 11;
   // T-16: client-generated scan id for idempotent QR processing.
   string qr_scan_id = 12;
+  // Catalog category scanned (mobile v5). Optional: 0 / unset = unknown (legacy clients).
+  optional int64 category_id = 13;
 }
 
 message CheckInResponse {
@@ -128,6 +130,8 @@ message CheckOptionInPackageExistsResponse {
 message GetOptionDetailsRequest {
   int64 package_id = 1;
   int64 option_id = 2;
+  // Optional; 0 = unset. When set, campaign eligibility (Bakcell / already redeemed) is respected.
+  int64 user_id = 3;
 }
 
 message GetOptionDetailsResponse {

@@ -36,6 +36,7 @@ public class SubscriptionFreezeService {
     private final az.fitnest.order.client.CatalogServiceGrpcClient catalogServiceGrpcClient;
     private final FreezeFinalizeService freezeFinalizeService;
     private final az.fitnest.order.service.TranslationService translationService;
+    private final FreezeTierPolicyProvider tierPolicyProvider;
 
     @Transactional(readOnly = true)
     public FreezeEligibilityResponse getEligibility(Long userId, Long subscriptionId) {
@@ -47,10 +48,15 @@ public class SubscriptionFreezeService {
         }
 
         SubscriptionFreezeEntitlement entitlement = entitlementService.getBySubscriptionId(subscriptionId).orElse(null);
-        int totalDays = entitlement != null ? entitlement.getTotalDays() : 0;
+        int budgetDays = entitlement != null ? entitlement.getTotalDays() : 0;
         int consumedDays = entitlement != null ? entitlement.getConsumedDays() : 0;
         int reservedDays = entitlement != null ? entitlement.getReservedDays() : 0;
-        int availableDays = Math.max(0, totalDays - consumedDays - reservedDays);
+
+        // Legacy cumulative budgets can be higher than the v1.2 tier allowance.
+        // Clients must never see or select more than the current tier limit.
+        int tierLimit = tierPolicyProvider.getAllowedDays(resolvePackageName(sub));
+        int totalDays = tierLimit > 0 ? tierLimit : budgetDays;
+        int availableDays = Math.min(totalDays, Math.max(0, budgetDays - consumedDays - reservedDays));
 
         Optional<SubscriptionFreeze> activeFreeze = freezeRepository.findBySubscriptionIdAndStatus(subscriptionId, FreezeStatus.ACTIVE);
         if (activeFreeze.isPresent()) {
@@ -83,6 +89,11 @@ public class SubscriptionFreezeService {
             throw new az.fitnest.order.exception.ConflictException(eligibility.reason());
         }
 
+        // INVALID_DAYS: 1..tier allowance. LIMIT_EXCEEDED: valid for the tier,
+        // but more than is still available this month.
+        if (days < 1 || days > eligibility.totalDays()) {
+            throw new az.fitnest.order.exception.BadRequestException("error.freeze.invalid_days");
+        }
         if (days > eligibility.availableDays()) {
             throw new az.fitnest.order.exception.ConflictException("error.freeze.limit_exceeded");
         }
@@ -316,13 +327,9 @@ public class SubscriptionFreezeService {
         freeze.setExpiryAfter(expiryAfter);
         freezeRepository.save(freeze);
 
-        // Update entitlement budget
-        SubscriptionFreezeEntitlement entitlement = entitlementRepository.findBySubscriptionIdForUpdate(freeze.getSubscriptionId())
-                .orElseThrow(() -> new az.fitnest.order.exception.ResourceNotFoundException("error.freeze.no_entitlement"));
-
-        entitlement.setReservedDays(Math.max(0, entitlement.getReservedDays() - freeze.getRequestedDays()));
-        entitlement.setConsumedDays(entitlement.getConsumedDays() + usedDays);
-        entitlementRepository.save(entitlement);
+        // Update entitlement budget (days belong to the month the freeze started in)
+        entitlementService.finaliseConsumed(
+                freeze.getSubscriptionId(), usedDays, returnedDays, freeze.getStartAt());
 
         // Unfreeze subscription
         Subscription sub = subscriptionRepository.findByIdForUpdate(freeze.getSubscriptionId())
@@ -438,6 +445,15 @@ public class SubscriptionFreezeService {
                 .orElse(null);
 
         return mapToDto(freeze, subscriptionName);
+    }
+
+    private String resolvePackageName(Subscription sub) {
+        if (sub.getPackageId() == null) {
+            return null;
+        }
+        return subscriptionPackageRepository.findById(sub.getPackageId())
+                .map(SubscriptionPackage::getName)
+                .orElse(null);
     }
 
     private FreezeRecordDto mapToDto(SubscriptionFreeze f, String subscriptionName) {

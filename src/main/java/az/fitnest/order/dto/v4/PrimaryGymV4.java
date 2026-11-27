@@ -10,8 +10,15 @@ public final class PrimaryGymV4 {
 
   public record Select(@NotNull @Positive Long gymId) {}
 
+  /** categoryId is optional: older catalog builds / clients omit it (stored as NULL on the visit). */
   public record CheckIn(
-      @NotNull @Positive Long gymId, @NotBlank @Size(max = 100) String requestId) {}
+      @NotNull @Positive Long gymId,
+      @NotBlank @Size(max = 100) String requestId,
+      @Positive Long categoryId) {
+    public CheckIn(Long gymId, String requestId) {
+      this(gymId, requestId, null);
+    }
+  }
 
   public record Cycle(LocalDateTime start, LocalDateTime end) {}
 
@@ -58,7 +65,8 @@ public final class PrimaryGymV4 {
       long primaryVisits,
       BigDecimal entryPrice,
       BigDecimal monthlyPrice,
-      String priceTier) {}
+      String priceTier,
+      Long categoryId) {}
 
   public record Settlement(
       Long subscriptionId,

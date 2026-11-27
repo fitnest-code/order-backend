@@ -129,7 +129,8 @@ public class HomeGymService {
                     gymName,
                     periodCalculator.toOffset(visit.getCheckedInAt()),
                     visit.getEntryType().name(),
-                    visit.getSinglePrice()));
+                    visit.getSinglePrice(),
+                    visit.getCategoryId()));
         }
         return new HomeGymVisitPage(items, safePage, safeSize, visitPage.getTotalElements());
     }

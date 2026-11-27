@@ -510,6 +510,7 @@ public class HomeGymCheckInService {
                 .unlimitedPrice(context.unlimitedPrice())
                 .countsTowardsLimit(countsTowardsLimit)
                 .qrScanId(context.qrScanId())
+                .categoryId(context.categoryId())
                 .build();
         return gymVisitRepository.save(visit);
     }

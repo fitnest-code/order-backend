@@ -215,7 +215,7 @@ public class PrimaryGymV4Service {
     if (replay.isPresent()) {
       if (!replay.get().getGymId().equals(input.gymId()))
         throw error(HttpStatus.CONFLICT, "IDEMPOTENCY_KEY_REUSED");
-      return response(replay.get());
+      return response(replay.get(), visits.findById(replay.get().getVisitId()).map(GymVisit::getCategoryId).orElse(null));
     }
     var now = LocalDateTime.now(ZONE);
     var c = cycle(s.getStartAt(), s.getEndAt(), now);
@@ -283,6 +283,7 @@ public class PrimaryGymV4Service {
                 .gymId(input.gymId())
                 .subscriptionId(s.getSubscriptionId())
                 .checkedInAt(now)
+                .categoryId(input.categoryId())
                 .build());
     var r = new GymVisitPricingV4();
     r.setVisitId(v.getId());
@@ -302,10 +303,10 @@ public class PrimaryGymV4Service {
     r.setPriceTier(q.priceTier());
     r.setPolicyVersion(q.policyVersion());
     pricing.save(r);
-    return response(r);
+    return response(r, v.getCategoryId());
   }
 
-  private Visit response(GymVisitPricingV4 r) {
+  private Visit response(GymVisitPricingV4 r, Long categoryId) {
     return new Visit(
         r.getVisitId(),
         r.getGymId(),
@@ -315,7 +316,8 @@ public class PrimaryGymV4Service {
         r.getPrimaryVisits(),
         r.getEntryPrice(),
         r.getMonthlyPrice(),
-        r.getPriceTier());
+        r.getPriceTier(),
+        categoryId);
   }
 
   @Transactional(readOnly = true)

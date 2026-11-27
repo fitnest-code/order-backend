@@ -34,4 +34,8 @@ public class GymVisitPricingV4 {
 
   private String priceTier;
   private long policyVersion;
+
+  /** MAIN|SUB from catalog v6; null on legacy v4/v5 rows. */
+  @Column(length = 10)
+  private String categoryRole;
 }
