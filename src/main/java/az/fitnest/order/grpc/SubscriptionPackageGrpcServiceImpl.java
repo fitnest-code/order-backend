@@ -3,10 +3,14 @@ package az.fitnest.order.grpc;
 import az.fitnest.order.model.entity.PackageOption;
 import az.fitnest.order.model.entity.SubscriptionPackage;
 import az.fitnest.order.model.entity.PlanBenefit;
+import az.fitnest.order.pricingcampaign.dto.PricingDto;
+import az.fitnest.order.pricingcampaign.service.PricingCampaignService;
 import az.fitnest.order.repository.SubscriptionPackageRepository;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
 import net.devh.boot.grpc.server.service.GrpcService;
+
+import java.math.BigDecimal;
 
 @GrpcService
 @RequiredArgsConstructor
@@ -15,6 +19,7 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
     private final SubscriptionPackageRepository packageRepository;
     private final az.fitnest.order.service.impl.UserSubscriptionService userSubscriptionService;
     private final az.fitnest.order.service.homegym.HomeGymCheckInService homeGymCheckInService;
+    private final PricingCampaignService pricingCampaignService;
 
     @Override
     public void getPackageNamesByIds(GetPackageNamesByIdsRequest request, StreamObserver<GetPackageNamesByIdsResponse> responseObserver) {
@@ -192,9 +197,10 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
                         .findFirst();
                     if (option.isPresent()) {
                         var optEntity = option.get();
-                        double amount = optEntity.getPriceDiscounted() != null ?
-                            optEntity.getPriceDiscounted().doubleValue() :
-                            (optEntity.getPriceStandard() != null ? optEntity.getPriceStandard().doubleValue() : 0.0);
+                        // Legacy payment (gym epoint/ABB/BOB init) re-quotes here — must match BF checkout,
+                        // not raw price_discounted, or display (v1 campaign) and charge diverge.
+                        Long userId = request.getUserId() == 0 ? null : request.getUserId();
+                        double amount = resolveChargeAmount(optEntity, userId);
                         String currency = pkg.getCurrency() != null ? pkg.getCurrency() : "AZN";
                         GetOptionDetailsResponse response = GetOptionDetailsResponse.newBuilder()
                             .setAmount(amount)
@@ -216,6 +222,25 @@ public class SubscriptionPackageGrpcServiceImpl extends SubscriptionPackageServi
                 .withCause(e)
                 .asRuntimeException());
         }
+    }
+
+    /**
+     * Same rule as {@code PricingCheckoutService}: campaign final from priceStandard when applicable;
+     * otherwise legacy {@code priceDiscounted ?: priceStandard}.
+     */
+    double resolveChargeAmount(PackageOption option, Long userId) {
+        BigDecimal standard = option.getPriceStandard();
+        Integer months = option.getDurationMonths();
+        if (standard != null && months != null && months > 0) {
+            PricingDto pricing = pricingCampaignService.computePricing(standard, months, userId);
+            if (pricing.campaignApplied() && pricing.finalPrice() != null) {
+                return pricing.finalPrice().doubleValue();
+            }
+        }
+        if (option.getPriceDiscounted() != null) {
+            return option.getPriceDiscounted().doubleValue();
+        }
+        return standard != null ? standard.doubleValue() : 0.0;
     }
 
     private SubscriptionPackageInfo mapPackageToGrpc(SubscriptionPackage pkg) {
