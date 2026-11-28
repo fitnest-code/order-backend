@@ -40,6 +40,8 @@ class DashboardSubscriptionServiceTest {
         when(subscriptionRepository.countGroupedByPackageAndStatus(anyList())).thenReturn(List.of());
         when(subscriptionRepository.countStartedByPackageBetween(any(), any())).thenReturn(List.of());
         when(subscriptionRepository.countEndingByPackageBetween(any(), any())).thenReturn(List.of());
+        when(subscriptionRepository.countStartsByDay(any(), any()))
+                .thenReturn(List.<Object[]>of(new Object[]{LocalDate.of(2026, 11, 1), 5L}));
 
         DashboardSubscriptionSummaryResponse res = service.getSummary(
                 LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30));
@@ -51,5 +53,7 @@ class DashboardSubscriptionServiceTest {
         assertEquals(4L, res.last7DaysCount());
         assertNull(res.activeDeltaPct());
         assertTrue(res.activePositiveTrend());
+        assertEquals(30, res.sparkline().size());
+        assertEquals(5.0, res.sparkline().get(0));
     }
 }

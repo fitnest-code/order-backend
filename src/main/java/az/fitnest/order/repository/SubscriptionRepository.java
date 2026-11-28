@@ -61,6 +61,16 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
             @org.springframework.data.repository.query.Param("start") LocalDateTime start,
             @org.springframework.data.repository.query.Param("end") LocalDateTime end);
 
+    /** Dashboard sparkline: new subscription starts per day. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT CAST(s.startAt AS LocalDate), COUNT(s) FROM Subscription s " +
+            "WHERE s.startAt BETWEEN :start AND :end " +
+            "GROUP BY CAST(s.startAt AS LocalDate) " +
+            "ORDER BY CAST(s.startAt AS LocalDate)")
+    List<Object[]> countStartsByDay(
+            @org.springframework.data.repository.query.Param("start") LocalDateTime start,
+            @org.springframework.data.repository.query.Param("end") LocalDateTime end);
+
     org.springframework.data.domain.Page<Subscription> findByStatus(String status, org.springframework.data.domain.Pageable pageable);
 
     org.springframework.data.domain.Page<Subscription> findByStatusAndPackageId(

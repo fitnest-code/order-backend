@@ -62,6 +62,9 @@ public class DashboardSubscriptionService {
             deltaPct = ((startedNow - startedPrev) * 100.0) / startedPrev;
         }
 
+        List<Double> sparkline = denseSeries(range[0], range[1],
+                subscriptionRepository.countStartsByDay(start, end));
+
         return new DashboardSubscriptionSummaryResponse(
                 active,
                 frozen,
@@ -70,6 +73,7 @@ public class DashboardSubscriptionService {
                 last7Days,
                 deltaPct,
                 startedNow >= startedPrev,
+                sparkline,
                 buildPackageCards(now),
                 range[0].toString(),
                 range[1].toString()
@@ -247,6 +251,35 @@ public class DashboardSubscriptionService {
             throw new IllegalArgumentException("status must be ACTIVE or FROZEN");
         }
         return upper;
+    }
+
+    private static List<Double> denseSeries(LocalDate from, LocalDate to, List<Object[]> raw) {
+        Map<LocalDate, Double> byDay = new HashMap<>();
+        for (Object[] row : raw) {
+            LocalDate day = toLocalDate(row[0]);
+            double value = row[1] instanceof Number n ? n.doubleValue() : 0.0;
+            if (day != null) {
+                byDay.put(day, value);
+            }
+        }
+        List<Double> series = new ArrayList<>();
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            series.add(byDay.getOrDefault(d, 0.0));
+        }
+        return series;
+    }
+
+    private static LocalDate toLocalDate(Object value) {
+        if (value instanceof LocalDate d) {
+            return d;
+        }
+        if (value instanceof java.sql.Date d) {
+            return d.toLocalDate();
+        }
+        if (value instanceof LocalDateTime dt) {
+            return dt.toLocalDate();
+        }
+        return null;
     }
 
     private static LocalDate[] resolveRange(LocalDate dateFrom, LocalDate dateTo) {
