@@ -40,6 +40,27 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     long countByIsUpgradedAndStartAtBetween(Boolean isUpgraded, LocalDateTime start, LocalDateTime end);
     long countByStartAtBetween(LocalDateTime start, LocalDateTime end);
 
+    /** Dashboard package cards: count per packageId + status. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT s.packageId, s.status, COUNT(s) FROM Subscription s " +
+            "WHERE s.status IN :statuses GROUP BY s.packageId, s.status")
+    List<Object[]> countGroupedByPackageAndStatus(
+            @org.springframework.data.repository.query.Param("statuses") List<String> statuses);
+
+    org.springframework.data.domain.Page<Subscription> findByStatus(String status, org.springframework.data.domain.Pageable pageable);
+
+    org.springframework.data.domain.Page<Subscription> findByStatusAndPackageId(
+            String status, Long packageId, org.springframework.data.domain.Pageable pageable);
+
+    List<Subscription> findByStatusAndPackageId(String status, Long packageId);
+
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT s FROM Subscription s WHERE s.userId IN :userIds AND s.status IN :statuses " +
+            "ORDER BY s.startAt DESC")
+    List<Subscription> findByUserIdInAndStatusIn(
+            @org.springframework.data.repository.query.Param("userIds") List<Long> userIds,
+            @org.springframework.data.repository.query.Param("statuses") List<String> statuses);
+
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @org.springframework.data.jpa.repository.Query("SELECT s FROM Subscription s WHERE s.subscriptionId = :id")
     Optional<Subscription> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
