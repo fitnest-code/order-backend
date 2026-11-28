@@ -53,4 +53,9 @@ public interface SubscriptionHomeGymRepository extends JpaRepository<Subscriptio
     long countByGymIdAndStatus(Long gymId, HomeGymStatus status);
 
     List<SubscriptionHomeGym> findByStatusAndEndReasonIsNull(HomeGymStatus status);
+
+    /** Dashboard: active home-gym selections grouped by gym. */
+    @Query("SELECT h.gymId, COUNT(DISTINCT h.userId) FROM SubscriptionHomeGym h " +
+            "WHERE h.status = az.fitnest.order.model.enums.HomeGymStatus.ACTIVE GROUP BY h.gymId")
+    List<Object[]> countActiveHomeGymUsersByGym();
 }

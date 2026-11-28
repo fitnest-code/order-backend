@@ -1,5 +1,6 @@
 package az.fitnest.order.controller;
 
+import az.fitnest.order.dto.dashboard.DashboardHomeGymCountItem;
 import az.fitnest.order.dto.dashboard.DashboardSubscriptionPage;
 import az.fitnest.order.dto.dashboard.DashboardSubscriptionStartItem;
 import az.fitnest.order.dto.dashboard.DashboardSubscriptionSummaryResponse;
@@ -79,5 +80,11 @@ public class DashboardSubscriptionController {
     public ResponseEntity<List<DashboardSubscriptionStartItem>> purchaseDates(
             @RequestParam List<Long> userIds) {
         return ResponseEntity.ok(dashboardSubscriptionService.purchaseDates(userIds));
+    }
+
+    @Operation(summary = "Active home-gym selection counts by gym")
+    @GetMapping("/home-gym-counts")
+    public ResponseEntity<List<DashboardHomeGymCountItem>> homeGymCounts() {
+        return ResponseEntity.ok(dashboardSubscriptionService.homeGymCounts());
     }
 }

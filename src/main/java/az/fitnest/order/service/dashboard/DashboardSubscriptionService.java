@@ -1,5 +1,6 @@
 package az.fitnest.order.service.dashboard;
 
+import az.fitnest.order.dto.dashboard.DashboardHomeGymCountItem;
 import az.fitnest.order.dto.dashboard.DashboardPackageCard;
 import az.fitnest.order.dto.dashboard.DashboardSubscriptionListItem;
 import az.fitnest.order.dto.dashboard.DashboardSubscriptionPage;
@@ -7,6 +8,7 @@ import az.fitnest.order.dto.dashboard.DashboardSubscriptionStartItem;
 import az.fitnest.order.dto.dashboard.DashboardSubscriptionSummaryResponse;
 import az.fitnest.order.model.entity.Subscription;
 import az.fitnest.order.model.entity.SubscriptionPackage;
+import az.fitnest.order.repository.SubscriptionHomeGymRepository;
 import az.fitnest.order.repository.SubscriptionPackageRepository;
 import az.fitnest.order.repository.SubscriptionRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +25,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,16 +35,21 @@ public class DashboardSubscriptionService {
 
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionPackageRepository subscriptionPackageRepository;
+    private final SubscriptionHomeGymRepository subscriptionHomeGymRepository;
 
     public DashboardSubscriptionSummaryResponse getSummary(LocalDate dateFrom, LocalDate dateTo) {
         LocalDate[] range = resolveRange(dateFrom, dateTo);
         LocalDateTime start = range[0].atStartOfDay();
         LocalDateTime end = range[1].atTime(LocalTime.of(23, 59, 59));
 
+        LocalDateTime now = LocalDateTime.now(BAKU);
+        LocalDateTime last7Start = now.minusDays(7);
+
         long active = subscriptionRepository.countByStatus("ACTIVE");
         long frozen = subscriptionRepository.countByStatus("FROZEN");
         long ended = subscriptionRepository.countByStatusInAndEndAtBetween(ENDED_STATUSES, start, end);
         long renewed = subscriptionRepository.countByIsUpgradedAndStartAtBetween(true, start, end);
+        long last7Days = subscriptionRepository.countByStartAtBetween(last7Start, now);
 
         long days = Math.max(1, java.time.temporal.ChronoUnit.DAYS.between(range[0], range[1]) + 1);
         long startedNow = subscriptionRepository.countByStartAtBetween(start, end);
@@ -61,12 +67,23 @@ public class DashboardSubscriptionService {
                 frozen,
                 ended,
                 renewed,
+                last7Days,
                 deltaPct,
                 startedNow >= startedPrev,
-                buildPackageCards(),
+                buildPackageCards(now),
                 range[0].toString(),
                 range[1].toString()
         );
+    }
+
+    public List<DashboardHomeGymCountItem> homeGymCounts() {
+        List<DashboardHomeGymCountItem> items = new ArrayList<>();
+        for (Object[] row : subscriptionHomeGymRepository.countActiveHomeGymUsersByGym()) {
+            Long gymId = (Long) row[0];
+            long count = row[1] instanceof Number n ? n.longValue() : 0L;
+            items.add(new DashboardHomeGymCountItem(gymId, count));
+        }
+        return items;
     }
 
     public DashboardSubscriptionPage list(String status, Long packageId, int page, int size) {
@@ -146,10 +163,11 @@ public class DashboardSubscriptionService {
                 .toList();
     }
 
-    private List<DashboardPackageCard> buildPackageCards() {
+    private List<DashboardPackageCard> buildPackageCards(LocalDateTime now) {
         List<Object[]> rows = subscriptionRepository.countGroupedByPackageAndStatus(
                 List.of("ACTIVE", "FROZEN"));
         Map<Long, long[]> counts = new LinkedHashMap<>();
+        long totalActive = 0L;
         for (Object[] row : rows) {
             Long packageId = (Long) row[0];
             String status = (String) row[1];
@@ -157,21 +175,43 @@ public class DashboardSubscriptionService {
             long[] pair = counts.computeIfAbsent(packageId, id -> new long[2]);
             if ("ACTIVE".equalsIgnoreCase(status)) {
                 pair[0] = count;
+                totalActive += count;
             } else if ("FROZEN".equalsIgnoreCase(status)) {
                 pair[1] = count;
             }
         }
+
+        Map<Long, Long> started7 = toLongMap(subscriptionRepository.countStartedByPackageBetween(
+                now.minusDays(7), now));
+        Map<Long, Long> ending30 = toLongMap(subscriptionRepository.countEndingByPackageBetween(
+                now, now.plusDays(30)));
+
         Map<Long, String> names = resolvePackageNames(new ArrayList<>(counts.keySet()));
         List<DashboardPackageCard> cards = new ArrayList<>();
         for (Map.Entry<Long, long[]> e : counts.entrySet()) {
+            long active = e.getValue()[0];
+            double share = totalActive > 0 ? (active * 100.0) / totalActive : 0.0;
             cards.add(new DashboardPackageCard(
                     e.getKey(),
                     names.getOrDefault(e.getKey(), "Package " + e.getKey()),
-                    e.getValue()[0],
-                    e.getValue()[1]
+                    active,
+                    e.getValue()[1],
+                    started7.getOrDefault(e.getKey(), 0L),
+                    ending30.getOrDefault(e.getKey(), 0L),
+                    Math.round(share * 10.0) / 10.0
             ));
         }
         return cards;
+    }
+
+    private static Map<Long, Long> toLongMap(List<Object[]> rows) {
+        Map<Long, Long> map = new HashMap<>();
+        for (Object[] row : rows) {
+            Long id = (Long) row[0];
+            long count = row[1] instanceof Number n ? n.longValue() : 0L;
+            map.put(id, count);
+        }
+        return map;
     }
 
     private Map<Long, String> resolvePackageNames(List<Long> packageIds) {
