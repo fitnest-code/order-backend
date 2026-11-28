@@ -26,7 +26,9 @@ public class SubscriptionReportController {
     public record SubscriptionReportResponse(
         long activeSubscriptions,
         long endingSubscriptions,
-        long renewingSubscriptions
+        long renewingSubscriptions,
+        double percentageChange,
+        boolean isPositiveTrend
     ) {}
 
     @Operation(summary = "Abunəlik hesabat məlumatlarını gətir")
@@ -43,6 +45,18 @@ public class SubscriptionReportController {
         long ending = subscriptionRepository.countByStatusInAndEndAtBetween(List.of("ACTIVE"), start, end);
         long renewing = subscriptionRepository.countByIsUpgradedAndStartAtBetween(true, start, end);
 
-        return ResponseEntity.ok(new SubscriptionReportResponse(active, ending, renewing));
+        long days = Math.max(1, java.time.Duration.between(start, end).toDays());
+        long startedNow = subscriptionRepository.countByStartAtBetween(start, end);
+        long startedPrev = subscriptionRepository.countByStartAtBetween(start.minusDays(days), start);
+
+        double pct = 0.0;
+        if (startedPrev > 0) {
+            pct = ((startedNow - startedPrev) * 100.0) / startedPrev;
+        } else if (startedNow > 0) {
+            pct = 100.0;
+        }
+
+        return ResponseEntity.ok(new SubscriptionReportResponse(
+                active, ending, renewing, Math.abs(pct), startedNow >= startedPrev));
     }
 }
