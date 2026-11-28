@@ -7,6 +7,7 @@ public record DashboardSubscriptionSummaryResponse(
         long frozenCount,
         long endedInPeriod,
         long renewedInPeriod,
+        long last7DaysCount,
         Double activeDeltaPct,
         boolean activePositiveTrend,
         List<DashboardPackageCard> packageCards,

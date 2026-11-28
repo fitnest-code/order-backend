@@ -47,6 +47,20 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     List<Object[]> countGroupedByPackageAndStatus(
             @org.springframework.data.repository.query.Param("statuses") List<String> statuses);
 
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT s.packageId, COUNT(s) FROM Subscription s " +
+            "WHERE s.status = 'ACTIVE' AND s.startAt BETWEEN :start AND :end GROUP BY s.packageId")
+    List<Object[]> countStartedByPackageBetween(
+            @org.springframework.data.repository.query.Param("start") LocalDateTime start,
+            @org.springframework.data.repository.query.Param("end") LocalDateTime end);
+
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT s.packageId, COUNT(s) FROM Subscription s " +
+            "WHERE s.status = 'ACTIVE' AND s.endAt BETWEEN :start AND :end GROUP BY s.packageId")
+    List<Object[]> countEndingByPackageBetween(
+            @org.springframework.data.repository.query.Param("start") LocalDateTime start,
+            @org.springframework.data.repository.query.Param("end") LocalDateTime end);
+
     org.springframework.data.domain.Page<Subscription> findByStatus(String status, org.springframework.data.domain.Pageable pageable);
 
     org.springframework.data.domain.Page<Subscription> findByStatusAndPackageId(
