@@ -10,6 +10,7 @@ public record DashboardSubscriptionSummaryResponse(
         long last7DaysCount,
         Double activeDeltaPct,
         boolean activePositiveTrend,
+        List<Double> sparkline,
         List<DashboardPackageCard> packageCards,
         String dateFrom,
         String dateTo
